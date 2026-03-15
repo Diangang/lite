@@ -1,8 +1,10 @@
 #ifndef KERNEL_H
 #define KERNEL_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "libc.h"
 
 /* I/O Port Helper Functions */
 static inline void outb(uint16_t port, uint8_t value)
@@ -21,9 +23,5 @@ static inline uint8_t inb(uint16_t port)
 void terminal_initialize(void);
 void terminal_writestring(const char* data);
 void terminal_putchar(char c);
-
-/* String Helpers */
-int strcmp(const char *s1, const char *s2);
-int strncmp(const char *s1, const char *s2, size_t n);
 
 #endif

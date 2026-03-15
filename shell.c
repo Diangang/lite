@@ -1,5 +1,7 @@
 #include "shell.h"
 #include "kernel.h"
+#include "libc.h"
+#include "timer.h"
 
 #define CMD_BUF_SIZE 256
 
@@ -21,11 +23,12 @@ static void shell_execute(void)
     }
     else if (strcmp(cmd_buffer, "help") == 0) {
         terminal_writestring("Available commands:\n");
-        terminal_writestring("  help  - Show this message\n");
-        terminal_writestring("  clear - Clear the screen\n");
-        terminal_writestring("  hello - Print a greeting\n");
-        terminal_writestring("  info  - Display system information\n");
-        terminal_writestring("  echo  - Print text to the screen\n");
+        terminal_writestring("  help   - Show this message\n");
+        terminal_writestring("  clear  - Clear the screen\n");
+        terminal_writestring("  hello  - Print a greeting\n");
+        terminal_writestring("  info   - Display system information\n");
+        terminal_writestring("  echo   - Print text to the screen\n");
+        terminal_writestring("  uptime - Show system uptime\n");
     }
     else if (strcmp(cmd_buffer, "clear") == 0) {
         terminal_initialize();
@@ -36,7 +39,12 @@ static void shell_execute(void)
     else if (strcmp(cmd_buffer, "info") == 0) {
         terminal_writestring("Lite OS v0.1\n");
         terminal_writestring("Architecture: x86 (32-bit)\n");
-        terminal_writestring("Features: GDT, IDT, PIC, PS/2 Keyboard\n");
+        terminal_writestring("Features: GDT, IDT, PIC, PIT, PS/2 Keyboard\n");
+    }
+    else if (strcmp(cmd_buffer, "uptime") == 0) {
+        uint32_t uptime_sec = timer_get_uptime();
+        uint32_t ticks = timer_get_ticks();
+        printf("System uptime: %d seconds (%d ticks)\n", uptime_sec, ticks);
     }
     else if (strncmp(cmd_buffer, "echo ", 5) == 0) {
         /* Print everything after 'echo ' */
