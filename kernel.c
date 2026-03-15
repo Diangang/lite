@@ -6,16 +6,18 @@
 #include "shell.h"
 #include "timer.h"
 #include "libc.h"
+#include "multiboot.h"
+#include "pmm.h"
 
 /* Check if the compiler thinks we are targeting the wrong operating system. */
 
-void kernel_main(void);
+void kernel_main(uint32_t magic, multiboot_info_t* mbi);
 
 __attribute__((section(".text.entry")))
-void kernel_entry(void)
+void kernel_entry(uint32_t magic, multiboot_info_t* mbi)
 {
 	outb(0xE9, 'K');
-	kernel_main();
+	kernel_main(magic, mbi);
 	for (;;) {
 		__asm__ volatile ("hlt");
 	}
@@ -179,7 +181,7 @@ void terminal_writestring(const char* data)
 	terminal_write(data, strlen(data));
 }
 
-void kernel_main(void)
+void kernel_main(uint32_t magic, multiboot_info_t* mbi)
 {
 	/* Initialize terminal interface */
 	terminal_initialize();
@@ -190,6 +192,14 @@ void kernel_main(void)
     /* Initialize Global Descriptor Table */
     init_gdt();
     terminal_writestring("GDT initialized.\n");
+
+    /* Initialize Physical Memory Manager */
+    if (magic == MULTIBOOT_BOOTLOADER_MAGIC) {
+        pmm_init(mbi);
+        terminal_writestring("PMM initialized.\n");
+    } else {
+        terminal_writestring("Invalid Multiboot magic number!\n");
+    }
 
     /* Initialize Interrupt Descriptor Table */
     init_idt();

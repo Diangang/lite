@@ -2,6 +2,7 @@
 #include "kernel.h"
 #include "libc.h"
 #include "timer.h"
+#include "pmm.h"
 
 #define CMD_BUF_SIZE 256
 
@@ -23,12 +24,14 @@ static void shell_execute(void)
     }
     else if (strcmp(cmd_buffer, "help") == 0) {
         terminal_writestring("Available commands:\n");
-        terminal_writestring("  help   - Show this message\n");
-        terminal_writestring("  clear  - Clear the screen\n");
-        terminal_writestring("  hello  - Print a greeting\n");
-        terminal_writestring("  info   - Display system information\n");
-        terminal_writestring("  echo   - Print text to the screen\n");
-        terminal_writestring("  uptime - Show system uptime\n");
+        terminal_writestring("  help    - Show this message\n");
+        terminal_writestring("  clear   - Clear the screen\n");
+        terminal_writestring("  hello   - Print a greeting\n");
+        terminal_writestring("  info    - Display system information\n");
+        terminal_writestring("  echo    - Print text to the screen\n");
+        terminal_writestring("  uptime  - Show system uptime\n");
+        terminal_writestring("  meminfo - Show physical memory map\n");
+        terminal_writestring("  alloc   - Test physical memory allocation\n");
     }
     else if (strcmp(cmd_buffer, "clear") == 0) {
         terminal_initialize();
@@ -39,12 +42,30 @@ static void shell_execute(void)
     else if (strcmp(cmd_buffer, "info") == 0) {
         terminal_writestring("Lite OS v0.1\n");
         terminal_writestring("Architecture: x86 (32-bit)\n");
-        terminal_writestring("Features: GDT, IDT, PIC, PIT, PS/2 Keyboard\n");
+        terminal_writestring("Features: GDT, IDT, PIC, PIT, PS/2 Keyboard, PMM\n");
     }
     else if (strcmp(cmd_buffer, "uptime") == 0) {
         uint32_t uptime_sec = timer_get_uptime();
         uint32_t ticks = timer_get_ticks();
         printf("System uptime: %d seconds (%d ticks)\n", uptime_sec, ticks);
+    }
+    else if (strcmp(cmd_buffer, "meminfo") == 0) {
+        pmm_print_memory_map();
+    }
+    else if (strcmp(cmd_buffer, "alloc") == 0) {
+        terminal_writestring("Allocating 3 pages...\n");
+        void* p1 = pmm_alloc_page();
+        printf("Page 1: 0x%x\n", (uint32_t)p1);
+        void* p2 = pmm_alloc_page();
+        printf("Page 2: 0x%x\n", (uint32_t)p2);
+        void* p3 = pmm_alloc_page();
+        printf("Page 3: 0x%x\n", (uint32_t)p3);
+
+        terminal_writestring("Freeing Page 2...\n");
+        pmm_free_page(p2);
+
+        void* p4 = pmm_alloc_page();
+        printf("Allocated Page 4 (should be same as Page 2): 0x%x\n", (uint32_t)p4);
     }
     else if (strncmp(cmd_buffer, "echo ", 5) == 0) {
         /* Print everything after 'echo ' */

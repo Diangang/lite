@@ -40,13 +40,17 @@ _start:
 	/* Set up the stack pointer. */
 	mov $stack_top, %esp
 
+	/* Push Multiboot information structure pointer (ebx) and magic number (eax) */
+	push %ebx
+	push %eax
+
 	/*
 	 * Call the global constructors. (Optional for C, but good practice if
 	 * you ever add C++ or advanced C features).
 	 */
 
-	/* Transfer control to the main kernel. */
-	call kernel_main
+	/* 跳转到 C 语言的内核入口函数 */
+	call kernel_entry
 
 	/*
 	 * If the system has nothing more to do, put the computer into an

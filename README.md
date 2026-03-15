@@ -1,4 +1,4 @@
-# Lite OS
+# Lite Kernel
 
 Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 内核。
 
@@ -18,8 +18,11 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - 串口（COM1）日志输出（方便在无图形界面下调试）。
   - PS/2 键盘驱动。
   - **PIT 可编程定时器**（提供系统 Tick 和 uptime 支持）。
+  - **物理内存管理 (PMM)**：
+    - Multiboot E820 内存地图解析。
+    - **Bitmap 位图分配器**：支持按页 (4KB) 粒度的物理内存分配 (`alloc`) 与释放 (`free`)。
   - **极简标准 C 库**（实现了 `printf`, `memset`, `memcpy`, `itoa` 等核心函数）。
-- **交互式 Shell**：内置极简内核态 Shell，支持 `help`, `clear`, `info`, `echo`, `uptime` 等命令，具备命令缓冲区和回车解析功能。
+- **交互式 Shell**：内置极简内核态 Shell，支持 `help`, `clear`, `info`, `echo`, `uptime`, `meminfo`, `alloc` 等命令。
 
 ## 构建与运行
 
