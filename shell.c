@@ -3,6 +3,7 @@
 #include "libc.h"
 #include "timer.h"
 #include "pmm.h"
+#include "kheap.h"
 
 #define CMD_BUF_SIZE 256
 
@@ -32,6 +33,8 @@ static void shell_execute(void)
         terminal_writestring("  uptime  - Show system uptime\n");
         terminal_writestring("  meminfo - Show physical memory map\n");
         terminal_writestring("  alloc   - Test physical memory allocation\n");
+        terminal_writestring("  vmmtest - Trigger a Page Fault\n");
+        terminal_writestring("  heaptest- Test kernel heap (malloc/free)\n");
     }
     else if (strcmp(cmd_buffer, "clear") == 0) {
         terminal_initialize();
@@ -66,6 +69,35 @@ static void shell_execute(void)
 
         void* p4 = pmm_alloc_page();
         printf("Allocated Page 4 (should be same as Page 2): 0x%x\n", (uint32_t)p4);
+    }
+    else if (strcmp(cmd_buffer, "vmmtest") == 0) {
+        terminal_writestring("Attempting to write to unmapped memory (0xA0000000)...\n");
+        uint32_t *ptr = (uint32_t*)0xA0000000;
+        *ptr = 0xDEADBEEF; /* This should trigger a Page Fault! */
+    }
+    else if (strcmp(cmd_buffer, "heaptest") == 0) {
+        kheap_print_stats();
+
+        terminal_writestring("Allocating 128 bytes...\n");
+        void *a = kmalloc(128);
+        printf("Allocated at 0x%x\n", (uint32_t)a);
+
+        terminal_writestring("Allocating 256 bytes...\n");
+        void *b = kmalloc(256);
+        printf("Allocated at 0x%x\n", (uint32_t)b);
+
+        kheap_print_stats();
+
+        terminal_writestring("Freeing first block...\n");
+        kfree(a);
+
+        kheap_print_stats();
+
+        terminal_writestring("Allocating 64 bytes (should fit in first block)...\n");
+        void *c = kmalloc(64);
+        printf("Allocated at 0x%x\n", (uint32_t)c);
+
+        kheap_print_stats();
     }
     else if (strncmp(cmd_buffer, "echo ", 5) == 0) {
         /* Print everything after 'echo ' */

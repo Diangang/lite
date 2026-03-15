@@ -8,6 +8,8 @@
 #include "libc.h"
 #include "multiboot.h"
 #include "pmm.h"
+#include "vmm.h"
+#include "kheap.h"
 
 /* Check if the compiler thinks we are targeting the wrong operating system. */
 
@@ -197,6 +199,12 @@ void kernel_main(uint32_t magic, multiboot_info_t* mbi)
     if (magic == MULTIBOOT_BOOTLOADER_MAGIC) {
         pmm_init(mbi);
         terminal_writestring("PMM initialized.\n");
+
+        /* Initialize Virtual Memory Manager */
+        vmm_init();
+
+        /* Initialize Kernel Heap */
+        kheap_init();
     } else {
         terminal_writestring("Invalid Multiboot magic number!\n");
     }

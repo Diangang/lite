@@ -21,8 +21,16 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - **物理内存管理 (PMM)**：
     - Multiboot E820 内存地图解析。
     - **Bitmap 位图分配器**：支持按页 (4KB) 粒度的物理内存分配 (`alloc`) 与释放 (`free`)。
+  - **虚拟内存管理 (VMM)**：
+    - **分页机制 (Paging)**：开启 x86 保护模式分页，设置 CR3 和 CR0 寄存器。
+    - **恒等映射**：将物理内存前 4MB 映射到相同的虚拟地址，保证内核平滑启动。
+    - **缺页异常处理**：捕获并解析 `#PF` (Interrupt 14)，打印故障地址 (CR2) 和错误码。
+  - **内核堆分配器 (KHeap)**：
+    - 实现了 `kmalloc` 和 `kfree`，支持动态内存分配。
+    - 采用 **First-Fit** 策略与空闲块 **合并 (Coalescing)** 算法。
+    - 支持堆空间自动扩展（当堆满时自动申请新物理页）。
   - **极简标准 C 库**（实现了 `printf`, `memset`, `memcpy`, `itoa` 等核心函数）。
-- **交互式 Shell**：内置极简内核态 Shell，支持 `help`, `clear`, `info`, `echo`, `uptime`, `meminfo`, `alloc` 等命令。
+- **交互式 Shell**：内置极简内核态 Shell，支持 `help`, `clear`, `info`, `echo`, `uptime`, `meminfo`, `alloc`, `vmmtest`, `heaptest` 等命令。
 
 ## 构建与运行
 
