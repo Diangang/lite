@@ -1,19 +1,10 @@
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
+#include "kernel.h"
+#include "gdt.h"
+#include "idt.h"
+#include "isr.h"
+#include "keyboard.h"
 
-static inline void outb(uint16_t port, uint8_t value)
-{
-	__asm__ volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
-}
-
-static inline uint8_t inb(uint16_t port)
-{
-	uint8_t ret;
-
-	__asm__ volatile ("inb %1, %0" : "=a"(ret) : "Nd"(port));
-	return ret;
-}
+/* Check if the compiler thinks we are targeting the wrong operating system. */
 
 void kernel_main(void);
 
@@ -72,8 +63,8 @@ static void serial_write(const char* data)
 
 /* Hardware text mode color constants. */
 enum vga_color {
-	VGA_COLOR_BLACK = 0,
-	VGA_COLOR_BLUE = 1,
+    VGA_COLOR_BLACK = 0,
+    VGA_COLOR_BLUE = 1,
 	VGA_COLOR_GREEN = 2,
 	VGA_COLOR_CYAN = 3,
 	VGA_COLOR_RED = 4,
@@ -89,6 +80,15 @@ enum vga_color {
 	VGA_COLOR_LIGHT_BROWN = 14,
 	VGA_COLOR_WHITE = 15,
 };
+
+/* Simple memset implementation */
+void *memset(void *s, int c, size_t n)
+{
+    unsigned char *p = s;
+    while (n--)
+        *p++ = (unsigned char)c;
+    return s;
+}
 
 static inline uint8_t vga_entry_color(enum vga_color fg, enum vga_color bg)
 {
@@ -168,11 +168,39 @@ void terminal_writestring(const char* data)
 	terminal_write(data, strlen(data));
 }
 
+#include "gdt.h"
+#include "idt.h"
+#include "isr.h"
+#include "keyboard.h"
+
 void kernel_main(void)
 {
 	/* Initialize terminal interface */
 	terminal_initialize();
-	serial_init();
+
+    /* Initialize Global Descriptor Table */
+    init_gdt();
+    terminal_writestring("GDT initialized.\n");
+
+    /* Initialize Interrupt Descriptor Table */
+    init_idt();
+    terminal_writestring("IDT initialized.\n");
+
+    /* Install CPU Exceptions before IRQs! */
+    isr_install();
+    terminal_writestring("CPU Exceptions installed.\n");
+
+    /* Initialize Interrupt Service Routines (PIC remap + IRQ handlers) */
+    irq_install();
+    terminal_writestring("ISRs and PIC initialized.\n");
+
+    /* Initialize Keyboard Driver */
+    init_keyboard();
+    terminal_writestring("Keyboard initialized. Try typing!\n");
+
+    /* Enable Interrupts */
+    __asm__ volatile ("sti");
+    terminal_writestring("Interrupts enabled (STI).\n");
 
 	/* Newline support is rudimentary in this example */
 	terminal_writestring("Hello, Kernel World!\n");
@@ -184,4 +212,9 @@ void kernel_main(void)
 	serial_write("This is a minimal kernel running on QEMU.\n");
 	serial_write("Memory address 0xB8000 is directly manipulated.\n");
 	serial_write("Enjoy your OS development journey!\n");
+
+    /* Infinite loop to keep the kernel running and responsive to interrupts */
+    while (1) {
+        __asm__ volatile ("hlt");
+    }
 }
