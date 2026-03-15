@@ -108,6 +108,28 @@ size_t strlen(const char* str)
 	return len;
 }
 
+int strcmp(const char *s1, const char *s2)
+{
+    while (*s1 && (*s1 == *s2)) {
+        s1++;
+        s2++;
+    }
+    return *(const unsigned char *)s1 - *(const unsigned char *)s2;
+}
+
+int strncmp(const char *s1, const char *s2, size_t n)
+{
+    while (n && *s1 && (*s1 == *s2)) {
+        s1++;
+        s2++;
+        n--;
+    }
+    if (n == 0) {
+        return 0;
+    }
+    return *(const unsigned char *)s1 - *(const unsigned char *)s2;
+}
+
 static const size_t VGA_WIDTH = 80;
 static const size_t VGA_HEIGHT = 25;
 
@@ -141,19 +163,44 @@ void terminal_putentryat(char c, uint8_t color, size_t x, size_t y)
 	terminal_buffer[index] = vga_entry(c, color);
 }
 
+static void terminal_scroll(void)
+{
+    /* Move all lines up by one */
+    for (size_t y = 1; y < VGA_HEIGHT; y++) {
+        for (size_t x = 0; x < VGA_WIDTH; x++) {
+            size_t from_index = y * VGA_WIDTH + x;
+            size_t to_index = (y - 1) * VGA_WIDTH + x;
+            terminal_buffer[to_index] = terminal_buffer[from_index];
+        }
+    }
+    /* Clear the last line */
+    for (size_t x = 0; x < VGA_WIDTH; x++) {
+        size_t index = (VGA_HEIGHT - 1) * VGA_WIDTH + x;
+        terminal_buffer[index] = vga_entry(' ', terminal_color);
+    }
+    terminal_row = VGA_HEIGHT - 1;
+}
+
 void terminal_putchar(char c)
 {
+    if (c == '\b') {
+        if (terminal_column > 0) {
+            terminal_column--;
+            terminal_putentryat(' ', terminal_color, terminal_column, terminal_row);
+        }
+        return;
+    }
 	if (c == '\n') {
 		terminal_column = 0;
 		if (++terminal_row == VGA_HEIGHT)
-			terminal_row = 0;
+			terminal_scroll();
 		return;
 	}
 	terminal_putentryat(c, terminal_color, terminal_column, terminal_row);
 	if (++terminal_column == VGA_WIDTH) {
 		terminal_column = 0;
 		if (++terminal_row == VGA_HEIGHT)
-			terminal_row = 0;
+			terminal_scroll();
 	}
 }
 
@@ -172,11 +219,15 @@ void terminal_writestring(const char* data)
 #include "idt.h"
 #include "isr.h"
 #include "keyboard.h"
+#include "shell.h"
 
 void kernel_main(void)
 {
 	/* Initialize terminal interface */
 	terminal_initialize();
+
+    /* Initialize serial port */
+    serial_init();
 
     /* Initialize Global Descriptor Table */
     init_gdt();
@@ -212,6 +263,9 @@ void kernel_main(void)
 	serial_write("This is a minimal kernel running on QEMU.\n");
 	serial_write("Memory address 0xB8000 is directly manipulated.\n");
 	serial_write("Enjoy your OS development journey!\n");
+
+    /* Initialize the shell */
+    shell_init();
 
     /* Infinite loop to keep the kernel running and responsive to interrupts */
     while (1) {

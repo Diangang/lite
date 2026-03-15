@@ -22,4 +22,8 @@ void terminal_initialize(void);
 void terminal_writestring(const char* data);
 void terminal_putchar(char c);
 
+/* String Helpers */
+int strcmp(const char *s1, const char *s2);
+int strncmp(const char *s1, const char *s2, size_t n);
+
 #endif

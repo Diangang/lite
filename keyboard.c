@@ -1,6 +1,7 @@
 #include "keyboard.h"
 #include "isr.h"
 #include "kernel.h" /* For terminal_putchar and inb */
+#include "shell.h"
 
 /* US Keyboard Layout Scancode Table (Set 1) */
 unsigned char kbdus[256] =
@@ -55,9 +56,9 @@ void keyboard_callback(registers_t *regs)
     }
     else
     {
-        /* Key pressed - print the character */
+        /* Key pressed - pass the character to the shell */
         if (kbdus[scancode] != 0) {
-            terminal_putchar(kbdus[scancode]);
+            shell_process_char(kbdus[scancode]);
         }
     }
 }
