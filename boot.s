@@ -20,10 +20,10 @@
 .long CHECKSUM
 
 /* Reserve a stack for the initial thread. */
-.section .bss
+.section .bootstrap_stack, "aw", @nobits
 .align 16
 stack_bottom:
-.skip 16384 # 16 KiB
+.skip 32768 # 32 KiB
 stack_top:
 
 /* The kernel entry point. */

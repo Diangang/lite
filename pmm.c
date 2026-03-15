@@ -48,9 +48,26 @@ void pmm_init(multiboot_info_t* mbi)
 
     total_pages = (total_memory_kb * 1024) / PMM_PAGE_SIZE;
 
-    /* 2. Place bitmap after the kernel */
+    /* 2. Place bitmap after the kernel AND after any modules */
     /* We use the 'end' symbol from linker script to find where kernel ends */
     uint32_t kernel_end = (uint32_t)&end;
+
+    /* Check if modules exist and place bitmap after them to avoid overwriting */
+    if (mbi->mods_count > 0) {
+        /* Check module structure array location */
+        uint32_t mods_struct_end = mbi->mods_addr + mbi->mods_count * sizeof(multiboot_module_t);
+        if (mods_struct_end > kernel_end) {
+            kernel_end = mods_struct_end;
+        }
+
+        /* Check module data location */
+        multiboot_module_t* mod = (multiboot_module_t*)mbi->mods_addr;
+        for (uint32_t i = 0; i < mbi->mods_count; i++) {
+            if (mod[i].mod_end > kernel_end) {
+                kernel_end = mod[i].mod_end;
+            }
+        }
+    }
 
     /* Align kernel_end to page boundary */
     if (kernel_end % PMM_PAGE_SIZE) {
@@ -86,10 +103,15 @@ void pmm_init(multiboot_info_t* mbi)
                         uint32_t page_addr = (start_page + i) * PMM_PAGE_SIZE;
                         uint32_t bitmap_end_addr = (uint32_t)pmm_bitmap + (bitmap_size * 4);
 
-                        /* Also check overlap with kernel code (0x100000 - &end) */
-                        /* But wait, we placed bitmap AFTER &end, so we just need to protect up to bitmap_end_addr */
-
+                        /* Check overlap with kernel code/modules/bitmap */
                         if (page_addr >= bitmap_end_addr) {
+                            /* The bitmap is now placed AFTER everything (kernel + modules + struct) */
+                            /* So we just need to check if page_addr is >= bitmap_end_addr to be safe */
+                            /* Actually, we should free pages that are AFTER the bitmap. */
+                            /* But wait, what if there is free memory BETWEEN kernel end and bitmap start? */
+                            /* We moved bitmap to end of everything. So everything before bitmap is used (kernel, modules). */
+                            /* So freeing only pages >= bitmap_end_addr is safe and correct. */
+
                             bitmap_unset(start_page + i);
                         }
                     }

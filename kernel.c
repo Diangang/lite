@@ -10,52 +10,69 @@
 #include "pmm.h"
 #include "vmm.h"
 #include "kheap.h"
+#include "initrd.h"
 
 /* Check if the compiler thinks we are targeting the wrong operating system. */
 
-void kernel_main(uint32_t magic, multiboot_info_t* mbi);
+void kernel_main(multiboot_info_t* mbi, uint32_t magic);
 
 __attribute__((section(".text.entry")))
 void kernel_entry(uint32_t magic, multiboot_info_t* mbi)
 {
 	outb(0xE9, 'K');
-	kernel_main(magic, mbi);
+	kernel_main(mbi, magic);
 	for (;;) {
 		__asm__ volatile ("hlt");
 	}
 }
 
-enum {
-	COM1 = 0x3F8
-};
-
-static void serial_init(void)
-{
-	outb(COM1 + 1, 0x00);
-	outb(COM1 + 3, 0x80);
-	outb(COM1 + 0, 0x03);
-	outb(COM1 + 1, 0x00);
-	outb(COM1 + 3, 0x03);
-	outb(COM1 + 2, 0xC7);
-	outb(COM1 + 4, 0x0B);
+/* Serial Helper Functions */
+void serial_init() {
+   outb(0x3f8 + 1, 0x00);    // Disable all interrupts
+   outb(0x3f8 + 3, 0x80);    // Enable DLAB (set baud rate divisor)
+   outb(0x3f8 + 0, 0x03);    // Set divisor to 3 (lo byte) 38400 baud
+   outb(0x3f8 + 1, 0x00);    //                  (hi byte)
+   outb(0x3f8 + 3, 0x03);    // 8 bits, no parity, one stop bit
+   outb(0x3f8 + 2, 0xC7);    // Enable FIFO, clear them, with 14-byte threshold
+   outb(0x3f8 + 4, 0x0B);    // IRQs enabled, RTS/DSR set
+   outb(0x3f8 + 1, 0x01);    // Enable Received Data Available Interrupt
 }
 
-static int serial_is_transmit_empty(void)
-{
-	return inb(COM1 + 5) & 0x20;
+int is_transmit_empty() {
+   return inb(0x3f8 + 5) & 0x20;
 }
 
-static void serial_putchar(char c)
-{
-	while (!serial_is_transmit_empty()) {
-	}
-	outb(COM1, (uint8_t)c);
+void write_serial(char a) {
+   while (is_transmit_empty() == 0);
+   outb(0x3f8, a);
 }
 
-static void serial_write(const char* data)
-{
-	for (size_t i = 0; data[i]; i++)
-		serial_putchar(data[i]);
+void serial_write(const char* data) {
+    while (*data) {
+        write_serial(*data++);
+    }
+}
+
+void serial_handler(registers_t *regs) {
+    (void)regs;
+    /* Check if it's a read interrupt (IIR) */
+    /* Read the character */
+    if (inb(0x3f8 + 5) & 1) {
+        char c = inb(0x3f8);
+        /* Echo back is handled by shell */
+        /* Pass to shell */
+        shell_process_char(c);
+    }
+}
+
+void serial_write_hex(uint32_t n) {
+    serial_write("0x");
+    for (int i = 28; i >= 0; i -= 4) {
+        uint32_t digit = (n >> i) & 0xF;
+        char c = (digit < 10) ? ('0' + digit) : ('A' + digit - 10);
+        write_serial(c);
+    }
+    serial_write("\n");
 }
 
 /* Check if the compiler thinks we are targeting the wrong operating system. */
@@ -108,16 +125,16 @@ uint16_t* terminal_buffer;
 
 void terminal_initialize(void)
 {
-	terminal_row = 0;
-	terminal_column = 0;
-	terminal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-	terminal_buffer = (uint16_t*) 0xB8000;
-	for (size_t y = 0; y < VGA_HEIGHT; y++) {
-		for (size_t x = 0; x < VGA_WIDTH; x++) {
-			const size_t index = y * VGA_WIDTH + x;
-			terminal_buffer[index] = vga_entry(' ', terminal_color);
-		}
-	}
+    terminal_row = 0;
+    terminal_column = 0;
+    terminal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    terminal_buffer = (uint16_t*) 0xB8000;
+    for (size_t y = 0; y < VGA_HEIGHT; y++) {
+        for (size_t x = 0; x < VGA_WIDTH; x++) {
+            const size_t index = y * VGA_WIDTH + x;
+            terminal_buffer[index] = vga_entry(' ', terminal_color);
+        }
+    }
 }
 
 void terminal_setcolor(uint8_t color)
@@ -151,6 +168,9 @@ static void terminal_scroll(void)
 
 void terminal_putchar(char c)
 {
+    /* Output to Serial Port as well */
+    write_serial(c);
+
     if (c == '\b') {
         if (terminal_column > 0) {
             terminal_column--;
@@ -183,55 +203,87 @@ void terminal_writestring(const char* data)
 	terminal_write(data, strlen(data));
 }
 
-void kernel_main(uint32_t magic, multiboot_info_t* mbi)
+void kernel_main(multiboot_info_t* mbi, uint32_t magic)
 {
-	/* Initialize terminal interface */
-	terminal_initialize();
-
-    /* Initialize serial port */
+    /* Initialize serial port FIRST so we can debug without VGA */
     serial_init();
+    serial_write("Serial initialized.\n");
+
+    /* Initialize terminal interface */
+    terminal_initialize();
 
     /* Initialize Global Descriptor Table */
     init_gdt();
-    terminal_writestring("GDT initialized.\n");
+    serial_write("GDT initialized.\n");
 
     /* Initialize Physical Memory Manager */
     if (magic == MULTIBOOT_BOOTLOADER_MAGIC) {
         pmm_init(mbi);
-        terminal_writestring("PMM initialized.\n");
+        serial_write("PMM initialized.\n");
 
         /* Initialize Virtual Memory Manager */
         vmm_init();
+        serial_write("VMM initialized.\n");
 
         /* Initialize Kernel Heap */
         kheap_init();
+        serial_write("KHEAP initialized.\n");
+
+        /* Initialize Ramdisk if modules are loaded */
+        if (mbi->mods_count > 0) {
+            multiboot_module_t* mod = (multiboot_module_t*)mbi->mods_addr;
+            uint32_t initrd_location = mod->mod_start;
+            uint32_t initrd_end = mod->mod_end;
+
+            if (initrd_location == 0xFFFFFFFF || initrd_location == 0) {
+                serial_write("ERROR: Invalid InitRD location!\n");
+                terminal_writestring("ERROR: Invalid InitRD location!\n");
+            } else {
+                /* Identity map the initrd range to be safe */
+                uint32_t start_page = initrd_location & 0xFFFFF000;
+                uint32_t end_page = (initrd_end & 0xFFFFF000) + 4096;
+                // Avoid potential overflow if end_page is near 4GB
+                if (end_page < start_page) end_page = 0xFFFFF000;
+
+                for (uint32_t addr = start_page; addr < end_page; addr += 4096) {
+                     vmm_map_page((void*)addr, (void*)addr);
+                }
+
+                fs_root = init_initrd(initrd_location);
+                if (fs_root) {
+                    serial_write("Ramdisk loaded.\n");
+                    terminal_writestring("Ramdisk loaded.\n");
+                } else {
+                    serial_write("Failed to load Ramdisk.\n");
+                    terminal_writestring("Failed to load Ramdisk.\n");
+                }
+            }
+        } else {
+            terminal_writestring("WARNING: No Multiboot modules found! InitRD not loaded.\n");
+        }
     } else {
         terminal_writestring("Invalid Multiboot magic number!\n");
     }
 
     /* Initialize Interrupt Descriptor Table */
     init_idt();
-    terminal_writestring("IDT initialized.\n");
+    serial_write("IDT initialized.\n");
 
     /* Install CPU Exceptions before IRQs! */
     isr_install();
-    terminal_writestring("CPU Exceptions installed.\n");
 
     /* Initialize Interrupt Service Routines (PIC remap + IRQ handlers) */
     irq_install();
-    terminal_writestring("ISRs and PIC initialized.\n");
+    serial_write("Interrupts initialized.\n");
 
     /* Initialize Keyboard Driver */
     init_keyboard();
-    terminal_writestring("Keyboard initialized. Try typing!\n");
 
     /* Initialize PIT Timer (100 Hz = 10ms per tick) */
     init_timer(100);
-    terminal_writestring("Timer initialized (100 Hz).\n");
 
     /* Enable Interrupts */
     __asm__ volatile ("sti");
-    terminal_writestring("Interrupts enabled (STI).\n");
 
 	/* Newline support is rudimentary in this example */
 	terminal_writestring("Hello, Kernel World!\n");

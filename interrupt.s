@@ -74,6 +74,13 @@ irq1:
     push $33        /* Interrupt number 33 */
     jmp irq_common_stub
 
+/* IRQ 4 - Serial COM1 */
+.global irq4
+irq4:
+    push $0         /* Dummy error code */
+    push $36        /* Interrupt number 36 */
+    jmp irq_common_stub
+
 /* ISRs (Exceptions) */
 .macro ISR_NOERRCODE num
   .global isr\num

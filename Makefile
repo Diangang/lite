@@ -8,13 +8,14 @@ CFLAGS = -m32 -ffreestanding -O2 -Wall -Wextra -fno-pie -fno-builtin
 LDFLAGS = -m elf_i386 -T linker.ld -nostdlib
 
 SOURCES_S = boot.s gdt_flush.s idt_flush.s interrupt.s
-SOURCES_C = kernel.c gdt.c idt.c isr.c keyboard.c shell.c libc.c timer.c pmm.c vmm.c kheap.c
+SOURCES_C = kernel.c gdt.c idt.c isr.c keyboard.c shell.c libc.c timer.c pmm.c vmm.c kheap.c fs.c initrd.c
 OBJECTS = $(SOURCES_S:.s=.o) $(SOURCES_C:.c=.o)
 
 KERNEL = myos.bin
 ISO = myos.iso
+INITRD = initrd.img
 
-all: $(KERNEL)
+all: $(KERNEL) $(INITRD)
 
 $(KERNEL): $(OBJECTS)
 	$(LD) $(LDFLAGS) -o $@ $(OBJECTS)
@@ -37,14 +38,21 @@ iso: $(KERNEL)
 	@echo "To run the ISO with QEMU, execute manually:"
 	@echo "qemu-system-i386 -cdrom $(ISO) -curses"
 
-# Run directly with QEMU's built-in multiboot loader
-run: $(KERNEL)
-	@echo "\nKernel build complete: $(KERNEL)"
-	@echo "To run directly with QEMU, execute manually:"
-	@echo "qemu-system-i386 -kernel $(KERNEL) -curses"
+# Create a simple initrd creator tool
+mkinitrd: mkinitrd.c
+	gcc -o mkinitrd mkinitrd.c
+
+initrd.img: mkinitrd
+	echo "Hello, Lite OS!" > test.txt
+	echo "This is another file." > readme.txt
+	./mkinitrd test.txt readme.txt
+	rm -f test.txt readme.txt
+
+run: $(KERNEL) initrd.img
+	qemu-system-i386 -kernel $(KERNEL) -initrd initrd.img -m 512M
 
 clean:
-	rm -f $(OBJECTS) $(KERNEL) $(ISO)
+	rm -f $(OBJECTS) $(KERNEL) $(ISO) mkinitrd initrd.img
 	rm -rf isodir
 
 .PHONY: all iso run run-iso clean

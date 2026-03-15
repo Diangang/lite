@@ -30,7 +30,12 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
     - 采用 **First-Fit** 策略与空闲块 **合并 (Coalescing)** 算法。
     - 支持堆空间自动扩展（当堆满时自动申请新物理页）。
   - **极简标准 C 库**（实现了 `printf`, `memset`, `memcpy`, `itoa` 等核心函数）。
-- **交互式 Shell**：内置极简内核态 Shell，支持 `help`, `clear`, `info`, `echo`, `uptime`, `meminfo`, `alloc`, `vmmtest`, `heaptest` 等命令。
+  - **InitRD (Initial Ramdisk)**：
+    - 支持通过 Multiboot 协议加载外部文件系统镜像。
+    - 实现了简单的只读文件系统解析，支持读取文件内容。
+- **交互式 Shell**：
+  - 内置极简内核态 Shell，支持 `help`, `clear`, `info`, `echo`, `uptime`, `meminfo`, `alloc`, `vmmtest`, `heaptest`, `ls`, `cat` 等命令。
+  - **双模式输入输出**：同时支持 VGA 显示器+键盘 和 **串口 (COM1)** 终端交互。
 
 ## 构建与运行
 
@@ -47,11 +52,20 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
 # 清理并编译内核二进制 (myos.bin)
 make clean && make
 
-# 直接使用 QEMU 启动内核（最快、最常用的开发测试方式）
-make run
+# 使用 QEMU 启动内核（图形界面模式）
+# 注意：此模式下 Shell 输入依赖 QEMU 窗口焦点
+qemu-system-i386 -kernel myos.bin -initrd initrd.img -m 512M
+
+# [推荐] 使用调试脚本启动（无头模式 + 串口交互）
+# 适合在无图形界面的服务器或 SSH 环境下开发
+./debug.sh
 ```
 
-*提示：在 `make run` 的 QEMU 窗口中，您可以尝试敲击键盘，屏幕会回显您输入的字符。*
+*提示：使用 `./debug.sh` 启动后，您可以在当前终端直接与 OS Shell 交互。按 `Ctrl+A` 然后按 `X` 退出 QEMU。*
 
 ## 学习指南
 如果您想深入了解本项目每一行代码的运作原理，请阅读 [LEARNING.md](./LEARNING.md)。该文档详细拆解了引导流程、中断上下文切换、驱动编写等核心细节。
+
+此外，在 `docs/` 目录下还提供了以下参考资料：
+- [all_issues_summary.md](./docs/all_issues_summary.md)：项目开发过程中的疑难 Bug 及排查过程汇总（包含 InitRD 和串口交互等经典问题）。
+- [os_knowledge_qa.md](./docs/os_knowledge_qa.md)：操作系统底层核心概念（如 IDT、PIC、分页恒等映射等）的 Q&A 问答指南。

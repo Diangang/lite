@@ -22,9 +22,14 @@ static void kheap_extend(size_t size) {
         }
 
         /* Map the physical page to the current end of heap */
-        /* Note: We need to implement vmm_map_page first! */
-        /* For now, we assume vmm_map_page maps 4KB at a time */
         vmm_map_page(phys, (void*)heap_end);
+
+        /*
+         * IMPORTANT: Since we are not identity mapping the heap,
+         * we cannot access 'phys' directly to clear it.
+         * We MUST access it through the virtual address 'heap_end'.
+         */
+        memset((void*)heap_end, 0, 4096);
 
         heap_end += 4096;
     }

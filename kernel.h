@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "libc.h"
+#include "isr.h"
 
 /* I/O Port Helper Functions */
 static inline void outb(uint16_t port, uint8_t value)
@@ -23,5 +24,11 @@ static inline uint8_t inb(uint16_t port)
 void terminal_initialize(void);
 void terminal_writestring(const char* data);
 void terminal_putchar(char c);
+
+/* Serial Helper Functions */
+void serial_init(void);
+void serial_write(const char* data);
+void write_serial(char a);
+void serial_handler(registers_t* regs);
 
 #endif

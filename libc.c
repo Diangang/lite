@@ -27,6 +27,14 @@ size_t strlen(const char* str)
     return len;
 }
 
+char *strcpy(char *dest, const char *src)
+{
+    char *tmp = dest;
+    while ((*dest++ = *src++) != '\0')
+        /* nothing */;
+    return tmp;
+}
+
 int strcmp(const char *s1, const char *s2)
 {
     while (*s1 && (*s1 == *s2)) {
@@ -54,6 +62,7 @@ void itoa(int num, int base, char *buf)
 {
     int i = 0;
     int is_negative = 0;
+    unsigned int u_num;
 
     if (num == 0) {
         buf[i++] = '0';
@@ -63,13 +72,15 @@ void itoa(int num, int base, char *buf)
 
     if (num < 0 && base == 10) {
         is_negative = 1;
-        num = -num;
+        u_num = (unsigned int)-num;
+    } else {
+        u_num = (unsigned int)num;
     }
 
-    while (num != 0) {
-        int rem = num % base;
+    while (u_num != 0) {
+        int rem = u_num % base;
         buf[i++] = (rem > 9) ? (rem - 10) + 'a' : rem + '0';
-        num = num / base;
+        u_num = u_num / base;
     }
 
     if (is_negative) {
@@ -111,7 +122,6 @@ void printf(const char *format, ...)
                 case 'x': {
                     int val = va_arg(args, int);
                     itoa(val, 16, buf);
-                    terminal_writestring("0x");
                     terminal_writestring(buf);
                     break;
                 }

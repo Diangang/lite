@@ -41,7 +41,7 @@ SECTIONS
 	{
 		*(COMMON)
 		*(.bss)
-		*(.bss.*)
+        *(.bootstrap_stack)
 	}
 
     /* Define a symbol that points to the end of the kernel */

@@ -4,6 +4,7 @@
 #include "timer.h"
 #include "pmm.h"
 #include "kheap.h"
+#include "fs.h"
 
 #define CMD_BUF_SIZE 256
 
@@ -35,6 +36,8 @@ static void shell_execute(void)
         terminal_writestring("  alloc   - Test physical memory allocation\n");
         terminal_writestring("  vmmtest - Trigger a Page Fault\n");
         terminal_writestring("  heaptest- Test kernel heap (malloc/free)\n");
+        terminal_writestring("  ls      - List files in initrd\n");
+        terminal_writestring("  cat     - Print file content\n");
     }
     else if (strcmp(cmd_buffer, "clear") == 0) {
         terminal_initialize();
@@ -99,6 +102,41 @@ static void shell_execute(void)
 
         kheap_print_stats();
     }
+    else if (strcmp(cmd_buffer, "ls") == 0) {
+        if (!fs_root) {
+            terminal_writestring("No file system mounted!\n");
+        } else {
+            int i = 0;
+            struct dirent *node = 0;
+            while ((node = readdir_fs(fs_root, i)) != 0) {
+                printf("Found file: %s\n", node->name);
+                fs_node_t *fsnode = finddir_fs(fs_root, node->name);
+                if ((fsnode->flags & 0x7) == FS_DIRECTORY)
+                    printf("\t(directory)\n");
+                else
+                    printf("\t(file)\n");
+                i++;
+            }
+        }
+    }
+    else if (strncmp(cmd_buffer, "cat ", 4) == 0) {
+        if (!fs_root) {
+            terminal_writestring("No file system mounted!\n");
+        } else {
+            char* filename = cmd_buffer + 4;
+            fs_node_t *fsnode = finddir_fs(fs_root, filename);
+            if (fsnode) {
+                uint8_t *buf = (uint8_t*)kmalloc(fsnode->length + 1);
+                uint32_t sz = read_fs(fsnode, 0, fsnode->length, buf);
+                buf[sz] = 0;
+                terminal_writestring((char*)buf);
+                terminal_writestring("\n");
+                kfree(buf);
+            } else {
+                printf("File not found: %s\n", filename);
+            }
+        }
+    }
     else if (strncmp(cmd_buffer, "echo ", 5) == 0) {
         /* Print everything after 'echo ' */
         terminal_writestring(cmd_buffer + 5);
@@ -123,14 +161,14 @@ void shell_init(void)
 
 void shell_process_char(char c)
 {
-    if (c == '\n') {
+    if (c == '\n' || c == '\r') {
         /* Enter key */
         terminal_putchar('\n');
         shell_execute();
         shell_prompt();
     }
-    else if (c == '\b') {
-        /* Backspace */
+    else if (c == '\b' || c == 0x7F) {
+        /* Backspace or Delete */
         if (cmd_index > 0) {
             cmd_index--;
             terminal_putchar('\b'); /* Visually erase on screen */

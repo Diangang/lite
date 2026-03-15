@@ -39,18 +39,37 @@ void vmm_init(void)
         return;
     }
 
-    /* 3. Identity Map the first 4MB (Physical 0-4MB -> Virtual 0-4MB) */
-    /* This ensures the kernel continues running correctly after paging is enabled */
-    uint32_t addr = 0;
-    for (int i = 0; i < 1024; i++) {
-        /* Attribute: Supervisor, Read/Write, Present */
-        first_page_table[i] = addr | PTE_READ_WRITE | PTE_PRESENT;
-        addr += 4096;
-    }
+    /* 3. Identity Map the first 128MB (Physical 0-128MB -> Virtual 0-128MB) */
+    /* This ensures kernel, initrd, and low memory are all accessible */
+    /* We need 32 page tables to cover 128MB (128 / 4 = 32) */
 
-    /* 4. Put the Page Table into the Page Directory */
-    /* The first entry of PDE points to this Page Table */
-    page_directory[0] = ((uint32_t)first_page_table) | PTE_READ_WRITE | PTE_PRESENT;
+    uint32_t addr = 0;
+
+    /* Loop through 32 Page Tables (covering 128MB) */
+    for (int pde_idx = 0; pde_idx < 32; pde_idx++) {
+        uint32_t* pt;
+
+        if (pde_idx == 0) {
+            pt = first_page_table; /* We already allocated this one */
+        } else {
+            pt = (uint32_t*)pmm_alloc_page();
+            if (!pt) {
+                printf("VMM PANIC: Failed to allocate Page Table %d! Halting.\n", pde_idx);
+                for(;;); /* Halt */
+            }
+            memset(pt, 0, 4096);
+        }
+
+        /* Fill the page table */
+        for (int i = 0; i < 1024; i++) {
+            /* Attribute: Supervisor, Read/Write, Present */
+            pt[i] = addr | PTE_READ_WRITE | PTE_PRESENT;
+            addr += 4096;
+        }
+
+        /* Put the Page Table into the Page Directory */
+        page_directory[pde_idx] = ((uint32_t)pt) | PTE_READ_WRITE | PTE_PRESENT;
+    }
 
     /* 5. Register Page Fault Handler */
     register_interrupt_handler(14, page_fault_handler);
@@ -69,6 +88,8 @@ void vmm_init(void)
 
 void vmm_map_page(void* phys_addr, void* virt_addr)
 {
+    /* printf("DEBUG: Mapping phys 0x%x -> virt 0x%x\n", phys_addr, virt_addr); */
+
     /*
      * Simple mapper: Assumes the page table for this address already exists.
      * Since our heap is at 0xC0000000 (3GB mark), we need a page table for that region.

@@ -41,6 +41,7 @@ extern void isr31();
 /* ... we will add more as needed, but for now let's focus on IRQ1 (Keyboard) */
 extern void irq0();
 extern void irq1();
+extern void irq4();
 
 /*
  * Remap the PIC (Programmable Interrupt Controller)
@@ -69,8 +70,8 @@ static void pic_remap(void)
     outb(0xA1, 0x01);
 
     /* OCW1: Unmask all interrupts (0x00 = enable all, 0xFF = disable all) */
-    /* Only enable IRQ0 (Timer) and IRQ1 (Keyboard) for now */
-    outb(0x21, 0xFC); /* 1111 1100: Enable IRQ0 and IRQ1 */
+    /* Only enable IRQ0 (Timer), IRQ1 (Keyboard), and IRQ4 (Serial) for now */
+    outb(0x21, 0xEC); /* 1110 1100: Enable IRQ0, IRQ1, IRQ4 */
     outb(0xA1, 0xFF); /* Disable all slave IRQs */
 }
 
@@ -151,7 +152,11 @@ void irq_handler(registers_t *regs)
     /* Always send to master PIC */
     outb(0x20, 0x20);
 
-    if (interrupt_handlers[regs->int_no] != 0)
+    /* Handle Serial Interrupt specifically if needed, or through handler array */
+    if (regs->int_no == 36) { // IRQ 4
+        serial_handler(regs);
+    }
+    else if (interrupt_handlers[regs->int_no] != 0)
     {
         isr_t handler = interrupt_handlers[regs->int_no];
         handler(regs);
@@ -204,4 +209,7 @@ void irq_install(void)
 
     /* IRQ1 (Keyboard) -> IDT 33 */
     idt_set_gate(33, (uint32_t)irq1, 0x08, 0x8E);
+
+    /* IRQ4 (Serial) -> IDT 36 */
+    idt_set_gate(36, (uint32_t)irq4, 0x08, 0x8E);
 }
