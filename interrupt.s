@@ -48,7 +48,7 @@ irq_common_stub:
 
     push %esp       /* Pass pointer to stack */
     call irq_handler
-    add $4, %esp    /* Clean up the pushed esp */
+    mov %eax, %esp
 
     pop %ebx
     mov %bx, %ds

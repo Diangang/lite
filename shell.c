@@ -2,6 +2,7 @@
 #include "kernel.h"
 #include "libc.h"
 #include "timer.h"
+#include "task.h"
 #include "pmm.h"
 #include "kheap.h"
 #include "fs.h"
@@ -36,6 +37,11 @@ static void shell_execute(void)
         terminal_writestring("  alloc   - Test physical memory allocation\n");
         terminal_writestring("  vmmtest - Trigger a Page Fault\n");
         terminal_writestring("  heaptest- Test kernel heap (malloc/free)\n");
+        terminal_writestring("  demo on - Enable task demo output\n");
+        terminal_writestring("  demo off- Disable task demo output\n");
+        terminal_writestring("  yield   - Voluntary scheduler yield\n");
+        terminal_writestring("  sleep   - Sleep for 50 ticks\n");
+        terminal_writestring("  ps      - List tasks\n");
         terminal_writestring("  ls      - List files in initrd\n");
         terminal_writestring("  cat     - Print file content\n");
     }
@@ -101,6 +107,33 @@ static void shell_execute(void)
         printf("Allocated at 0x%x\n", (uint32_t)c);
 
         kheap_print_stats();
+    }
+    else if (strcmp(cmd_buffer, "demo on") == 0) {
+        task_set_demo_enabled(1);
+        terminal_writestring("Task demo enabled.\n");
+    }
+    else if (strcmp(cmd_buffer, "demo off") == 0) {
+        task_set_demo_enabled(0);
+        terminal_writestring("Task demo disabled.\n");
+    }
+    else if (strcmp(cmd_buffer, "demo") == 0) {
+        if (task_get_demo_enabled()) {
+            terminal_writestring("Task demo is enabled.\n");
+        } else {
+            terminal_writestring("Task demo is disabled.\n");
+        }
+    }
+    else if (strcmp(cmd_buffer, "yield") == 0) {
+        terminal_writestring("Yielding...\n");
+        task_yield();
+    }
+    else if (strcmp(cmd_buffer, "sleep") == 0) {
+        terminal_writestring("Sleeping for 50 ticks...\n");
+        task_sleep(50);
+        task_yield();
+    }
+    else if (strcmp(cmd_buffer, "ps") == 0) {
+        task_list();
     }
     else if (strcmp(cmd_buffer, "ls") == 0) {
         if (!fs_root) {

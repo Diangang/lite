@@ -11,6 +11,7 @@
 #include "vmm.h"
 #include "kheap.h"
 #include "initrd.h"
+#include "task.h"
 
 /* Check if the compiler thinks we are targeting the wrong operating system. */
 
@@ -73,6 +74,28 @@ void serial_write_hex(uint32_t n) {
         write_serial(c);
     }
     serial_write("\n");
+}
+
+static void task_demo_a(void)
+{
+    for (;;) {
+        if (task_get_demo_enabled()) {
+            terminal_putchar('A');
+        }
+        task_sleep(5);
+        task_yield();
+    }
+}
+
+static void task_demo_b(void)
+{
+    for (;;) {
+        if (task_get_demo_enabled()) {
+            terminal_putchar('B');
+        }
+        task_sleep(5);
+        task_yield();
+    }
 }
 
 /* Check if the compiler thinks we are targeting the wrong operating system. */
@@ -281,6 +304,11 @@ void kernel_main(multiboot_info_t* mbi, uint32_t magic)
 
     /* Initialize PIT Timer (100 Hz = 10ms per tick) */
     init_timer(100);
+
+    /* Initialize basic tasking */
+    tasking_init();
+    task_create(task_demo_a);
+    task_create(task_demo_b);
 
     /* Enable Interrupts */
     __asm__ volatile ("sti");

@@ -22,7 +22,7 @@ void register_interrupt_handler(uint8_t n, isr_t handler);
 
 /* IRQ definitions */
 void irq_install(void);
-void irq_handler(registers_t *regs);
+registers_t *irq_handler(registers_t *regs);
 
 #define IRQ0 32
 #define IRQ1 33

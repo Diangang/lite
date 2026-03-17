@@ -141,7 +141,7 @@ void isr_handler(registers_t *regs)
 }
 
 /* Common handler for all IRQs */
-void irq_handler(registers_t *regs)
+registers_t *irq_handler(registers_t *regs)
 {
     /* Send EOI (End of Interrupt) signal to PICs */
     /* If IRQ >= 8 (slave), send to slave PIC */
@@ -161,6 +161,13 @@ void irq_handler(registers_t *regs)
         isr_t handler = interrupt_handlers[regs->int_no];
         handler(regs);
     }
+
+    if (regs->int_no == IRQ0) {
+        registers_t *task_schedule(registers_t *r);
+        regs = task_schedule(regs);
+    }
+
+    return regs;
 }
 
 void isr_install(void)
