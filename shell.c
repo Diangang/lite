@@ -76,7 +76,7 @@ static void shell_execute(void)
     else if (strcmp(cmd_buffer, "vmmtest") == 0) {
         terminal_writestring("Attempting to write to unmapped memory (0xA0000000)...\n");
         uint32_t *ptr = (uint32_t*)0xA0000000;
-        *ptr = 0xDEADBEEF; /* This should trigger a Page Fault! */
+        *ptr = 0xDEADBEEF;
     }
     else if (strcmp(cmd_buffer, "heaptest") == 0) {
         kheap_print_stats();

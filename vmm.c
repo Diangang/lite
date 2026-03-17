@@ -134,25 +134,92 @@ void vmm_map_page(void* phys_addr, void* virt_addr)
     __asm__ volatile("invlpg (%0)" :: "r" (virt_addr) : "memory");
 }
 
+int vmm_is_mapped(void* virt_addr)
+{
+    if (!page_directory) return 0;
+
+    uint32_t va = (uint32_t)virt_addr;
+    uint32_t pde_idx = va / (1024 * 4096);
+    uint32_t pte_idx = (va % (1024 * 4096)) / 4096;
+
+    uint32_t pde = page_directory[pde_idx];
+    if (!(pde & PTE_PRESENT)) return 0;
+
+    uint32_t* table = (uint32_t*)(pde & ~0xFFF);
+    uint32_t pte = table[pte_idx];
+
+    return (pte & PTE_PRESENT) ? 1 : 0;
+}
+
+uint32_t vmm_virt_to_phys(void* virt_addr)
+{
+    if (!page_directory) return 0xFFFFFFFF;
+
+    uint32_t va = (uint32_t)virt_addr;
+    uint32_t pde_idx = va / (1024 * 4096);
+    uint32_t pte_idx = (va % (1024 * 4096)) / 4096;
+
+    uint32_t pde = page_directory[pde_idx];
+    if (!(pde & PTE_PRESENT)) return 0xFFFFFFFF;
+
+    uint32_t* table = (uint32_t*)(pde & ~0xFFF);
+    uint32_t pte = table[pte_idx];
+    if (!(pte & PTE_PRESENT)) return 0xFFFFFFFF;
+
+    return (pte & ~0xFFF) + (va & 0xFFF);
+}
+
 void page_fault_handler(registers_t *regs)
 {
     /* The faulting address is stored in the CR2 register */
     uint32_t faulting_address;
     __asm__ volatile("mov %%cr2, %0" : "=r" (faulting_address));
 
-    int present = !(regs->err_code & 0x1);   /* Page not present */
-    int rw = regs->err_code & 0x2;           /* Write operation? */
-    int us = regs->err_code & 0x4;           /* Processor was in user-mode? */
-    int reserved = regs->err_code & 0x8;     /* Overwritten CPU-reserved bits of page entry? */
-    int id = regs->err_code & 0x10;          /* Caused by an instruction fetch? */
+    int is_present = regs->err_code & 0x1;
+    int is_write = regs->err_code & 0x2;
+    int is_user = regs->err_code & 0x4;
+    int is_reserved = regs->err_code & 0x8;
+    int is_instr_fetch = regs->err_code & 0x10;
 
     printf("Page Fault! ( ");
-    if (present) printf("present ");
-    if (rw) printf("read-only ");
-    if (us) printf("user-mode ");
-    if (reserved) printf("reserved ");
-    if (id) printf("instruction-fetch ");
+    if (!is_present) printf("not-present ");
+    if (is_write) printf("write ");
+    else printf("read ");
+    if (is_user) printf("user ");
+    else printf("kernel ");
+    if (is_reserved) printf("reserved ");
+    if (is_instr_fetch) printf("instruction-fetch ");
     printf(") at 0x%x - EIP: 0x%x\n", faulting_address, regs->eip);
+
+    if (!is_present && !is_reserved) {
+        if (faulting_address < 0x1000) {
+            printf("KERNEL PANIC: Null pointer access.\n");
+            for(;;);
+        }
+
+        void *phys = pmm_alloc_page();
+        if (!phys) {
+            printf("KERNEL PANIC: Out of physical memory in Page Fault handler.\n");
+            for(;;);
+        }
+
+        uint32_t page_base = faulting_address & 0xFFFFF000;
+        vmm_map_page(phys, (void*)page_base);
+
+        uint32_t flags = PTE_READ_WRITE | PTE_PRESENT;
+        if (is_user) flags |= PTE_USER;
+
+        uint32_t pde_idx = page_base / (1024 * 4096);
+        uint32_t pte_idx = (page_base % (1024 * 4096)) / 4096;
+        uint32_t* table = (uint32_t*)(page_directory[pde_idx] & ~0xFFF);
+        table[pte_idx] = ((uint32_t)phys) | flags;
+
+        __asm__ volatile("invlpg (%0)" :: "r" ((void*)page_base) : "memory");
+
+        memset((void*)page_base, 0, 4096);
+        printf("Page Fault handled: mapped 0x%x -> 0x%x\n", page_base, (uint32_t)phys);
+        return;
+    }
 
     printf("KERNEL PANIC: Unhandled Page Fault.\n");
     for(;;);

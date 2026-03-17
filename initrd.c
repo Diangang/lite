@@ -53,35 +53,22 @@ static fs_node_t *initrd_finddir(fs_node_t *node, char *name)
 
 fs_node_t *init_initrd(uint32_t location)
 {
-    /*
-     * CRITICAL: Validate address before access.
-     * We assume location is identity mapped.
-     * Check if the page table entry actually exists for this location.
-     */
     if (location < 0x1000) {
         serial_write("DEBUG: ERROR: InitRD location is too low (NULL or IVT)!\n");
         return 0;
     }
 
-    volatile uint8_t *byte_ptr = (volatile uint8_t*)location;
-
-    /* Verify memory access by reading first few bytes */
-    /* This helps catch page faults early if mapping is wrong */
-    for(int i=0; i<4; i++) {
-        (void)byte_ptr[i];
+    if (!vmm_is_mapped((void*)location)) {
+        serial_write("DEBUG: ERROR: InitRD location is not mapped!\n");
+        return 0;
     }
 
     /* The first 4 bytes contains the number of files */
     uint32_t *ptr = (uint32_t*)location;
 
-    if (location > 0x08000000) {
-        serial_write("DEBUG: ERROR: InitRD location > 128MB, not mapped!\n");
-        return 0;
-    }
-
     nroot_nodes = *ptr;
 
-    if (nroot_nodes > 100 || nroot_nodes < 0) {
+    if (nroot_nodes > 100) {
         serial_write("DEBUG: nroot_nodes looks suspicious! Possible garbage data.\n");
         return 0;
     }

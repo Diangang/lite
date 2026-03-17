@@ -22,6 +22,8 @@
  */
 void vmm_init(void);
 void vmm_map_page(void* phys_addr, void* virt_addr);
+int vmm_is_mapped(void* virt_addr);
+uint32_t vmm_virt_to_phys(void* virt_addr);
 void page_fault_handler(registers_t *regs);
 
 #endif
