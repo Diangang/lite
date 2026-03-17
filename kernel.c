@@ -12,6 +12,7 @@
 #include "kheap.h"
 #include "initrd.h"
 #include "task.h"
+#include "syscall.h"
 
 /* Check if the compiler thinks we are targeting the wrong operating system. */
 
@@ -294,6 +295,7 @@ void kernel_main(multiboot_info_t* mbi, uint32_t magic)
 
     /* Install CPU Exceptions before IRQs! */
     isr_install();
+    syscall_init();
 
     /* Initialize Interrupt Service Routines (PIC remap + IRQ handlers) */
     irq_install();

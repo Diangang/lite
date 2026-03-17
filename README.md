@@ -35,7 +35,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
     - 支持通过 Multiboot 协议加载外部文件系统镜像。
     - 实现了简单的只读文件系统解析，支持读取文件内容。
 - **交互式 Shell**：
-  - 内置极简内核态 Shell，支持 `help`, `clear`, `info`, `echo`, `uptime`, `meminfo`, `alloc`, `vmmtest`, `heaptest`, `ls`, `cat`, `demo`, `yield`, `sleep`, `ps` 等命令（demo 默认关闭）。
+  - 内置极简内核态 Shell，支持 `help`, `clear`, `info`, `echo`, `uptime`, `meminfo`, `alloc`, `vmmtest`, `heaptest`, `ls`, `cat`, `demo`, `yield`, `sleep`, `ps`, `syscall` 等命令（demo 默认关闭）。
   - **双模式输入输出**：同时支持 VGA 显示器+键盘 和 **串口 (COM1)** 终端交互。
 
 ## 构建与运行

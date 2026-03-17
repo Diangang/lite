@@ -3,6 +3,7 @@
 #include "libc.h"
 #include "timer.h"
 #include "task.h"
+#include "syscall.h"
 #include "pmm.h"
 #include "kheap.h"
 #include "fs.h"
@@ -42,6 +43,7 @@ static void shell_execute(void)
         terminal_writestring("  yield   - Voluntary scheduler yield\n");
         terminal_writestring("  sleep   - Sleep for 50 ticks\n");
         terminal_writestring("  ps      - List tasks\n");
+        terminal_writestring("  syscall - Test syscall write/yield\n");
         terminal_writestring("  ls      - List files in initrd\n");
         terminal_writestring("  cat     - Print file content\n");
     }
@@ -134,6 +136,22 @@ static void shell_execute(void)
     }
     else if (strcmp(cmd_buffer, "ps") == 0) {
         task_list();
+    }
+    else if (strcmp(cmd_buffer, "syscall") == 0) {
+        const char *msg = "syscall write ok\n";
+        uint32_t len = strlen(msg);
+        __asm__ volatile(
+            "int $0x80"
+            :
+            : "a"(SYS_WRITE), "b"(msg), "c"(len)
+            : "memory"
+        );
+        __asm__ volatile(
+            "int $0x80"
+            :
+            : "a"(SYS_YIELD)
+            : "memory"
+        );
     }
     else if (strcmp(cmd_buffer, "ls") == 0) {
         if (!fs_root) {
