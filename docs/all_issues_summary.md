@@ -95,6 +95,11 @@
 - **定位**：用户态访问的页表项虽然设置了 `PTE_USER`，但对应的页目录项仍是内核权限，CPU 认为该页目录不可在 Ring 3 访问。
 - **解决**：在映射用户页时同步设置 PDE 的 `PTE_USER` 位，确保 PDE 与 PTE 同时具备用户权限。
 
+### 6.2 用户态 ELF 加载出现大量 Page Fault
+- **现象**：执行 `user` 后出现大量 `Page Fault! ( not-present write kernel )`，最后 `Page Fault! ( read user )` 并 `KERNEL PANIC`。
+- **定位**：用户 ELF 含 `.note.gnu.property` 段，链接器将其映射到 `0x08048000` 附近，加载器按段映射导致用户访问落在未预期区域，引发连锁缺页。
+- **解决**：为用户程序提供独立链接脚本，丢弃 `.note*` 段，只保留 `.text/.rodata/.data/.bss`，确保 ELF PT_LOAD 段落在 `0x400000` 附近并稳定可控。
+
 ---
 
 ## 总结

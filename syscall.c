@@ -30,6 +30,10 @@ void syscall_handler(registers_t *regs)
             task_yield();
             regs->eax = 0;
             break;
+        case SYS_EXIT:
+            task_exit();
+            regs->eax = 0;
+            break;
         default:
             regs->eax = (uint32_t)-1;
             break;

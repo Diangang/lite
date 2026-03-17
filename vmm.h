@@ -25,11 +25,13 @@ void vmm_map_page(void* phys_addr, void* virt_addr);
 void vmm_map_page_ex(uint32_t* dir, void* phys_addr, void* virt_addr, uint32_t flags);
 int vmm_is_mapped(void* virt_addr);
 uint32_t vmm_virt_to_phys(void* virt_addr);
+uint32_t vmm_virt_to_phys_ex(uint32_t* dir, void* virt_addr);
 void vmm_set_page_user(void* virt_addr);
 void vmm_set_page_user_ex(uint32_t* dir, void* virt_addr);
 uint32_t* vmm_clone_kernel_directory(void);
 void vmm_switch_directory(uint32_t* dir);
 uint32_t* vmm_get_current_directory(void);
+uint32_t* vmm_get_kernel_directory(void);
 void page_fault_handler(registers_t *regs);
 
 #endif

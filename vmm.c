@@ -161,6 +161,24 @@ uint32_t vmm_virt_to_phys(void* virt_addr)
     return (pte & ~0xFFF) + (va & 0xFFF);
 }
 
+uint32_t vmm_virt_to_phys_ex(uint32_t* dir, void* virt_addr)
+{
+    if (!dir) return 0xFFFFFFFF;
+
+    uint32_t va = (uint32_t)virt_addr;
+    uint32_t pde_idx = va / (1024 * 4096);
+    uint32_t pte_idx = (va % (1024 * 4096)) / 4096;
+
+    uint32_t pde = dir[pde_idx];
+    if (!(pde & PTE_PRESENT)) return 0xFFFFFFFF;
+
+    uint32_t* table = (uint32_t*)(pde & ~0xFFF);
+    uint32_t pte = table[pte_idx];
+    if (!(pte & PTE_PRESENT)) return 0xFFFFFFFF;
+
+    return (pte & ~0xFFF) + (va & 0xFFF);
+}
+
 void vmm_set_page_user(void* virt_addr)
 {
     vmm_set_page_user_ex(page_directory, virt_addr);
@@ -211,6 +229,11 @@ void vmm_switch_directory(uint32_t* dir)
 uint32_t* vmm_get_current_directory(void)
 {
     return page_directory;
+}
+
+uint32_t* vmm_get_kernel_directory(void)
+{
+    return kernel_directory;
 }
 
 void page_fault_handler(registers_t *regs)

@@ -4,6 +4,7 @@
 #include "libc.h"
 #include "timer.h"
 #include "vmm.h"
+#include "pmm.h"
 
 typedef struct task {
     uint32_t id;
@@ -12,6 +13,9 @@ typedef struct task {
     uint32_t wake_tick;
     int state;
     uint32_t* page_directory;
+    uint32_t user_base;
+    uint32_t user_pages;
+    uint32_t user_stack_base;
     struct task *next;
 } task_t;
 
@@ -22,7 +26,8 @@ static int demo_enabled = 0;
 
 enum {
     TASK_RUNNABLE = 0,
-    TASK_SLEEPING = 1
+    TASK_SLEEPING = 1,
+    TASK_DEAD = 2
 };
 
 static void task_idle(void)
@@ -68,6 +73,9 @@ void tasking_init(void)
     task->wake_tick = 0;
     task->state = TASK_RUNNABLE;
     task->page_directory = vmm_get_current_directory();
+    task->user_base = 0;
+    task->user_pages = 0;
+    task->user_stack_base = 0;
     task->next = task;
 
     task_head = task;
@@ -90,6 +98,9 @@ int task_create(void (*entry)(void))
     task->wake_tick = 0;
     task->state = TASK_RUNNABLE;
     task->page_directory = vmm_get_current_directory();
+    task->user_base = 0;
+    task->user_pages = 0;
+    task->user_stack_base = 0;
 
     task->next = task_head->next;
     task_head->next = task;
@@ -104,8 +115,58 @@ registers_t *task_schedule(registers_t *regs)
     task_current->regs = regs;
     uint32_t now = timer_get_ticks();
 
+    task_t *prev = task_current;
     task_t *candidate = task_current->next;
     while (candidate) {
+        if (candidate->state == TASK_DEAD) {
+            task_t *next = candidate->next;
+            if (candidate == task_head) {
+                task_head = next;
+            }
+
+            if (candidate->page_directory && candidate->page_directory != vmm_get_kernel_directory()) {
+                if (candidate->user_pages && candidate->user_base) {
+                    for (uint32_t i = 0; i < candidate->user_pages; i++) {
+                        uint32_t va = candidate->user_base + i * 4096;
+                        uint32_t phys = vmm_virt_to_phys_ex(candidate->page_directory, (void*)va);
+                        if (phys != 0xFFFFFFFF) {
+                            pmm_free_page((void*)(phys & ~0xFFF));
+                        }
+                    }
+                }
+                if (candidate->user_stack_base) {
+                    uint32_t phys = vmm_virt_to_phys_ex(candidate->page_directory, (void*)candidate->user_stack_base);
+                    if (phys != 0xFFFFFFFF) {
+                        pmm_free_page((void*)(phys & ~0xFFF));
+                    }
+                }
+
+                if (candidate->user_base) {
+                    uint32_t pde_idx = candidate->user_base / (1024 * 4096);
+                    uint32_t pde = candidate->page_directory[pde_idx];
+                    if (pde & PTE_PRESENT) {
+                        pmm_free_page((void*)(pde & ~0xFFF));
+                    }
+                }
+                if (candidate->user_stack_base) {
+                    uint32_t pde_idx = candidate->user_stack_base / (1024 * 4096);
+                    uint32_t pde = candidate->page_directory[pde_idx];
+                    if (pde & PTE_PRESENT) {
+                        pmm_free_page((void*)(pde & ~0xFFF));
+                    }
+                }
+
+                pmm_free_page(candidate->page_directory);
+            }
+
+            kfree(candidate->stack);
+            kfree(candidate);
+            prev->next = next;
+            candidate = next;
+            if (!candidate) break;
+            continue;
+        }
+
         if (candidate->state == TASK_SLEEPING) {
             if ((int32_t)(now - candidate->wake_tick) >= 0) {
                 candidate->state = TASK_RUNNABLE;
@@ -120,6 +181,7 @@ registers_t *task_schedule(registers_t *regs)
             return task_current->regs;
         }
 
+        prev = candidate;
         candidate = candidate->next;
         if (candidate == task_current) break;
     }
@@ -156,6 +218,22 @@ void task_set_current_page_directory(uint32_t* dir)
     task_current->page_directory = dir;
 }
 
+void task_set_user_info(uint32_t base, uint32_t pages, uint32_t stack_base)
+{
+    if (!task_current) return;
+    task_current->user_base = base;
+    task_current->user_pages = pages;
+    task_current->user_stack_base = stack_base;
+}
+
+void task_exit(void)
+{
+    if (!task_current) return;
+    if (task_current->id == 0) return;
+    task_current->state = TASK_DEAD;
+    task_yield();
+}
+
 void task_list(void)
 {
     if (!task_head) {
@@ -166,7 +244,12 @@ void task_list(void)
     terminal_writestring("ID   STATE     WAKE    CURRENT\n");
     task_t *task = task_head;
     do {
-        const char *state = task->state == TASK_SLEEPING ? "SLEEPING" : "RUNNABLE";
+        const char *state = "RUNNABLE";
+        if (task->state == TASK_SLEEPING) {
+            state = "SLEEPING";
+        } else if (task->state == TASK_DEAD) {
+            state = "DEAD";
+        }
         printf("%d    %s  %d    %s\n",
                task->id,
                state,

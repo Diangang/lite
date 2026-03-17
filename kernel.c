@@ -13,6 +13,7 @@
 #include "initrd.h"
 #include "task.h"
 #include "syscall.h"
+#include "fs.h"
 
 /* Check if the compiler thinks we are targeting the wrong operating system. */
 
@@ -99,38 +100,6 @@ static void task_demo_b(void)
     }
 }
 
-static void user_mode_test(void) __attribute__((section(".usertext"), aligned(4096)));
-
-static void user_mode_test(void)
-{
-    char msg[12];
-    msg[0] = 'u';
-    msg[1] = 's';
-    msg[2] = 'e';
-    msg[3] = 'r';
-    msg[4] = ' ';
-    msg[5] = 'o';
-    msg[6] = 'k';
-    msg[7] = '\n';
-    msg[8] = 0;
-
-    __asm__ volatile(
-        "int $0x80"
-        :
-        : "a"(SYS_WRITE), "b"(msg), "c"(8)
-        : "memory"
-    );
-
-    for (;;) {
-        __asm__ volatile(
-            "int $0x80"
-            :
-            : "a"(SYS_SLEEP), "b"(50)
-            : "memory"
-        );
-    }
-}
-
 static void enter_user_mode(uint32_t entry, uint32_t user_stack)
 {
     __asm__ volatile(
@@ -155,27 +124,235 @@ static void enter_user_mode(uint32_t entry, uint32_t user_stack)
     );
 }
 
-static void user_task(void)
+typedef struct {
+    unsigned char e_ident[16];
+    uint16_t e_type;
+    uint16_t e_machine;
+    uint32_t e_version;
+    uint32_t e_entry;
+    uint32_t e_phoff;
+    uint32_t e_shoff;
+    uint32_t e_flags;
+    uint16_t e_ehsize;
+    uint16_t e_phentsize;
+    uint16_t e_phnum;
+    uint16_t e_shentsize;
+    uint16_t e_shnum;
+    uint16_t e_shstrndx;
+} Elf32_Ehdr;
+
+typedef struct {
+    uint32_t p_type;
+    uint32_t p_offset;
+    uint32_t p_vaddr;
+    uint32_t p_paddr;
+    uint32_t p_filesz;
+    uint32_t p_memsz;
+    uint32_t p_flags;
+    uint32_t p_align;
+} Elf32_Phdr;
+
+static uint32_t align_down(uint32_t value)
 {
-    uint32_t user_stack_base = 0x3FF000;
+    return value & ~0xFFF;
+}
+
+static uint32_t align_up(uint32_t value)
+{
+    return (value + 0xFFF) & ~0xFFF;
+}
+
+static void ensure_private_table(uint32_t* dir, uint32_t pde_idx)
+{
+    if (dir[pde_idx] & PTE_PRESENT) {
+        uint32_t* old_table = (uint32_t*)(dir[pde_idx] & ~0xFFF);
+        uint32_t* new_table = (uint32_t*)pmm_alloc_page();
+        if (!new_table) {
+            return;
+        }
+        memcpy(new_table, old_table, 4096);
+        dir[pde_idx] = ((uint32_t)new_table) | PTE_PRESENT | PTE_READ_WRITE | PTE_USER;
+    } else {
+        uint32_t* new_table = (uint32_t*)pmm_alloc_page();
+        if (!new_table) {
+            return;
+        }
+        memset(new_table, 0, 4096);
+        dir[pde_idx] = ((uint32_t)new_table) | PTE_PRESENT | PTE_READ_WRITE | PTE_USER;
+    }
+}
+
+static void ensure_private_table_range(uint32_t* dir, uint32_t start, uint32_t end)
+{
+    uint32_t start_idx = start / (1024 * 4096);
+    uint32_t end_idx = (end - 1) / (1024 * 4096);
+    for (uint32_t i = start_idx; i <= end_idx; i++) {
+        ensure_private_table(dir, i);
+    }
+}
+
+static int load_user_program(const char* name, uint32_t* entry, uint32_t* user_stack, uint32_t** out_dir,
+                             uint32_t* out_base, uint32_t* out_pages, uint32_t* out_stack_base)
+{
+    if (!fs_root) {
+        terminal_writestring("No file system mounted.\n");
+        return -1;
+    }
+
+    fs_node_t *node = finddir_fs(fs_root, (char*)name);
+    if (!node) {
+        terminal_writestring("User program not found.\n");
+        return -1;
+    }
+
+    if (node->length == 0) {
+        terminal_writestring("User program is empty.\n");
+        return -1;
+    }
+
+    uint8_t *buf = (uint8_t*)kmalloc(node->length);
+    if (!buf) {
+        terminal_writestring("User program buffer alloc failed.\n");
+        return -1;
+    }
+    uint32_t read = read_fs(node, 0, node->length, buf);
+    if (read != node->length) {
+        terminal_writestring("User program read failed.\n");
+        kfree(buf);
+        return -1;
+    }
+
+    if (node->length < sizeof(Elf32_Ehdr)) {
+        terminal_writestring("User program too small.\n");
+        kfree(buf);
+        return -1;
+    }
+
+    Elf32_Ehdr *ehdr = (Elf32_Ehdr*)buf;
+    if (!(ehdr->e_ident[0] == 0x7F && ehdr->e_ident[1] == 'E' &&
+          ehdr->e_ident[2] == 'L' && ehdr->e_ident[3] == 'F')) {
+        terminal_writestring("User program is not ELF.\n");
+        kfree(buf);
+        return -1;
+    }
+    if (ehdr->e_ident[4] != 1 || ehdr->e_ident[5] != 1) {
+        terminal_writestring("User program ELF format unsupported.\n");
+        kfree(buf);
+        return -1;
+    }
+    if (ehdr->e_phoff + (uint32_t)ehdr->e_phnum * ehdr->e_phentsize > node->length) {
+        terminal_writestring("User program header out of range.\n");
+        kfree(buf);
+        return -1;
+    }
+
+    uint32_t min_vaddr = 0xFFFFFFFF;
+    uint32_t max_vaddr = 0;
+    for (uint16_t i = 0; i < ehdr->e_phnum; i++) {
+        Elf32_Phdr *phdr = (Elf32_Phdr*)(buf + ehdr->e_phoff + i * ehdr->e_phentsize);
+        if (phdr->p_type != 1 || phdr->p_memsz == 0) {
+            continue;
+        }
+        if (phdr->p_vaddr >= 0xC0000000 || (phdr->p_vaddr + phdr->p_memsz) >= 0xC0000000) {
+            terminal_writestring("User program vaddr out of range.\n");
+            kfree(buf);
+            return -1;
+        }
+        if (phdr->p_offset + phdr->p_filesz > node->length) {
+            terminal_writestring("User program segment out of range.\n");
+            kfree(buf);
+            return -1;
+        }
+        if (phdr->p_vaddr < min_vaddr) min_vaddr = phdr->p_vaddr;
+        if (phdr->p_vaddr + phdr->p_memsz > max_vaddr) max_vaddr = phdr->p_vaddr + phdr->p_memsz;
+    }
+
+    if (min_vaddr == 0xFFFFFFFF) {
+        terminal_writestring("User program has no loadable segments.\n");
+        kfree(buf);
+        return -1;
+    }
+    if (ehdr->e_entry < min_vaddr || ehdr->e_entry >= max_vaddr) {
+        terminal_writestring("User program entry out of range.\n");
+        kfree(buf);
+        return -1;
+    }
+
     uint32_t* user_dir = vmm_clone_kernel_directory();
     if (!user_dir) {
         terminal_writestring("User page directory alloc failed.\n");
-        return;
+        kfree(buf);
+        return -1;
+    }
+
+    uint32_t user_base = align_down(min_vaddr);
+    uint32_t user_end = align_up(max_vaddr);
+    uint32_t user_stack_base = 0xBFF000;
+    uint32_t pages = (user_end - user_base) / 4096;
+
+    ensure_private_table_range(user_dir, user_base, user_end);
+    ensure_private_table(user_dir, user_stack_base / (1024 * 4096));
+
+    for (uint32_t i = 0; i < pages; i++) {
+        void *phys = pmm_alloc_page();
+        if (!phys) {
+            terminal_writestring("User program page alloc failed.\n");
+            kfree(buf);
+            return -1;
+        }
+        vmm_map_page_ex(user_dir, phys, (void*)(user_base + i * 4096),
+                        PTE_PRESENT | PTE_READ_WRITE | PTE_USER);
     }
 
     void *stack_phys = pmm_alloc_page();
-    if (stack_phys) {
-        vmm_map_page_ex(user_dir, stack_phys, (void*)user_stack_base, PTE_PRESENT | PTE_READ_WRITE | PTE_USER);
+    if (!stack_phys) {
+        terminal_writestring("User stack alloc failed.\n");
+        kfree(buf);
+        return -1;
     }
-
-    void *user_text_phys = (void*)(vmm_virt_to_phys((void*)user_mode_test) & 0xFFFFF000);
-    vmm_map_page_ex(user_dir, user_text_phys, (void*)((uint32_t)user_mode_test & 0xFFFFF000),
+    vmm_map_page_ex(user_dir, stack_phys, (void*)user_stack_base,
                     PTE_PRESENT | PTE_READ_WRITE | PTE_USER);
 
-    task_set_current_page_directory(user_dir);
+    uint32_t entry_point = ehdr->e_entry;
+    uint32_t* old_dir = vmm_get_current_directory();
     vmm_switch_directory(user_dir);
-    enter_user_mode((uint32_t)user_mode_test, 0x400000);
+    memset((void*)user_base, 0, user_end - user_base);
+    for (uint16_t i = 0; i < ehdr->e_phnum; i++) {
+        Elf32_Phdr *phdr = (Elf32_Phdr*)(buf + ehdr->e_phoff + i * ehdr->e_phentsize);
+        if (phdr->p_type != 1 || phdr->p_filesz == 0) {
+            continue;
+        }
+        memcpy((void*)phdr->p_vaddr, buf + phdr->p_offset, phdr->p_filesz);
+    }
+    vmm_switch_directory(old_dir);
+    kfree(buf);
+
+    *entry = entry_point;
+    *user_stack = 0xC0000000;
+    *out_dir = user_dir;
+    *out_base = user_base;
+    *out_pages = pages;
+    *out_stack_base = user_stack_base;
+    return 0;
+}
+
+static void user_task(void)
+{
+    uint32_t entry = 0;
+    uint32_t stack = 0;
+    uint32_t* user_dir = NULL;
+    uint32_t user_base = 0;
+    uint32_t user_pages = 0;
+    uint32_t user_stack_base = 0;
+    if (load_user_program("user.elf", &entry, &stack, &user_dir,
+                          &user_base, &user_pages, &user_stack_base) != 0) {
+        return;
+    }
+
+    task_set_current_page_directory(user_dir);
+    task_set_user_info(user_base, user_pages, user_stack_base);
+    vmm_switch_directory(user_dir);
+    enter_user_mode(entry, stack);
     for(;;);
 }
 

@@ -14,6 +14,8 @@ OBJECTS = $(SOURCES_S:.s=.o) $(SOURCES_C:.c=.o)
 KERNEL = myos.bin
 ISO = myos.iso
 INITRD = initrd.img
+USER_ELF = user.elf
+USER_OBJ = userprog.o
 
 all: $(KERNEL) $(INITRD)
 
@@ -42,17 +44,23 @@ iso: $(KERNEL)
 mkinitrd: mkinitrd.c
 	gcc -o mkinitrd mkinitrd.c
 
-initrd.img: mkinitrd
+initrd.img: mkinitrd $(USER_ELF)
 	echo "Hello, Lite OS!" > test.txt
 	echo "This is another file." > readme.txt
-	./mkinitrd test.txt readme.txt
+	./mkinitrd test.txt readme.txt $(USER_ELF)
 	rm -f test.txt readme.txt
+
+$(USER_OBJ): userprog.s
+	$(AS) --32 $< -o $@
+
+$(USER_ELF): $(USER_OBJ) userprog.ld
+	$(LD) -m elf_i386 -T userprog.ld -o $@ $<
 
 run: $(KERNEL) initrd.img
 	qemu-system-i386 -kernel $(KERNEL) -initrd initrd.img -m 512M
 
 clean:
-	rm -f $(OBJECTS) $(KERNEL) $(ISO) mkinitrd initrd.img
+	rm -f $(OBJECTS) $(KERNEL) $(ISO) mkinitrd initrd.img $(USER_OBJ) $(USER_ELF)
 	rm -rf isodir
 
 .PHONY: all iso run run-iso clean
