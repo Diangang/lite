@@ -22,6 +22,11 @@ SECTIONS
 		*(.text.*)
 	}
 
+	.usertext BLOCK(4K) : ALIGN(4K)
+	{
+		*(.usertext)
+	}
+
 	/* Read-only data. */
 	.rodata BLOCK(4K) : ALIGN(4K)
 	{

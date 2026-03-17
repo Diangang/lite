@@ -44,6 +44,7 @@ static void shell_execute(void)
         terminal_writestring("  sleep   - Sleep for 50 ticks\n");
         terminal_writestring("  ps      - List tasks\n");
         terminal_writestring("  syscall - Test syscall write/yield\n");
+        terminal_writestring("  user    - Start user-mode test task\n");
         terminal_writestring("  ls      - List files in initrd\n");
         terminal_writestring("  cat     - Print file content\n");
     }
@@ -152,6 +153,9 @@ static void shell_execute(void)
             : "a"(SYS_YIELD)
             : "memory"
         );
+    }
+    else if (strcmp(cmd_buffer, "user") == 0) {
+        user_mode_launch();
     }
     else if (strcmp(cmd_buffer, "ls") == 0) {
         if (!fs_root) {

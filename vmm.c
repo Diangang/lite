@@ -10,6 +10,7 @@
  * We need this array to be 4KB aligned.
  */
 static uint32_t* page_directory = NULL;
+static uint32_t* kernel_directory = NULL;
 
 /*
  * We will need at least one page table to map the first 4MB
@@ -77,6 +78,7 @@ void vmm_init(void)
     /* 6. Load CR3 and Enable Paging (CR0) */
     /* We use inline assembly here for CR3 loading and CR0 setting */
     __asm__ volatile("mov %0, %%cr3" :: "r"(page_directory));
+    kernel_directory = page_directory;
 
     uint32_t cr0;
     __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
@@ -86,22 +88,14 @@ void vmm_init(void)
     printf("VMM: Paging Enabled! Identity mapped 0-4MB.\n");
 }
 
-void vmm_map_page(void* phys_addr, void* virt_addr)
+void vmm_map_page_ex(uint32_t* dir, void* phys_addr, void* virt_addr, uint32_t flags)
 {
-    /* printf("DEBUG: Mapping phys 0x%x -> virt 0x%x\n", phys_addr, virt_addr); */
-
-    /*
-     * Simple mapper: Assumes the page table for this address already exists.
-     * Since our heap is at 0xC0000000 (3GB mark), we need a page table for that region.
-     * PDE index for 0xC0000000 is 768.
-     */
+    if (!dir) return;
 
     uint32_t pde_idx = (uint32_t)virt_addr / (1024 * 4096);
     uint32_t pte_idx = ((uint32_t)virt_addr % (1024 * 4096)) / 4096;
 
-    /* Check if the page table exists */
-    if (!(page_directory[pde_idx] & PTE_PRESENT)) {
-        /* Create a new page table */
+    if (!(dir[pde_idx] & PTE_PRESENT)) {
         uint32_t* new_table = (uint32_t*)pmm_alloc_page();
         if (!new_table) {
             printf("VMM: Failed to allocate Page Table for 0x%x\n", virt_addr);
@@ -109,29 +103,27 @@ void vmm_map_page(void* phys_addr, void* virt_addr)
         }
 
         memset(new_table, 0, 4096);
+        dir[pde_idx] = ((uint32_t)new_table) | PTE_READ_WRITE | PTE_PRESENT;
+        if (flags & PTE_USER) {
+            dir[pde_idx] |= PTE_USER;
+        }
 
-        /* Add to directory */
-        page_directory[pde_idx] = ((uint32_t)new_table) | PTE_READ_WRITE | PTE_PRESENT;
-
-        /*
-         * CRITICAL: We just modified the page directory, but CR3 is already loaded.
-         * The CPU caches PDE/PTEs in the TLB (Translation Lookaside Buffer).
-         * We MUST flush the TLB for this to take effect.
-         * Reloading CR3 flushes the entire TLB.
-         */
         uint32_t cr3;
         __asm__ volatile("mov %%cr3, %0" : "=r"(cr3));
         __asm__ volatile("mov %0, %%cr3" :: "r"(cr3));
+    } else if (flags & PTE_USER) {
+        dir[pde_idx] |= PTE_USER;
     }
 
-    /* Get the page table address from the directory (mask out flags) */
-    uint32_t* table = (uint32_t*)(page_directory[pde_idx] & ~0xFFF);
+    uint32_t* table = (uint32_t*)(dir[pde_idx] & ~0xFFF);
+    table[pte_idx] = ((uint32_t)phys_addr) | flags;
 
-    /* Map the page */
-    table[pte_idx] = ((uint32_t)phys_addr) | PTE_READ_WRITE | PTE_PRESENT;
-
-    /* Flush TLB for this specific page */
     __asm__ volatile("invlpg (%0)" :: "r" (virt_addr) : "memory");
+}
+
+void vmm_map_page(void* phys_addr, void* virt_addr)
+{
+    vmm_map_page_ex(page_directory, phys_addr, virt_addr, PTE_READ_WRITE | PTE_PRESENT);
 }
 
 int vmm_is_mapped(void* virt_addr)
@@ -167,6 +159,58 @@ uint32_t vmm_virt_to_phys(void* virt_addr)
     if (!(pte & PTE_PRESENT)) return 0xFFFFFFFF;
 
     return (pte & ~0xFFF) + (va & 0xFFF);
+}
+
+void vmm_set_page_user(void* virt_addr)
+{
+    vmm_set_page_user_ex(page_directory, virt_addr);
+}
+
+void vmm_set_page_user_ex(uint32_t* dir, void* virt_addr)
+{
+    if (!dir) return;
+
+    uint32_t va = (uint32_t)virt_addr;
+    uint32_t pde_idx = va / (1024 * 4096);
+    uint32_t pte_idx = (va % (1024 * 4096)) / 4096;
+
+    uint32_t pde = dir[pde_idx];
+    if (!(pde & PTE_PRESENT)) return;
+
+    uint32_t* table = (uint32_t*)(pde & ~0xFFF);
+    uint32_t pte = table[pte_idx];
+    if (!(pte & PTE_PRESENT)) return;
+
+    dir[pde_idx] |= PTE_USER;
+    table[pte_idx] = pte | PTE_USER;
+
+    __asm__ volatile("invlpg (%0)" :: "r" (virt_addr) : "memory");
+}
+
+uint32_t* vmm_clone_kernel_directory(void)
+{
+    if (!kernel_directory) return NULL;
+    uint32_t* new_dir = (uint32_t*)pmm_alloc_page();
+    if (!new_dir) return NULL;
+    memset(new_dir, 0, 4096);
+
+    for (int i = 0; i < 1024; i++) {
+        new_dir[i] = kernel_directory[i];
+    }
+
+    return new_dir;
+}
+
+void vmm_switch_directory(uint32_t* dir)
+{
+    if (!dir) return;
+    page_directory = dir;
+    __asm__ volatile("mov %0, %%cr3" :: "r"(dir));
+}
+
+uint32_t* vmm_get_current_directory(void)
+{
+    return page_directory;
 }
 
 void page_fault_handler(registers_t *regs)

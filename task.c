@@ -3,6 +3,7 @@
 #include "kernel.h"
 #include "libc.h"
 #include "timer.h"
+#include "vmm.h"
 
 typedef struct task {
     uint32_t id;
@@ -10,6 +11,7 @@ typedef struct task {
     uint32_t *stack;
     uint32_t wake_tick;
     int state;
+    uint32_t* page_directory;
     struct task *next;
 } task_t;
 
@@ -65,6 +67,7 @@ void tasking_init(void)
     task->stack = stack;
     task->wake_tick = 0;
     task->state = TASK_RUNNABLE;
+    task->page_directory = vmm_get_current_directory();
     task->next = task;
 
     task_head = task;
@@ -86,6 +89,7 @@ int task_create(void (*entry)(void))
     task->stack = stack;
     task->wake_tick = 0;
     task->state = TASK_RUNNABLE;
+    task->page_directory = vmm_get_current_directory();
 
     task->next = task_head->next;
     task_head->next = task;
@@ -110,6 +114,9 @@ registers_t *task_schedule(registers_t *regs)
 
         if (candidate->state == TASK_RUNNABLE) {
             task_current = candidate;
+            if (task_current->page_directory != vmm_get_current_directory()) {
+                vmm_switch_directory(task_current->page_directory);
+            }
             return task_current->regs;
         }
 
@@ -141,6 +148,12 @@ void task_set_demo_enabled(int enabled)
 int task_get_demo_enabled(void)
 {
     return demo_enabled;
+}
+
+void task_set_current_page_directory(uint32_t* dir)
+{
+    if (!task_current || !dir) return;
+    task_current->page_directory = dir;
 }
 
 void task_list(void)

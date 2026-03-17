@@ -88,6 +88,15 @@
 
 ---
 
+## 6. 用户态与独立页表问题
+
+### 6.1 用户态启动后 Page Fault (read user)
+- **现象**：执行 `user` 后出现 `Page Fault! ( read user ) at 0x104000`，随后 `KERNEL PANIC: Unhandled Page Fault`。
+- **定位**：用户态访问的页表项虽然设置了 `PTE_USER`，但对应的页目录项仍是内核权限，CPU 认为该页目录不可在 Ring 3 访问。
+- **解决**：在映射用户页时同步设置 PDE 的 `PTE_USER` 位，确保 PDE 与 PTE 同时具备用户权限。
+
+---
+
 ## 总结
 
 在从零构建 Lite OS 的过程中，最困难的环节往往是“**缺乏可见性**”（如早期的 Triple Fault 导致无法看报错）。

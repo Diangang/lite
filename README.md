@@ -10,7 +10,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
 
 ## 当前特性
 - **Multiboot 兼容**：可以通过 GRUB 或 QEMU 直接加载启动。
-- **GDT & IDT**：实现了自定义的全局描述符表和中断描述符表。
+- **GDT & IDT**：实现了自定义的全局描述符表和中断描述符表，支持 Ring 3 与 TSS。
 - **异常处理**：捕获 CPU 的 0-31 号异常，防止内核静默崩溃（提供 Kernel Panic 机制）。
 - **硬件中断**：配置了 8259A PIC，正确映射了 IRQ，解决了与 CPU 异常的冲突。
 - **基础驱动与模块**：
@@ -26,6 +26,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
     - **恒等映射**：将物理内存前 128MB 映射到相同的虚拟地址，保证内核与低端内存可访问。
     - **缺页异常处理**：捕获 `#PF` (Interrupt 14)，支持最小按需映射（not-present 缺页自动分配并映射）。
     - **映射查询**：提供虚拟地址是否已映射与虚实地址转换的辅助接口。
+    - **独立页目录**：支持克隆内核页目录并在任务间切换。
   - **内核堆分配器 (KHeap)**：
     - 实现了 `kmalloc` 和 `kfree`，支持动态内存分配。
     - 采用 **First-Fit** 策略与空闲块 **合并 (Coalescing)** 算法。
@@ -35,7 +36,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
     - 支持通过 Multiboot 协议加载外部文件系统镜像。
     - 实现了简单的只读文件系统解析，支持读取文件内容。
 - **交互式 Shell**：
-  - 内置极简内核态 Shell，支持 `help`, `clear`, `info`, `echo`, `uptime`, `meminfo`, `alloc`, `vmmtest`, `heaptest`, `ls`, `cat`, `demo`, `yield`, `sleep`, `ps`, `syscall` 等命令（demo 默认关闭）。
+  - 内置极简内核态 Shell，支持 `help`, `clear`, `info`, `echo`, `uptime`, `meminfo`, `alloc`, `vmmtest`, `heaptest`, `ls`, `cat`, `demo`, `yield`, `sleep`, `ps`, `syscall`, `user` 等命令（demo 默认关闭）。
   - **双模式输入输出**：同时支持 VGA 显示器+键盘 和 **串口 (COM1)** 终端交互。
 
 ## 构建与运行

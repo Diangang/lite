@@ -1,13 +1,13 @@
 #include "gdt.h"
+#include "tss.h"
 
-/* Define 5 GDT entries: Null, Kernel Code, Kernel Data, User Code, User Data */
-gdt_entry_t gdt_entries[5];
+gdt_entry_t gdt_entries[6];
 gdt_ptr_t   gdt_ptr;
 
 /* Defined in gdt_flush.s */
 extern void gdt_flush(uint32_t);
 
-static void gdt_set_gate(int32_t num, uint32_t base, uint32_t limit, uint8_t access, uint8_t gran)
+void gdt_set_gate(int32_t num, uint32_t base, uint32_t limit, uint8_t access, uint8_t gran)
 {
     gdt_entries[num].base_low    = (base & 0xFFFF);
     gdt_entries[num].base_middle = (base >> 16) & 0xFF;
@@ -22,7 +22,7 @@ static void gdt_set_gate(int32_t num, uint32_t base, uint32_t limit, uint8_t acc
 
 void init_gdt(void)
 {
-    gdt_ptr.limit = (sizeof(gdt_entry_t) * 5) - 1;
+    gdt_ptr.limit = (sizeof(gdt_entry_t) * 6) - 1;
     gdt_ptr.base  = (uint32_t)&gdt_entries;
 
     /* 0: Null Descriptor */
@@ -45,5 +45,8 @@ void init_gdt(void)
     /* Access: 0xF2 = 1111 0010b (Present, Ring 3, Code/Data, Data, Writable) */
     gdt_set_gate(4, 0, 0xFFFFFFFF, 0xF2, 0xCF);
 
+    tss_init();
+
     gdt_flush((uint32_t)&gdt_ptr);
+    tss_flush(0x28);
 }

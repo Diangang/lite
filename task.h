@@ -10,6 +10,7 @@ registers_t *task_schedule(registers_t *regs);
 void task_sleep(uint32_t ticks);
 void task_yield(void);
 void task_list(void);
+void task_set_current_page_directory(uint32_t* dir);
 void task_set_demo_enabled(int enabled);
 int task_get_demo_enabled(void);
 

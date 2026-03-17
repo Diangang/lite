@@ -30,5 +30,6 @@ void serial_init(void);
 void serial_write(const char* data);
 void write_serial(char a);
 void serial_handler(registers_t* regs);
+void user_mode_launch(void);
 
 #endif

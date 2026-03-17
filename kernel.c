@@ -99,6 +99,86 @@ static void task_demo_b(void)
     }
 }
 
+static void user_mode_test(void) __attribute__((section(".usertext"), aligned(4096)));
+
+static void user_mode_test(void)
+{
+    char msg[12];
+    msg[0] = 'u';
+    msg[1] = 's';
+    msg[2] = 'e';
+    msg[3] = 'r';
+    msg[4] = ' ';
+    msg[5] = 'o';
+    msg[6] = 'k';
+    msg[7] = '\n';
+    msg[8] = 0;
+
+    __asm__ volatile(
+        "int $0x80"
+        :
+        : "a"(SYS_WRITE), "b"(msg), "c"(8)
+        : "memory"
+    );
+
+    for (;;) {
+        __asm__ volatile(
+            "int $0x80"
+            :
+            : "a"(SYS_SLEEP), "b"(50)
+            : "memory"
+        );
+    }
+}
+
+static void enter_user_mode(uint32_t entry, uint32_t user_stack)
+{
+    __asm__ volatile(
+        "cli\n"
+        "mov $0x23, %%ax\n"
+        "mov %%ax, %%ds\n"
+        "mov %%ax, %%es\n"
+        "mov %%ax, %%fs\n"
+        "mov %%ax, %%gs\n"
+        "pushl $0x23\n"
+        "pushl %[stack]\n"
+        "pushf\n"
+        "popl %%eax\n"
+        "orl $0x200, %%eax\n"
+        "pushl %%eax\n"
+        "pushl $0x1B\n"
+        "pushl %[entry]\n"
+        "iret\n"
+        :
+        : [entry] "r"(entry), [stack] "r"(user_stack)
+        : "eax", "memory"
+    );
+}
+
+static void user_task(void)
+{
+    uint32_t user_stack_base = 0x3FF000;
+    uint32_t* user_dir = vmm_clone_kernel_directory();
+    if (!user_dir) {
+        terminal_writestring("User page directory alloc failed.\n");
+        return;
+    }
+
+    void *stack_phys = pmm_alloc_page();
+    if (stack_phys) {
+        vmm_map_page_ex(user_dir, stack_phys, (void*)user_stack_base, PTE_PRESENT | PTE_READ_WRITE | PTE_USER);
+    }
+
+    void *user_text_phys = (void*)(vmm_virt_to_phys((void*)user_mode_test) & 0xFFFFF000);
+    vmm_map_page_ex(user_dir, user_text_phys, (void*)((uint32_t)user_mode_test & 0xFFFFF000),
+                    PTE_PRESENT | PTE_READ_WRITE | PTE_USER);
+
+    task_set_current_page_directory(user_dir);
+    vmm_switch_directory(user_dir);
+    enter_user_mode((uint32_t)user_mode_test, 0x400000);
+    for(;;);
+}
+
 /* Check if the compiler thinks we are targeting the wrong operating system. */
 /* #if defined(__linux__)
 #error "You are not using a cross-compiler, you will most certainly run into trouble"
@@ -225,6 +305,18 @@ void terminal_write(const char* data, size_t size)
 void terminal_writestring(const char* data)
 {
 	terminal_write(data, strlen(data));
+}
+
+void user_mode_launch(void)
+{
+    static int started = 0;
+    if (started) {
+        terminal_writestring("User task already started.\n");
+        return;
+    }
+    started = 1;
+    task_create(user_task);
+    terminal_writestring("User task created.\n");
 }
 
 void kernel_main(multiboot_info_t* mbi, uint32_t magic)
