@@ -308,6 +308,7 @@ static int load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
     uint32_t user_end = align_up(max_vaddr);
     uint32_t user_stack_base = 0xBFF000;
     uint32_t pages = (user_end - user_base) / 4096;
+    uint32_t heap_base = user_end;
 
     ensure_private_table(user_dir, user_stack_base / (1024 * 4096));
 
@@ -340,6 +341,7 @@ static int load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
         }
     }
     task_user_vma_add(user_stack_base, user_stack_base + 4096, VMA_READ | VMA_WRITE);
+    task_user_heap_init(heap_base, user_stack_base);
 
     void *stack_phys = pmm_alloc_page();
     if (!stack_phys) {

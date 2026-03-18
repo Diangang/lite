@@ -28,6 +28,8 @@ typedef struct task {
     uint32_t user_base;
     uint32_t user_pages;
     uint32_t user_stack_base;
+    uint32_t heap_base;
+    uint32_t heap_brk;
     int exit_code;
     int exit_reason;
     uint32_t exit_info0;
@@ -85,6 +87,14 @@ static void buf_append_u32(char *buf, uint32_t *off, uint32_t cap, uint32_t v)
     buf_append(buf, off, cap, tmp);
 }
 
+static void buf_append_hex(char *buf, uint32_t *off, uint32_t cap, uint32_t v)
+{
+    char tmp[32];
+    itoa((int)v, 16, tmp);
+    buf_append(buf, off, cap, "0x");
+    buf_append(buf, off, cap, tmp);
+}
+
 static void task_idle(void)
 {
     for (;;) {
@@ -115,6 +125,25 @@ static void vma_add(task_t *task, uint32_t start, uint32_t end, uint32_t flags)
     v->flags = flags;
     v->next = task->vma_list;
     task->vma_list = v;
+}
+
+static vma_t *vma_find_heap(task_t *task)
+{
+    if (!task) return NULL;
+    if (!task->heap_base) return NULL;
+    vma_t *v = task->vma_list;
+    while (v) {
+        if (v->start == task->heap_base && (v->flags & (VMA_READ | VMA_WRITE)) == (VMA_READ | VMA_WRITE)) {
+            return v;
+        }
+        v = v->next;
+    }
+    return NULL;
+}
+
+static uint32_t align_up(uint32_t value)
+{
+    return (value + 0xFFF) & ~0xFFF;
 }
 
 void task_user_vmas_reset(void)
@@ -170,6 +199,8 @@ void tasking_init(void)
     task->user_base = 0;
     task->user_pages = 0;
     task->user_stack_base = 0;
+    task->heap_base = 0;
+    task->heap_brk = 0;
     task->exit_code = 0;
     task->exit_reason = 0;
     task->exit_info0 = 0;
@@ -220,6 +251,8 @@ static int task_create_internal(void (*entry)(void), const char *program)
     task->user_base = 0;
     task->user_pages = 0;
     task->user_stack_base = 0;
+    task->heap_base = 0;
+    task->heap_brk = 0;
     task->exit_code = 0;
     task->exit_reason = 0;
     task->exit_info0 = 0;
@@ -574,6 +607,52 @@ const char *task_get_current_program(void)
     return task_current->program;
 }
 
+void task_user_heap_init(uint32_t heap_base, uint32_t stack_base)
+{
+    if (!task_current) return;
+    if (heap_base < 0x1000) return;
+    if (heap_base >= 0xC0000000) return;
+    if (stack_base && heap_base + 0x1000 >= stack_base) return;
+    task_current->heap_base = heap_base;
+    task_current->heap_brk = heap_base;
+
+    vma_t *heap = vma_find_heap(task_current);
+    if (!heap) {
+        vma_add(task_current, heap_base, heap_base, VMA_READ | VMA_WRITE);
+    }
+}
+
+uint32_t task_brk(uint32_t new_end)
+{
+    if (!task_current) return 0;
+    if (task_current->heap_base == 0) return 0;
+
+    if (new_end == 0) {
+        return task_current->heap_brk;
+    }
+
+    if (new_end < task_current->heap_base) {
+        return task_current->heap_brk;
+    }
+    if (new_end >= 0xC0000000) {
+        return task_current->heap_brk;
+    }
+    if (task_current->user_stack_base && align_up(new_end) + 0x1000 > task_current->user_stack_base) {
+        return task_current->heap_brk;
+    }
+
+    task_current->heap_brk = new_end;
+
+    vma_t *heap = vma_find_heap(task_current);
+    if (heap) {
+        uint32_t end = align_up(new_end);
+        if (end < heap->start) end = heap->start;
+        heap->end = end;
+    }
+
+    return task_current->heap_brk;
+}
+
 uint32_t task_get_current_id(void)
 {
     if (!task_current) return 0;
@@ -619,6 +698,29 @@ uint32_t task_dump_tasks(char *buf, uint32_t len)
         if (off >= len) break;
         task = task->next;
     } while (task && task != task_head);
+    if (off < len) buf[off] = 0;
+    return off;
+}
+
+uint32_t task_dump_maps(char *buf, uint32_t len)
+{
+    if (!buf || len == 0) return 0;
+    if (!task_current) return 0;
+
+    uint32_t off = 0;
+    vma_t *v = task_current->vma_list;
+    while (v) {
+        buf_append_hex(buf, &off, len, v->start);
+        buf_append(buf, &off, len, "-");
+        buf_append_hex(buf, &off, len, v->end);
+        buf_append(buf, &off, len, " ");
+        buf_append(buf, &off, len, (v->flags & VMA_READ) ? "r" : "-");
+        buf_append(buf, &off, len, (v->flags & VMA_WRITE) ? "w" : "-");
+        buf_append(buf, &off, len, (v->flags & VMA_EXEC) ? "x" : "-");
+        buf_append(buf, &off, len, "\n");
+        if (off >= len) break;
+        v = v->next;
+    }
     if (off < len) buf[off] = 0;
     return off;
 }

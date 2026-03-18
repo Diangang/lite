@@ -43,6 +43,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `/proc/tasks`：任务列表与状态（`cat proc/tasks`）。
   - `/proc/sched`：tick 与上下文切换统计（`cat proc/sched`）。
   - `/proc/irq`：IRQ0/IRQ1/IRQ4 与 syscall 计数（`cat proc/irq`）。
+  - `/proc/maps`：当前任务的 VMA 列表（`cat proc/maps`）。
 - **交互式 Shell**：
   - 内置极简内核态 Shell，支持 `help`, `clear`, `info`, `echo`, `uptime`, `meminfo`, `alloc`, `vmmtest`, `heaptest`, `ls`, `cat`, `demo`, `yield`, `sleep`, `ps`, `syscall`, `run`, `user` 等命令（demo 默认关闭）。
   - **双模式输入输出**：同时支持 VGA 显示器+键盘 和 **串口 (COM1)** 终端交互。
@@ -55,6 +56,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `SYS_WRITE/SYS_READ` 在内核侧通过 `copyin/copyout` 分段拷贝访问用户缓冲区。
   - `SYS_READ` 从 shell 输入读取时会阻塞等待数据到达，避免 busy-yield 轮询。
   - `SYS_OPEN/SYS_FREAD/SYS_CLOSE` 提供最小只读文件访问能力（当前用于 InitRD）。
+  - `SYS_BRK` 提供最小用户堆扩展接口（基于堆 VMA 与按需缺页分配）。
   - syscall 入口使用 trap gate，不会隐式关闭中断，内核态具备可抢占的基础语义。
   - shell 的 `syscall` 命令运行在内核态，允许传入内核指针用于演示。
 - **用户态异常处理**：

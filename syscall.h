@@ -13,7 +13,8 @@ enum {
     SYS_GETPID = 5,
     SYS_OPEN = 6,
     SYS_FREAD = 7,
-    SYS_CLOSE = 8
+    SYS_CLOSE = 8,
+    SYS_BRK = 9
 };
 
 void syscall_init(void);

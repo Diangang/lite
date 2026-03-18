@@ -173,6 +173,7 @@ void syscall_handler(registers_t *regs)
             }
         }
     } else if (regs->eax == SYS_CLOSE) {
+    } else if (regs->eax == SYS_BRK) {
     }
 
     switch (regs->eax) {
@@ -266,6 +267,19 @@ void syscall_handler(registers_t *regs)
         case SYS_CLOSE: {
             uint32_t owner = task_get_current_id();
             regs->eax = (uint32_t)fd_close(owner, (int)regs->ebx);
+            break;
+        }
+        case SYS_BRK: {
+            uint32_t req = regs->ebx;
+            if (from_user) {
+                if (req != 0) {
+                    if (req < 0x1000 || req >= 0xC0000000) {
+                        regs->eax = task_brk(0);
+                        break;
+                    }
+                }
+            }
+            regs->eax = task_brk(req);
             break;
         }
         default:

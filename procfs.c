@@ -10,6 +10,7 @@ static fs_node_t proc_root;
 static fs_node_t proc_tasks;
 static fs_node_t proc_sched;
 static fs_node_t proc_irq;
+static fs_node_t proc_maps;
 
 static void buf_append(char *buf, uint32_t *off, uint32_t cap, const char *s)
 {
@@ -83,6 +84,18 @@ static uint32_t proc_read_irq(fs_node_t *node, uint32_t offset, uint32_t size, u
     return size;
 }
 
+static uint32_t proc_read_maps(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+{
+    (void)node;
+    static char tmp[2048];
+    uint32_t n = task_dump_maps(tmp, sizeof(tmp));
+    if (offset >= n) return 0;
+    uint32_t remain = n - offset;
+    if (size > remain) size = remain;
+    memcpy(buffer, tmp + offset, size);
+    return size;
+}
+
 static struct dirent *proc_readdir(fs_node_t *node, uint32_t index)
 {
     (void)node;
@@ -101,6 +114,11 @@ static struct dirent *proc_readdir(fs_node_t *node, uint32_t index)
         proc_dirent.ino = proc_irq.inode;
         return &proc_dirent;
     }
+    if (index == 3) {
+        strcpy(proc_dirent.name, "maps");
+        proc_dirent.ino = proc_maps.inode;
+        return &proc_dirent;
+    }
     return NULL;
 }
 
@@ -111,6 +129,7 @@ static fs_node_t *proc_finddir(fs_node_t *node, char *name)
     if (!strcmp(name, "tasks")) return &proc_tasks;
     if (!strcmp(name, "sched")) return &proc_sched;
     if (!strcmp(name, "irq")) return &proc_irq;
+    if (!strcmp(name, "maps")) return &proc_maps;
     return NULL;
 }
 
@@ -142,6 +161,13 @@ fs_node_t *procfs_init(void)
     proc_irq.inode = 3;
     proc_irq.length = 1024;
     proc_irq.read = &proc_read_irq;
+
+    memset(&proc_maps, 0, sizeof(proc_maps));
+    strcpy(proc_maps.name, "maps");
+    proc_maps.flags = FS_FILE;
+    proc_maps.inode = 4;
+    proc_maps.length = 2048;
+    proc_maps.read = &proc_read_maps;
 
     return &proc_root;
 }
