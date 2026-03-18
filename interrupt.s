@@ -131,4 +131,10 @@ ISR_NOERRCODE 28
 ISR_NOERRCODE 29
 ISR_ERRCODE   30
 ISR_NOERRCODE 31
-ISR_NOERRCODE 128
+
+/* Syscall (int 0x80): do not implicitly disable interrupts */
+.global isr128
+isr128:
+    push $0
+    push $128
+    jmp isr_common_stub

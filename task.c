@@ -7,6 +7,7 @@
 #include "pmm.h"
 #include "shell.h"
 #include "syscall.h"
+#include "tss.h"
 
 typedef struct task {
     uint32_t id;
@@ -94,6 +95,7 @@ void tasking_init(void)
 
     task_head = task;
     task_current = task;
+    tss_set_kernel_stack((uint32_t)task_current->stack + 4096);
 }
 
 static void task_set_program_name(task_t *task, const char *program)
@@ -246,6 +248,7 @@ registers_t *task_schedule(registers_t *regs)
             if (task_current->page_directory != vmm_get_current_directory()) {
                 vmm_switch_directory(task_current->page_directory);
             }
+            tss_set_kernel_stack((uint32_t)task_current->stack + 4096);
             return task_current->regs;
         }
 

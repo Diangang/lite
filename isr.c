@@ -216,7 +216,7 @@ void isr_install(void)
     idt_set_gate(29, (uint32_t)isr29, 0x08, 0x8E);
     idt_set_gate(30, (uint32_t)isr30, 0x08, 0x8E);
     idt_set_gate(31, (uint32_t)isr31, 0x08, 0x8E);
-    idt_set_gate(128, (uint32_t)isr128, 0x08, 0xEE);
+    idt_set_gate(128, (uint32_t)isr128, 0x08, 0xEF);
 }
 
 void irq_install(void)
