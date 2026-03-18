@@ -5,6 +5,7 @@
 #include "isr.h"
 #include "kheap.h"
 #include "pmm.h"
+#include "vmm.h"
 
 static struct dirent proc_dirent;
 static fs_node_t proc_root;
@@ -13,6 +14,7 @@ static fs_node_t proc_sched;
 static fs_node_t proc_irq;
 static fs_node_t proc_maps;
 static fs_node_t proc_meminfo;
+static fs_node_t proc_cow;
 
 typedef struct {
     int used;
@@ -129,6 +131,27 @@ static uint32_t proc_read_meminfo(fs_node_t *node, uint32_t offset, uint32_t siz
     buf_append(tmp, &off, sizeof(tmp), " kB\nMemFree: ");
     buf_append_u32(tmp, &off, sizeof(tmp), free_kb);
     buf_append(tmp, &off, sizeof(tmp), " kB\n");
+    if (off < sizeof(tmp)) tmp[off] = 0;
+    if (offset >= off) return 0;
+    uint32_t remain = off - offset;
+    if (size > remain) size = remain;
+    memcpy(buffer, tmp + offset, size);
+    return size;
+}
+
+static uint32_t proc_read_cow(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+{
+    (void)node;
+    static char tmp[128];
+    uint32_t off = 0;
+    uint32_t faults = 0;
+    uint32_t copies = 0;
+    vmm_get_cow_stats(&faults, &copies);
+    buf_append(tmp, &off, sizeof(tmp), "faults=");
+    buf_append_u32(tmp, &off, sizeof(tmp), faults);
+    buf_append(tmp, &off, sizeof(tmp), "\ncopies=");
+    buf_append_u32(tmp, &off, sizeof(tmp), copies);
+    buf_append(tmp, &off, sizeof(tmp), "\n");
     if (off < sizeof(tmp)) tmp[off] = 0;
     if (offset >= off) return 0;
     uint32_t remain = off - offset;
@@ -448,6 +471,11 @@ static struct dirent *proc_readdir(fs_node_t *node, uint32_t index)
         return &proc_dirent;
     }
     if (index == 5) {
+        strcpy(proc_dirent.name, "cow");
+        proc_dirent.ino = proc_cow.inode;
+        return &proc_dirent;
+    }
+    if (index == 6) {
         strcpy(proc_dirent.name, "self");
         proc_dirent.ino = 0x1000;
         return &proc_dirent;
@@ -464,6 +492,7 @@ static fs_node_t *proc_finddir(fs_node_t *node, char *name)
     if (!strcmp(name, "irq")) return &proc_irq;
     if (!strcmp(name, "maps")) return &proc_maps;
     if (!strcmp(name, "meminfo")) return &proc_meminfo;
+    if (!strcmp(name, "cow")) return &proc_cow;
     if (!strcmp(name, "self")) return proc_get_pid_dir(0xFFFFFFFF);
     uint32_t pid = 0;
     if (parse_u32(name, &pid) == 0) {
@@ -517,6 +546,13 @@ fs_node_t *procfs_init(void)
     proc_meminfo.inode = 5;
     proc_meminfo.length = 256;
     proc_meminfo.read = &proc_read_meminfo;
+
+    memset(&proc_cow, 0, sizeof(proc_cow));
+    strcpy(proc_cow.name, "cow");
+    proc_cow.flags = FS_FILE;
+    proc_cow.inode = 6;
+    proc_cow.length = 128;
+    proc_cow.read = &proc_read_cow;
 
     return &proc_root;
 }

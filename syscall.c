@@ -112,6 +112,7 @@ void syscall_handler(registers_t *regs)
     } else if (regs->eax == SYS_KILL) {
     } else if (regs->eax == SYS_MMAP) {
     } else if (regs->eax == SYS_MUNMAP) {
+    } else if (regs->eax == SYS_FORK) {
     }
 
     switch (regs->eax) {
@@ -401,6 +402,10 @@ void syscall_handler(registers_t *regs)
             uint32_t addr = regs->ebx;
             uint32_t len = regs->ecx;
             regs->eax = (uint32_t)(task_munmap(addr, len) == 0 ? 0 : (uint32_t)-1);
+            break;
+        }
+        case SYS_FORK: {
+            regs->eax = (uint32_t)task_fork(regs);
             break;
         }
         default:

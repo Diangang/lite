@@ -47,6 +47,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `/proc/self/maps`：当前任务 VMA（更 Linux-like 的路径形式）。
   - `/proc/<pid>/maps`：指定 pid 的 VMA（例如 `cat proc/1/maps`）。
   - `/proc/meminfo`：物理内存总量与空闲量（`cat proc/meminfo`）。
+  - `/proc/cow`：COW 缺页次数与复制次数统计（`cat proc/cow`）。
   - `/proc/<pid>/stat`：任务基础状态（`cat proc/1/stat`）。
   - `/proc/<pid>/cmdline`：任务名（`cat proc/1/cmdline`）。
   - `/proc/<pid>/status`：任务可读状态（含 Type/Cwd，`cat proc/1/status`）。
@@ -65,6 +66,8 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `user` 进入用户态后切换输入前台为 `user>`，用户任务退出后自动恢复 `lite-os>`。
   - `run <file>` 从 InitRD 启动指定用户程序，并在退出后打印退出信息。
   - `run mmap.elf` 可验证匿名 mmap/munmap 与 `/proc/self/maps` 输出一致性。
+  - `run fork.elf` 可验证 fork + COW 行为与 `/proc/cow` 统计。
+  - fork 测试中出现两次 `Page Fault handled` 属于父子写时复制的正常表现。
   - 用户态 `ush` 支持 `run <file>`，行为等价于 `exec`（替换当前 shell 进程）。
   - 启动后默认运行 `init.elf`（PID1），由 init 负责拉起用户态 shell。
   - 用户态 `ush` 支持输入回显与退格显示。
@@ -83,6 +86,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `SYS_MMAP/SYS_MUNMAP` 提供匿名映射与回收（缺页按 VMA 规则处理，`/proc/<pid>/maps` 可观测）。
   - 缺页处理支持将 VMA 允许的 supervisor 映射修正为用户页。
   - 低端恒等映射区域的用户访问已通过缺页修正兼容（避免 present fault）。
+  - `SYS_FORK` 提供最小 fork，与 COW 页引用计数配合实现写时复制。
   - `SYS_BRK` 提供最小用户堆扩展接口（基于堆 VMA 与按需缺页分配）。
   - syscall 入口使用 trap gate，不会隐式关闭中断，内核态具备可抢占的基础语义。
   - shell 的 `syscall` 命令运行在内核态，允许传入内核指针用于演示。

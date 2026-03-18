@@ -7,6 +7,8 @@ static uint32_t total_memory_kb = 0;
 static uint32_t total_pages = 0;
 static uint32_t* pmm_bitmap = NULL;
 static uint32_t bitmap_size = 0;
+static uint16_t* pmm_refcount = NULL;
+static uint32_t refcount_size = 0;
 
 /* Bitmap Helpers */
 static inline void bitmap_set(uint32_t bit) {
@@ -77,9 +79,12 @@ void pmm_init(multiboot_info_t* mbi)
     pmm_bitmap = (uint32_t*)kernel_end;
     bitmap_size = total_pages / 32;
     if (total_pages % 32) bitmap_size++;
+    pmm_refcount = (uint16_t*)((uint32_t)pmm_bitmap + bitmap_size * 4);
+    refcount_size = total_pages * sizeof(uint16_t);
 
     /* Initialize bitmap: Mark ALL pages as used first (safe default) */
     memset(pmm_bitmap, 0xFF, bitmap_size * 4);
+    memset(pmm_refcount, 0, refcount_size);
 
     /* 3. Parse memory map to free available pages */
     if (mbi->flags & (1 << 6)) {
@@ -101,10 +106,10 @@ void pmm_init(multiboot_info_t* mbi)
                     for (uint32_t i = 0; i < num_pages; i++) {
                         /* Check if this page overlaps with our bitmap itself! */
                         uint32_t page_addr = (start_page + i) * PMM_PAGE_SIZE;
-                        uint32_t bitmap_end_addr = (uint32_t)pmm_bitmap + (bitmap_size * 4);
+                        uint32_t meta_end_addr = (uint32_t)pmm_refcount + refcount_size;
 
                         /* Check overlap with kernel code/modules/bitmap */
-                        if (page_addr >= bitmap_end_addr) {
+                        if (page_addr >= meta_end_addr) {
                             /* The bitmap is now placed AFTER everything (kernel + modules + struct) */
                             /* So we just need to check if page_addr is >= bitmap_end_addr to be safe */
                             /* Actually, we should free pages that are AFTER the bitmap. */
@@ -133,7 +138,10 @@ void* pmm_alloc_page(void)
     }
 
     bitmap_set(frame);
-    uint32_t addr = frame * PMM_PAGE_SIZE;
+    if (pmm_refcount && frame >= 0 && (uint32_t)frame < total_pages) {
+        pmm_refcount[frame] = 1;
+    }
+    uint32_t addr = (uint32_t)frame * PMM_PAGE_SIZE;
     return (void*)addr;
 }
 
@@ -141,7 +149,34 @@ void pmm_free_page(void* p)
 {
     uint32_t addr = (uint32_t)p;
     uint32_t frame = addr / PMM_PAGE_SIZE;
+    if (pmm_refcount && frame < total_pages) {
+        uint16_t rc = pmm_refcount[frame];
+        if (rc > 1) {
+            pmm_refcount[frame] = rc - 1;
+            return;
+        }
+        if (rc == 1) {
+            pmm_refcount[frame] = 0;
+        }
+    }
     bitmap_unset(frame);
+}
+
+void pmm_ref_page(void* p)
+{
+    uint32_t addr = (uint32_t)p;
+    uint32_t frame = addr / PMM_PAGE_SIZE;
+    if (!pmm_refcount || frame >= total_pages) return;
+    if (pmm_refcount[frame] == 0) pmm_refcount[frame] = 1;
+    else pmm_refcount[frame]++;
+}
+
+uint32_t pmm_get_refcount(void* p)
+{
+    uint32_t addr = (uint32_t)p;
+    uint32_t frame = addr / PMM_PAGE_SIZE;
+    if (!pmm_refcount || frame >= total_pages) return 0;
+    return pmm_refcount[frame];
 }
 
 void pmm_print_memory_map(void)

@@ -123,6 +123,11 @@
 - **定位**：用户 VMA 位于 `0x400000` 低端区域，但内核在 `vmm_init` 里对 `0~128MB` 做了 supervisor-only 恒等映射。用户写入时触发“present but no user permission”类型缺页，现有缺页处理只处理 not-present 分支，导致直接杀死用户进程。
 - **解决**：在缺页处理里增加 “present fault 且 VMA 允许访问” 的修正路径：为该页重新分配物理页，设置 `PTE_USER` 并按 VMA 设定读写权限，确保用户映射可写。
 
+### 6.7 fork/COW 写入触发两次 Page Fault（写时复制预期现象）
+- **现象**：执行 `fork.elf` 时打印两次 `Page Fault! ( write user )`，并显示 `Page Fault handled: remapped ...`，随后父子均正常输出。
+- **定位**：父子进程在 fork 后共享同一用户页；首次写入触发 COW，内核为当前进程分配新页并重新映射，因此各自都会触发一次缺页。
+- **解决**：属预期行为，无需修复；可通过 `/proc/cow` 观察 faults/copies 计数随写入增加。
+
 ---
 
 ## 总结

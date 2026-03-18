@@ -23,7 +23,8 @@ enum {
     SYS_IOCTL = 16,
     SYS_KILL = 17,
     SYS_MMAP = 18,
-    SYS_MUNMAP = 19
+    SYS_MUNMAP = 19,
+    SYS_FORK = 20
 };
 
 void syscall_init(void);

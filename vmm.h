@@ -16,6 +16,7 @@
 #define PTE_DIRTY         0x40
 #define PTE_PAGE_SIZE     0x80 /* Only valid in PDE (4MB pages) */
 #define PTE_GLOBAL        0x100
+#define PTE_COW           0x200
 
 /*
  * Virtual Memory Manager Functions
@@ -27,6 +28,7 @@ int vmm_is_mapped(void* virt_addr);
 uint32_t vmm_virt_to_phys(void* virt_addr);
 uint32_t vmm_virt_to_phys_ex(uint32_t* dir, void* virt_addr);
 uint32_t vmm_get_pte_flags_ex(uint32_t* dir, void* virt_addr);
+void vmm_update_page_flags_ex(uint32_t* dir, void* virt_addr, uint32_t flags);
 void vmm_set_page_user(void* virt_addr);
 void vmm_set_page_user_ex(uint32_t* dir, void* virt_addr);
 void vmm_set_page_readonly_ex(uint32_t* dir, void* virt_addr);
@@ -37,6 +39,7 @@ uint32_t* vmm_get_kernel_directory(void);
 int vmm_user_accessible(uint32_t* dir, void* addr, uint32_t len, int write);
 int vmm_copyin(void* dst, const void* src_user, uint32_t len);
 int vmm_copyout(void* dst_user, const void* src, uint32_t len);
+void vmm_get_cow_stats(uint32_t *faults, uint32_t *copies);
 void page_fault_handler(registers_t *regs);
 
 #endif

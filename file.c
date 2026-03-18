@@ -11,6 +11,7 @@ file_t *file_open_node(fs_node_t *node, uint32_t flags)
     f->node = node;
     f->flags = flags;
     f->vf = vfs_open_node(node, flags);
+    f->refcount = 1;
     if (!f->vf) {
         kfree(f);
         return NULL;
@@ -32,6 +33,7 @@ file_t *file_open_path(const char *path, uint32_t flags)
     f->node = vf->dentry && vf->dentry->inode ? vf->dentry->inode->node : NULL;
     f->flags = flags;
     f->vf = vf;
+    f->refcount = 1;
     if (!f->node) {
         file_close(f);
         return NULL;
@@ -57,9 +59,20 @@ int file_ioctl(file_t *f, uint32_t request, uint32_t arg)
     return ioctl_fs(f->node, request, arg);
 }
 
+file_t *file_dup(file_t *f)
+{
+    if (!f) return NULL;
+    f->refcount++;
+    return f;
+}
+
 void file_close(file_t *f)
 {
     if (!f) return;
+    if (f->refcount > 1) {
+        f->refcount--;
+        return;
+    }
     if (f->vf) vfs_close(f->vf);
     kfree(f);
 }

@@ -136,6 +136,17 @@ static void task_fdtable_close_all(task_t *task)
     }
 }
 
+static void task_fdtable_clone(task_t *dst, task_t *src)
+{
+    if (!dst || !src) return;
+    for (int i = 0; i < TASK_FD_MAX; i++) {
+        if (src->fds[i].used && src->fds[i].file) {
+            dst->fds[i].used = 1;
+            dst->fds[i].file = file_dup(src->fds[i].file);
+        }
+    }
+}
+
 static mm_t *mm_create(void)
 {
     mm_t *mm = (mm_t*)kmalloc(sizeof(mm_t));
@@ -143,6 +154,93 @@ static mm_t *mm_create(void)
     memset(mm, 0, sizeof(*mm));
     mm->page_directory = vmm_get_current_directory();
     return mm;
+}
+
+static void task_set_program_name(task_t *task, const char *program);
+
+static vma_t *vma_clone_list(vma_t *src)
+{
+    vma_t *head = NULL;
+    vma_t **tail = &head;
+    while (src) {
+        vma_t *v = (vma_t*)kmalloc(sizeof(vma_t));
+        if (!v) {
+            vma_t *n = head;
+            while (n) {
+                vma_t *next = n->next;
+                kfree(n);
+                n = next;
+            }
+            return NULL;
+        }
+        v->start = src->start;
+        v->end = src->end;
+        v->flags = src->flags;
+        v->next = NULL;
+        *tail = v;
+        tail = &v->next;
+        src = src->next;
+    }
+    return head;
+}
+
+static mm_t *mm_clone_cow(mm_t *src)
+{
+    if (!src) return NULL;
+    uint32_t *new_dir = vmm_clone_kernel_directory();
+    if (!new_dir) return NULL;
+    mm_t *mm = (mm_t*)kmalloc(sizeof(mm_t));
+    if (!mm) {
+        pmm_free_page(new_dir);
+        return NULL;
+    }
+    memset(mm, 0, sizeof(*mm));
+    mm->page_directory = new_dir;
+    mm->user_base = src->user_base;
+    mm->user_pages = src->user_pages;
+    mm->user_stack_base = src->user_stack_base;
+    mm->heap_base = src->heap_base;
+    mm->heap_brk = src->heap_brk;
+    mm->vma_list = vma_clone_list(src->vma_list);
+    if (src->vma_list && !mm->vma_list) {
+        pmm_free_page(new_dir);
+        kfree(mm);
+        return NULL;
+    }
+    vma_t *v = src->vma_list;
+    while (v) {
+        uint32_t start = v->start & ~0xFFF;
+        uint32_t end = (v->end + 0xFFF) & ~0xFFF;
+        for (uint32_t va = start; va < end; va += 4096) {
+            uint32_t pte = vmm_get_pte_flags_ex(src->page_directory, (void*)va);
+            if (!(pte & PTE_PRESENT)) continue;
+            if (!(pte & PTE_USER)) continue;
+            uint32_t phys = pte & ~0xFFF;
+            uint32_t flags = pte & 0xFFF;
+            int was_write = (flags & PTE_READ_WRITE) != 0;
+            if (was_write) {
+                flags &= ~PTE_READ_WRITE;
+                flags |= PTE_COW;
+                vmm_update_page_flags_ex(src->page_directory, (void*)va, flags);
+            }
+            vmm_map_page_ex(new_dir, (void*)phys, (void*)va, flags);
+            pmm_ref_page((void*)phys);
+        }
+        v = v->next;
+    }
+    return mm;
+}
+
+static registers_t *task_clone_regs(uint32_t *stack, registers_t *regs)
+{
+    if (!stack || !regs) return NULL;
+    uint32_t stack_top = (uint32_t)stack + 4096;
+    registers_t *dst = (registers_t*)(stack_top - sizeof(registers_t));
+    memcpy(dst, regs, sizeof(*regs));
+    dst->esp = stack_top;
+    dst->ebp = 0;
+    dst->eax = 0;
+    return dst;
 }
 
 static void mm_destroy(mm_t *mm)
@@ -340,6 +438,63 @@ int task_munmap(uint32_t addr, uint32_t length)
         task_free_user_page_mapped(task_current->mm->page_directory, va);
     }
     return 0;
+}
+
+int task_fork(registers_t *regs)
+{
+    if (!task_current || !task_current->mm || !regs) return -1;
+    task_t *task = (task_t*)kmalloc(sizeof(task_t));
+    uint32_t *stack = (uint32_t*)kmalloc(4096);
+    if (!task || !stack) {
+        if (task) kfree(task);
+        if (stack) kfree(stack);
+        return -1;
+    }
+
+    mm_t *child_mm = mm_clone_cow(task_current->mm);
+    if (!child_mm) {
+        kfree(stack);
+        kfree(task);
+        return -1;
+    }
+
+    task->id = next_task_id++;
+    task->parent_id = task_current->id;
+    task->regs = task_clone_regs(stack, regs);
+    if (!task->regs) {
+        mm_destroy(child_mm);
+        kfree(stack);
+        kfree(task);
+        return -1;
+    }
+    task->stack = stack;
+    task->wake_tick = 0;
+    task->state = TASK_RUNNABLE;
+    task->timeslice = TASK_TIMESLICE_TICKS;
+    task->mm = child_mm;
+    task->exit_code = 0;
+    task->exit_reason = 0;
+    task->exit_info0 = 0;
+    task->exit_info1 = 0;
+    task_set_program_name(task, task_current->program);
+    task->cwd[0] = 0;
+    if (task_current->cwd[0]) {
+        uint32_t n = (uint32_t)strlen(task_current->cwd);
+        if (n >= sizeof(task->cwd)) n = sizeof(task->cwd) - 1;
+        memcpy(task->cwd, task_current->cwd, n);
+        task->cwd[n] = 0;
+    }
+    task_fdtable_init(task);
+    task_fdtable_clone(task, task_current);
+    task->waitq = NULL;
+    task->wait_next = NULL;
+
+    uint32_t flags = irq_save();
+    task->next = task_head->next;
+    task_head->next = task;
+    irq_restore(flags);
+
+    return (int)task->id;
 }
 
 static int task_free_user_page_mapped(uint32_t *dir, uint32_t va_page)
@@ -703,9 +858,15 @@ registers_t *task_schedule(registers_t *regs)
                 sched_switch_count++;
             }
             task_current = candidate;
-            if (task_current->mm && task_current->mm->page_directory &&
-                task_current->mm->page_directory != vmm_get_current_directory()) {
-                vmm_switch_directory(task_current->mm->page_directory);
+            if (task_current->mm && task_current->mm->page_directory) {
+                if (task_current->mm->page_directory != vmm_get_current_directory()) {
+                    vmm_switch_directory(task_current->mm->page_directory);
+                }
+            } else {
+                uint32_t *kdir = vmm_get_kernel_directory();
+                if (kdir && kdir != vmm_get_current_directory()) {
+                    vmm_switch_directory(kdir);
+                }
             }
             tss_set_kernel_stack((uint32_t)task_current->stack + 4096);
             task_current->timeslice = TASK_TIMESLICE_TICKS;

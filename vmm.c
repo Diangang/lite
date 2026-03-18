@@ -4,6 +4,7 @@
 #include "kernel.h"
 #include "isr.h"
 #include "task.h"
+#include "kheap.h"
 
 /*
  * 1024 Page Directory Entries.
@@ -12,6 +13,8 @@
  */
 static uint32_t* page_directory = NULL;
 static uint32_t* kernel_directory = NULL;
+static uint32_t cow_faults = 0;
+static uint32_t cow_copies = 0;
 
 /*
  * We will need at least one page table to map the first 4MB
@@ -198,6 +201,29 @@ uint32_t vmm_get_pte_flags_ex(uint32_t* dir, void* virt_addr)
     return pte;
 }
 
+void vmm_update_page_flags_ex(uint32_t* dir, void* virt_addr, uint32_t flags)
+{
+    if (!dir) return;
+
+    uint32_t va = (uint32_t)virt_addr;
+    uint32_t pde_idx = va / (1024 * 4096);
+    uint32_t pte_idx = (va % (1024 * 4096)) / 4096;
+
+    uint32_t pde = dir[pde_idx];
+    if (!(pde & PTE_PRESENT)) return;
+
+    if (flags & PTE_USER) {
+        dir[pde_idx] |= PTE_USER;
+    }
+
+    uint32_t* table = (uint32_t*)(pde & ~0xFFF);
+    uint32_t pte = table[pte_idx];
+    if (!(pte & PTE_PRESENT)) return;
+
+    table[pte_idx] = (pte & ~0xFFF) | (flags & 0xFFF);
+    __asm__ volatile("invlpg (%0)" :: "r" (virt_addr) : "memory");
+}
+
 void vmm_set_page_user(void* virt_addr)
 {
     vmm_set_page_user_ex(page_directory, virt_addr);
@@ -313,12 +339,41 @@ int vmm_user_accessible(uint32_t* dir, void* addr, uint32_t len, int write)
         if (!(pte & PTE_USER)) return 0;
         if (write) {
             if (!(pde & PTE_READ_WRITE)) return 0;
-            if (!(pte & PTE_READ_WRITE)) return 0;
+            if (!(pte & PTE_READ_WRITE) && !(pte & PTE_COW)) return 0;
         }
         if (page == last) break;
         page += 4096;
     }
 
+    return 1;
+}
+
+static int vmm_resolve_cow(uint32_t page_base)
+{
+    uint32_t pte = vmm_get_pte_flags_ex(page_directory, (void*)page_base);
+    if (!(pte & PTE_COW)) return 0;
+    uint32_t phys = pte & ~0xFFF;
+    uint32_t rc = pmm_get_refcount((void*)phys);
+    cow_faults++;
+    if (rc <= 1) {
+        uint32_t flags = (pte & 0xFFF) | PTE_READ_WRITE;
+        flags &= ~PTE_COW;
+        vmm_update_page_flags_ex(page_directory, (void*)page_base, flags);
+        return 1;
+    }
+    void *new_phys = pmm_alloc_page();
+    if (!new_phys) return -1;
+    uint8_t *tmp = (uint8_t*)kmalloc(4096);
+    if (!tmp) {
+        pmm_free_page(new_phys);
+        return -1;
+    }
+    memcpy(tmp, (void*)page_base, 4096);
+    vmm_map_page_ex(page_directory, new_phys, (void*)page_base, PTE_PRESENT | PTE_USER | PTE_READ_WRITE);
+    memcpy((void*)page_base, tmp, 4096);
+    kfree(tmp);
+    pmm_free_page((void*)phys);
+    cow_copies++;
     return 1;
 }
 
@@ -336,8 +391,26 @@ int vmm_copyout(void* dst_user, const void* src, uint32_t len)
     if (!dst_user && len) return -1;
     if (!src && len) return -1;
     if (!vmm_user_accessible(vmm_get_current_directory(), (void*)dst_user, len, 1)) return -1;
+    if (len) {
+        uint32_t start = (uint32_t)dst_user;
+        uint32_t end = start + len - 1;
+        uint32_t page = start & ~0xFFF;
+        uint32_t last = end & ~0xFFF;
+        while (1) {
+            int res = vmm_resolve_cow(page);
+            if (res < 0) return -1;
+            if (page == last) break;
+            page += 4096;
+        }
+    }
     memcpy(dst_user, src, len);
     return 0;
+}
+
+void vmm_get_cow_stats(uint32_t *faults, uint32_t *copies)
+{
+    if (faults) *faults = cow_faults;
+    if (copies) *copies = cow_copies;
 }
 
 void page_fault_handler(registers_t *regs)
@@ -432,6 +505,11 @@ void page_fault_handler(registers_t *regs)
     }
 
     if (is_user) {
+        if (is_present && is_write && !is_reserved) {
+            uint32_t page_base = faulting_address & 0xFFFFF000;
+            int res = vmm_resolve_cow(page_base);
+            if (res > 0) return;
+        }
         printf("User Page Fault: unhandled.\n");
         task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
         return;
