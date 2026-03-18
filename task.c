@@ -35,6 +35,7 @@ typedef struct task {
     uint32_t exit_info0;
     uint32_t exit_info1;
     char program[32];
+    task_fd_t fds[TASK_FD_MAX];
     vma_t *vma_list;
     void *waitq;
     struct task *wait_next;
@@ -112,6 +113,16 @@ static void vma_list_free(task_t *task)
         v = next;
     }
     task->vma_list = NULL;
+}
+
+static void task_fdtable_init(task_t *task)
+{
+    if (!task) return;
+    for (int i = 0; i < TASK_FD_MAX; i++) {
+        task->fds[i].used = 0;
+        task->fds[i].node = NULL;
+        task->fds[i].offset = 0;
+    }
 }
 
 static void vma_add(task_t *task, uint32_t start, uint32_t end, uint32_t flags)
@@ -207,6 +218,7 @@ void tasking_init(void)
     task->exit_info1 = 0;
     task->program[0] = 0;
     task->vma_list = NULL;
+    task_fdtable_init(task);
     task->waitq = NULL;
     task->wait_next = NULL;
     task->next = task;
@@ -259,6 +271,7 @@ static int task_create_internal(void (*entry)(void), const char *program)
     task->exit_info1 = 0;
     task_set_program_name(task, program);
     task->vma_list = NULL;
+    task_fdtable_init(task);
     task->waitq = NULL;
     task->wait_next = NULL;
 
@@ -352,7 +365,6 @@ static void task_destroy(task_t *prev, task_t *task)
     prev->next = next;
     irq_restore(flags);
 
-    syscall_cleanup_task_fds(task->id);
     task_free_user_memory(task);
     kfree(task->stack);
     kfree(task);
@@ -723,6 +735,41 @@ uint32_t task_dump_maps(char *buf, uint32_t len)
     }
     if (off < len) buf[off] = 0;
     return off;
+}
+
+int task_fd_alloc(fs_node_t *node)
+{
+    if (!task_current || !node) return -1;
+    for (int i = 0; i < TASK_FD_MAX; i++) {
+        if (!task_current->fds[i].used) {
+            task_current->fds[i].used = 1;
+            task_current->fds[i].node = node;
+            task_current->fds[i].offset = 0;
+            return i + 3;
+        }
+    }
+    return -1;
+}
+
+task_fd_t *task_fd_get(int fd)
+{
+    if (!task_current) return NULL;
+    if (fd < 3) return NULL;
+    int idx = fd - 3;
+    if (idx < 0 || idx >= TASK_FD_MAX) return NULL;
+    if (!task_current->fds[idx].used) return NULL;
+    if (!task_current->fds[idx].node) return NULL;
+    return &task_current->fds[idx];
+}
+
+int task_fd_close(int fd)
+{
+    task_fd_t *d = task_fd_get(fd);
+    if (!d) return -1;
+    d->used = 0;
+    d->node = NULL;
+    d->offset = 0;
+    return 0;
 }
 
 void task_list(void)

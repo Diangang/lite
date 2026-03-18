@@ -3,10 +3,19 @@
 
 #include <stdint.h>
 #include "isr.h"
+#include "fs.h"
 
 typedef struct wait_queue {
     void *head;
 } wait_queue_t;
+
+typedef struct task_fd {
+    int used;
+    fs_node_t *node;
+    uint32_t offset;
+} task_fd_t;
+
+enum { TASK_FD_MAX = 16 };
 
 enum {
     VMA_READ = 1 << 0,
@@ -27,6 +36,9 @@ uint32_t task_dump_tasks(char *buf, uint32_t len);
 uint32_t task_dump_maps(char *buf, uint32_t len);
 void task_user_heap_init(uint32_t heap_base, uint32_t stack_base);
 uint32_t task_brk(uint32_t new_end);
+int task_fd_alloc(fs_node_t *node);
+task_fd_t *task_fd_get(int fd);
+int task_fd_close(int fd);
 
 void tasking_init(void);
 int task_create(void (*entry)(void));

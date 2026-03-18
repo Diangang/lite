@@ -19,6 +19,5 @@ enum {
 
 void syscall_init(void);
 void syscall_handler(registers_t *regs);
-void syscall_cleanup_task_fds(uint32_t owner_id);
 
 #endif

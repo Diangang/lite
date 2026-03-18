@@ -55,7 +55,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - 用户态 syscall 会进行用户指针校验，避免非法地址导致内核崩溃。
   - `SYS_WRITE/SYS_READ` 在内核侧通过 `copyin/copyout` 分段拷贝访问用户缓冲区。
   - `SYS_READ` 从 shell 输入读取时会阻塞等待数据到达，避免 busy-yield 轮询。
-  - `SYS_OPEN/SYS_FREAD/SYS_CLOSE` 提供最小只读文件访问能力（当前用于 InitRD）。
+  - `SYS_OPEN/SYS_FREAD/SYS_CLOSE` 提供最小只读文件访问能力（当前用于 InitRD），fdtable 为 per-task。
   - `SYS_BRK` 提供最小用户堆扩展接口（基于堆 VMA 与按需缺页分配）。
   - syscall 入口使用 trap gate，不会隐式关闭中断，内核态具备可抢占的基础语义。
   - shell 的 `syscall` 命令运行在内核态，允许传入内核指针用于演示。
