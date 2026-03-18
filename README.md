@@ -46,6 +46,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
 - **系统调用 (int 0x80)**：
   - 用户态 syscall 会进行用户指针校验，避免非法地址导致内核崩溃。
   - `SYS_WRITE/SYS_READ` 在内核侧通过 `copyin/copyout` 分段拷贝访问用户缓冲区。
+  - `SYS_OPEN/SYS_FREAD/SYS_CLOSE` 提供最小只读文件访问能力（当前用于 InitRD）。
   - shell 的 `syscall` 命令运行在内核态，允许传入内核指针用于演示。
 - **用户态异常处理**：
   - 用户态触发 `#PF/#GP/#UD` 等异常时，内核终止当前用户任务并继续运行 shell。

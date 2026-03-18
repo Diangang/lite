@@ -6,6 +6,7 @@
 #include "vmm.h"
 #include "pmm.h"
 #include "shell.h"
+#include "syscall.h"
 
 typedef struct task {
     uint32_t id;
@@ -219,6 +220,7 @@ static void task_destroy(task_t *prev, task_t *task)
     }
     prev->next = next;
 
+    syscall_cleanup_task_fds(task->id);
     task_free_user_memory(task);
     kfree(task->stack);
     kfree(task);
