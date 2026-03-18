@@ -4,10 +4,12 @@
 #include <stdint.h>
 #include "fs.h"
 
+typedef struct vfs_file vfs_file_t;
+
 typedef struct file {
     fs_node_t *node;
-    uint32_t pos;
     uint32_t flags;
+    vfs_file_t *vf;
 } file_t;
 
 file_t *file_open_node(fs_node_t *node, uint32_t flags);

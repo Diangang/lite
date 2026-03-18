@@ -8,6 +8,7 @@
 #include "kheap.h"
 #include "fs.h"
 #include "file.h"
+#include "vfs.h"
 
 #define CMD_BUF_SIZE 256
 #define INPUT_BUF_SIZE 256
@@ -231,11 +232,11 @@ static void shell_execute(void)
         if (!fs_root) {
             terminal_writestring("No file system mounted!\n");
         } else {
-            fs_node_t *dir = fs_root;
+            fs_node_t *dir = vfs_resolve("/");
             if (strncmp(cmd_buffer, "ls ", 3) == 0) {
                 char *path = cmd_buffer + 3;
                 if (path[0]) {
-                    fs_node_t *found = finddir_fs(fs_root, path);
+                    fs_node_t *found = vfs_resolve(path);
                     if (!found || ((found->flags & 0x7) != FS_DIRECTORY)) {
                         printf("Directory not found: %s\n", path);
                         cmd_index = 0;
@@ -243,6 +244,11 @@ static void shell_execute(void)
                     }
                     dir = found;
                 }
+            }
+            if (!dir) {
+                terminal_writestring("No file system mounted!\n");
+                cmd_index = 0;
+                return;
             }
             int i = 0;
             struct dirent *node = 0;

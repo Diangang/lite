@@ -16,8 +16,8 @@
 #include "procfs.h"
 #include "devfs.h"
 #include "sysfs.h"
-#include "rootfs.h"
 #include "fs.h"
+#include "vfs.h"
 
 /* Check if the compiler thinks we are targeting the wrong operating system. */
 
@@ -203,7 +203,7 @@ static int load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
         return -1;
     }
 
-    fs_node_t *node = finddir_fs(fs_root, (char*)name);
+    fs_node_t *node = vfs_resolve(name);
     if (!node) {
         terminal_writestring("User program not found.\n");
         return -1;
@@ -596,7 +596,11 @@ void kernel_main(multiboot_info_t* mbi, uint32_t magic)
                     fs_node_t *proc_root = procfs_init();
                     fs_node_t *dev_root = devfs_init();
                     fs_node_t *sys_root = sysfs_init();
-                    fs_root = rootfs_make(fs_root, proc_root, dev_root, sys_root);
+                    vfs_init();
+                    vfs_mount_root("/", fs_root);
+                    vfs_mount_root("/proc", proc_root);
+                    vfs_mount_root("/dev", dev_root);
+                    vfs_mount_root("/sys", sys_root);
                     serial_write("Ramdisk loaded.\n");
                     terminal_writestring("Ramdisk loaded.\n");
                 } else {
