@@ -18,17 +18,18 @@
 - **I/O ABI 收敛**：
   - `open/read/write/close` 风格 syscall；fdtable per-task；fd=0/1/2 绑定 `/dev/console`。
 - **可观测性**：
-  - procfs：`/proc/tasks /proc/sched /proc/irq /proc/maps /proc/self/maps /proc/<pid>/maps /proc/meminfo /proc/<pid>/stat`。
+  - procfs：`/proc/tasks /proc/sched /proc/irq /proc/maps /proc/self/maps /proc/<pid>/maps /proc/meminfo /proc/<pid>/stat /proc/<pid>/cmdline /proc/<pid>/status /proc/<pid>/fd/*`。
   - sysfs：`/sys/kernel/version /sys/kernel/uptime /sys/devices/*`。
 - **文件系统雏形**：
   - initrd（只读 fs_node 模型）、devfs、procfs、sysfs。
-  - rootfs 为“拼接根”（不是 mount 语义）。
-  - 最小 `file` 对象与 fdtable 对齐，offset 语义统一。
+  - mount 表驱动 `/` 下挂载点展示与路径解析，已替换“拼接根”实现。
+  - 新增 ramfs 作为可写根（可在没有块设备与磁盘 FS 时长期使用）。
+  - 最小 `file` 与 VFS file 对齐，offset 语义统一。
 
 未对齐的关键缺口：
 
-- **VFS 语义仍不完整**：缺 super_block / inode / dentry / mount；路径解析仍是 fs_node + 拼接根，未形成 mount tree。
-- **命名空间缺失**：无 cwd、无相对路径、无 mount 表，`/proc` `/sys` `/dev` 只是 rootfs 分发逻辑。
+- **VFS 语义仍不完整**：对象雏形已引入，但 inode/dentry/mount 尚未形成完整缓存/引用计数语义。
+- **命名空间仍偏最小**：cwd 仅用于 shell 演示，未引入 per-process namespace。
 - **kthread/mm 语义未完全分离**：kernel thread 仍持有 mm（需要明确 “user 必有 / kthread 可无”）。
 
 ## 1. v3 原则（新增约束）
@@ -51,7 +52,7 @@
 
 目标：
 - 引入 mount 表，支持把 initrd/procfs/sysfs/devfs 挂载到 `/` 下的固定路径。
-- 替换 `rootfs_make` 拼接根逻辑。
+- 替换旧“拼接根”逻辑。
 
 验收标准：
 - `/proc` `/sys` `/dev` 来自 mount tree，而不是 rootfs 分发逻辑。

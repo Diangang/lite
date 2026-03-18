@@ -32,10 +32,16 @@ typedef struct vfs_mount {
     vfs_super_block_t *sb;
 } vfs_mount_t;
 
+enum {
+    VFS_O_CREAT = 1 << 6,
+    VFS_O_TRUNC = 1 << 9
+};
+
 void vfs_init(void);
 int vfs_mount_root(const char *path, fs_node_t *root_node);
 int vfs_chdir(const char *path);
 const char *vfs_getcwd(void);
+int vfs_mkdir(const char *path);
 fs_node_t *vfs_resolve(const char *path);
 vfs_file_t *vfs_open(const char *path, uint32_t flags);
 vfs_file_t *vfs_open_node(fs_node_t *node, uint32_t flags);

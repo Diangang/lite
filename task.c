@@ -859,6 +859,96 @@ uint32_t task_dump_stat_pid(uint32_t pid, char *buf, uint32_t len)
     return off;
 }
 
+static task_t *task_find_by_pid(uint32_t pid)
+{
+    if (!task_head) return NULL;
+    task_t *t = task_head;
+    do {
+        if (t->id == pid) return t;
+        t = t->next;
+    } while (t && t != task_head);
+    return NULL;
+}
+
+uint32_t task_dump_cmdline_pid(uint32_t pid, char *buf, uint32_t len)
+{
+    if (!buf || len == 0) return 0;
+    if (!task_head) return 0;
+    if (pid == 0xFFFFFFFF) pid = task_get_current_id();
+
+    uint32_t flags = irq_save();
+    task_t *t = task_find_by_pid(pid);
+    if (!t) {
+        irq_restore(flags);
+        return 0;
+    }
+    uint32_t off = 0;
+    const char *name = t->program[0] ? t->program : "-";
+    buf_append(buf, &off, len, name);
+    buf_append(buf, &off, len, "\n");
+    if (off < len) buf[off] = 0;
+    irq_restore(flags);
+    return off;
+}
+
+uint32_t task_dump_status_pid(uint32_t pid, char *buf, uint32_t len)
+{
+    if (!buf || len == 0) return 0;
+    if (!task_head) return 0;
+    if (pid == 0xFFFFFFFF) pid = task_get_current_id();
+
+    uint32_t flags = irq_save();
+    task_t *t = task_find_by_pid(pid);
+    if (!t) {
+        irq_restore(flags);
+        return 0;
+    }
+
+    const char *name = t->program[0] ? t->program : "-";
+    const char *state = "R";
+    if (t->state == TASK_SLEEPING) state = "S";
+    else if (t->state == TASK_BLOCKED) state = "D";
+    else if (t->state == TASK_ZOMBIE) state = "Z";
+
+    uint32_t off = 0;
+    buf_append(buf, &off, len, "Name:\t");
+    buf_append(buf, &off, len, name);
+    buf_append(buf, &off, len, "\nState:\t");
+    buf_append(buf, &off, len, state);
+    buf_append(buf, &off, len, "\nPid:\t");
+    buf_append_u32(buf, &off, len, t->id);
+    buf_append(buf, &off, len, "\n");
+    if (off < len) buf[off] = 0;
+    irq_restore(flags);
+    return off;
+}
+
+uint32_t task_dump_fd_pid(uint32_t pid, uint32_t fd, char *buf, uint32_t len)
+{
+    if (!buf || len == 0) return 0;
+    if (!task_head) return 0;
+    if (pid == 0xFFFFFFFF) pid = task_get_current_id();
+    if (fd >= TASK_FD_MAX) return 0;
+
+    uint32_t flags = irq_save();
+    task_t *t = task_find_by_pid(pid);
+    if (!t) {
+        irq_restore(flags);
+        return 0;
+    }
+    if (!t->fds[fd].used || !t->fds[fd].file || !t->fds[fd].file->node) {
+        irq_restore(flags);
+        return 0;
+    }
+
+    uint32_t off = 0;
+    buf_append(buf, &off, len, t->fds[fd].file->node->name);
+    buf_append(buf, &off, len, "\n");
+    if (off < len) buf[off] = 0;
+    irq_restore(flags);
+    return off;
+}
+
 int task_fd_alloc(file_t *file)
 {
     if (!task_current || !file) return -1;

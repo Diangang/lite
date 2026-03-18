@@ -6,6 +6,11 @@
 
 typedef struct vfs_file vfs_file_t;
 
+enum {
+    O_CREAT = 1 << 6,
+    O_TRUNC = 1 << 9
+};
+
 typedef struct file {
     fs_node_t *node;
     uint32_t flags;

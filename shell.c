@@ -120,6 +120,55 @@ static void shell_execute(void)
             printf("cd: %s\n", path);
         }
     }
+    else if (strncmp(cmd_buffer, "mkdir ", 6) == 0) {
+        const char *path = cmd_buffer + 6;
+        while (*path == ' ') path++;
+        if (!*path) {
+            terminal_writestring("mkdir: missing operand\n");
+        } else if (vfs_mkdir(path) != 0) {
+            printf("mkdir: %s\n", path);
+        }
+    }
+    else if (strncmp(cmd_buffer, "touch ", 6) == 0) {
+        const char *path = cmd_buffer + 6;
+        while (*path == ' ') path++;
+        if (!*path) {
+            terminal_writestring("touch: missing operand\n");
+        } else {
+            file_t *f = file_open_path(path, O_CREAT);
+            if (!f) {
+                printf("touch: %s\n", path);
+            } else {
+                file_close(f);
+            }
+        }
+    }
+    else if (strncmp(cmd_buffer, "writefile ", 10) == 0) {
+        char *p = cmd_buffer + 10;
+        while (*p == ' ') p++;
+        if (!*p) {
+            terminal_writestring("writefile: missing operand\n");
+        } else {
+            char *sp = p;
+            while (*sp && *sp != ' ') sp++;
+            if (!*sp) {
+                terminal_writestring("writefile: missing data\n");
+            } else {
+                *sp = 0;
+                const char *path = p;
+                const char *data = sp + 1;
+                while (*data == ' ') data++;
+                file_t *f = file_open_path(path, O_CREAT | O_TRUNC);
+                if (!f) {
+                    printf("writefile: %s\n", path);
+                } else {
+                    file_write(f, (const uint8_t*)data, (uint32_t)strlen(data));
+                    file_write(f, (const uint8_t*)"\n", 1);
+                    file_close(f);
+                }
+            }
+        }
+    }
     else if (strcmp(cmd_buffer, "alloc") == 0) {
         terminal_writestring("Allocating 3 pages...\n");
         void* p1 = pmm_alloc_page();

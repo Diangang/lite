@@ -1,6 +1,7 @@
 #include "vfs.h"
 #include "kheap.h"
 #include "libc.h"
+#include "ramfs.h"
 
 static vfs_mount_t vfs_mounts[8];
 static uint32_t vfs_mount_count = 0;
@@ -273,6 +274,34 @@ static vfs_mount_t *vfs_find_mount(const char *path, uint32_t *out_tail_off)
     return best;
 }
 
+int vfs_mkdir(const char *path)
+{
+    if (!path || !*path) return -1;
+    char abs[256];
+    if (!vfs_build_abs(path, abs, sizeof(abs))) return -1;
+    uint32_t abs_len = (uint32_t)strlen(abs);
+    if (abs_len < 2) return -1;
+    uint32_t slash = abs_len;
+    while (slash > 0 && abs[slash - 1] != '/') slash--;
+    if (slash == 0 || slash >= abs_len) return -1;
+    char parent[256];
+    if (slash == 1) {
+        strcpy(parent, "/");
+    } else {
+        memcpy(parent, abs, slash);
+        parent[slash] = 0;
+    }
+    const char *name = abs + slash;
+    if (!*name) return -1;
+
+    fs_node_t *pnode = vfs_resolve(parent);
+    if (pnode == &vfs_root_node) pnode = vfs_base_root;
+    if (!pnode || (pnode->flags & 0x7) != FS_DIRECTORY) return -1;
+    if (finddir_fs(pnode, (char*)name)) return -1;
+    if (!ramfs_create_child(pnode, name, FS_DIRECTORY)) return -1;
+    return 0;
+}
+
 fs_node_t *vfs_resolve(const char *path)
 {
     if (!path || !*path) return NULL;
@@ -289,9 +318,39 @@ fs_node_t *vfs_resolve(const char *path)
 vfs_file_t *vfs_open(const char *path, uint32_t flags)
 {
     fs_node_t *node = vfs_resolve(path);
+    if (!node && (flags & VFS_O_CREAT)) {
+        char abs[256];
+        if (!vfs_build_abs(path, abs, sizeof(abs))) return NULL;
+        char parent[256];
+        uint32_t abs_len = (uint32_t)strlen(abs);
+        if (abs_len < 2) return NULL;
+        uint32_t slash = abs_len;
+        while (slash > 0 && abs[slash - 1] != '/') slash--;
+        if (slash == 0 || slash >= abs_len) return NULL;
+        if (slash == 1) {
+            strcpy(parent, "/");
+        } else {
+            memcpy(parent, abs, slash);
+            parent[slash] = 0;
+        }
+        const char *name = abs + slash;
+        if (!*name) return NULL;
+
+        fs_node_t *pnode = vfs_resolve(parent);
+        if (pnode == &vfs_root_node) pnode = vfs_base_root;
+        if (!pnode || (pnode->flags & 0x7) != FS_DIRECTORY) return NULL;
+        fs_node_t *created = ramfs_create_child(pnode, name, FS_FILE);
+        if (!created) return NULL;
+        node = created;
+    }
     if (!node) return NULL;
 
-    return vfs_open_node(node, flags);
+    vfs_file_t *f = vfs_open_node(node, flags);
+    if (!f) return NULL;
+    if ((flags & VFS_O_TRUNC) && (node->flags & 0x7) == FS_FILE) {
+        node->length = 0;
+    }
+    return f;
 }
 
 vfs_file_t *vfs_open_node(fs_node_t *node, uint32_t flags)

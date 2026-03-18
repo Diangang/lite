@@ -18,6 +18,7 @@
 #include "sysfs.h"
 #include "fs.h"
 #include "vfs.h"
+#include "ramfs.h"
 
 /* Check if the compiler thinks we are targeting the wrong operating system. */
 
@@ -596,11 +597,14 @@ void kernel_main(multiboot_info_t* mbi, uint32_t magic)
                     fs_node_t *proc_root = procfs_init();
                     fs_node_t *dev_root = devfs_init();
                     fs_node_t *sys_root = sysfs_init();
+                    fs_node_t *ram_root = ramfs_init();
                     vfs_init();
-                    vfs_mount_root("/", fs_root);
+                    vfs_mount_root("/", ram_root);
+                    vfs_mount_root("/initrd", fs_root);
                     vfs_mount_root("/proc", proc_root);
                     vfs_mount_root("/dev", dev_root);
                     vfs_mount_root("/sys", sys_root);
+                    vfs_chdir("/initrd");
                     serial_write("Ramdisk loaded.\n");
                     terminal_writestring("Ramdisk loaded.\n");
                 } else {

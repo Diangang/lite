@@ -48,6 +48,9 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `/proc/<pid>/maps`：指定 pid 的 VMA（例如 `cat proc/1/maps`）。
   - `/proc/meminfo`：物理内存总量与空闲量（`cat proc/meminfo`）。
   - `/proc/<pid>/stat`：任务基础状态（`cat proc/1/stat`）。
+  - `/proc/<pid>/cmdline`：任务名（`cat proc/1/cmdline`）。
+  - `/proc/<pid>/status`：任务可读状态（`cat proc/1/status`）。
+  - `/proc/<pid>/fd/<n>`：fd 指向的节点名（`cat proc/1/fd/0`）。
 - **devfs（最小设备节点）**：
   - `/dev/console`：控制台设备（字符设备），用于 stdin/stdout 类 I/O（可通过 `open dev/console` + `read` 读取）。
 - **sysfs（最小自描述接口）**：
@@ -56,7 +59,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - 已引入最小 VFS 层（mount 表 + super_block/inode/dentry/file 结构雏形），并用 mount 表驱动 `/` 下的挂载点展示与路径解析。
 - **交互式 Shell**：
   - 内置极简内核态 Shell，支持 `help`, `clear`, `info`, `echo`, `uptime`, `meminfo`, `alloc`, `vmmtest`, `heaptest`, `ls`, `cat`, `demo`, `yield`, `sleep`, `ps`, `syscall`, `run`, `user` 等命令（demo 默认关闭）。
-  - 支持 `cd`/`pwd` 与相对路径；`ls` 默认列出当前目录。
+  - 支持 `cd`/`pwd` 与相对路径；`ls` 默认列出当前目录；支持 `mkdir`/`touch`/`writefile` 在 ramfs 上创建与写入。
   - **双模式输入输出**：同时支持 VGA 显示器+键盘 和 **串口 (COM1)** 终端交互。
   - `user` 进入用户态后切换输入前台为 `user>`，用户任务退出后自动恢复 `lite-os>`。
   - `run <file>` 从 InitRD 启动指定用户程序，并在退出后打印退出信息。

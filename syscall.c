@@ -163,7 +163,8 @@ void syscall_handler(registers_t *regs)
                 regs->eax = (uint32_t)-1;
                 break;
             }
-            file_t *f = file_open_path(name, 0);
+            uint32_t flags = regs->ecx;
+            file_t *f = file_open_path(name, flags);
             if (!f) {
                 regs->eax = (uint32_t)-1;
                 break;

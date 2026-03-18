@@ -20,11 +20,17 @@ typedef struct {
     fs_node_t dir;
     fs_node_t maps;
     fs_node_t stat;
+    fs_node_t cmdline;
+    fs_node_t status;
+    fs_node_t fd_dir;
+    fs_node_t fd_files[TASK_FD_MAX];
     struct dirent dirent;
 } proc_pid_entry_t;
 
 enum { PROC_PID_MAX = 16 };
 static proc_pid_entry_t proc_pids[PROC_PID_MAX];
+
+static int parse_u32(const char *s, uint32_t *out);
 
 static void buf_append(char *buf, uint32_t *off, uint32_t cap, const char *s)
 {
@@ -144,6 +150,48 @@ static uint32_t proc_read_pid_stat(fs_node_t *node, uint32_t offset, uint32_t si
     return size;
 }
 
+static uint32_t proc_read_pid_cmdline(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+{
+    if (!node) return 0;
+    static char tmp[256];
+    uint32_t pid = node->impl;
+    uint32_t n = task_dump_cmdline_pid(pid, tmp, sizeof(tmp));
+    if (offset >= n) return 0;
+    uint32_t remain = n - offset;
+    if (size > remain) size = remain;
+    memcpy(buffer, tmp + offset, size);
+    return size;
+}
+
+static uint32_t proc_read_pid_status(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+{
+    if (!node) return 0;
+    static char tmp[256];
+    uint32_t pid = node->impl;
+    uint32_t n = task_dump_status_pid(pid, tmp, sizeof(tmp));
+    if (offset >= n) return 0;
+    uint32_t remain = n - offset;
+    if (size > remain) size = remain;
+    memcpy(buffer, tmp + offset, size);
+    return size;
+}
+
+static uint32_t proc_read_pid_fd(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+{
+    if (!node) return 0;
+    static char tmp[256];
+    uint32_t slot = (node->impl >> 16) & 0xFFFF;
+    uint32_t fd = node->impl & 0xFFFF;
+    if (slot >= PROC_PID_MAX) return 0;
+    uint32_t pid = proc_pids[slot].pid;
+    uint32_t n = task_dump_fd_pid(pid, fd, tmp, sizeof(tmp));
+    if (offset >= n) return 0;
+    uint32_t remain = n - offset;
+    if (size > remain) size = remain;
+    memcpy(buffer, tmp + offset, size);
+    return size;
+}
+
 static uint32_t proc_read_pid_maps(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!node) return 0;
@@ -156,6 +204,45 @@ static uint32_t proc_read_pid_maps(fs_node_t *node, uint32_t offset, uint32_t si
     if (size > remain) size = remain;
     memcpy(buffer, tmp + offset, size);
     return size;
+}
+
+static struct dirent *proc_pid_fd_readdir(fs_node_t *node, uint32_t index)
+{
+    if (!node) return NULL;
+    uint32_t slot = node->impl;
+    if (slot >= PROC_PID_MAX) return NULL;
+    proc_pid_entry_t *e = &proc_pids[slot];
+    if (!e->used) return NULL;
+
+    uint32_t pid = e->pid;
+    static char tmp[64];
+    for (uint32_t fd = 0; fd < TASK_FD_MAX; fd++) {
+        uint32_t n = task_dump_fd_pid(pid, fd, tmp, sizeof(tmp));
+        if (n == 0) continue;
+        if (index == 0) {
+            strcpy(e->dirent.name, e->fd_files[fd].name);
+            e->dirent.ino = e->fd_files[fd].inode;
+            return &e->dirent;
+        }
+        index--;
+    }
+    return NULL;
+}
+
+static fs_node_t *proc_pid_fd_finddir(fs_node_t *node, char *name)
+{
+    if (!node || !name) return NULL;
+    uint32_t slot = node->impl;
+    if (slot >= PROC_PID_MAX) return NULL;
+    proc_pid_entry_t *e = &proc_pids[slot];
+    if (!e->used) return NULL;
+
+    uint32_t fd = 0;
+    if (parse_u32(name, &fd) != 0) return NULL;
+    if (fd >= TASK_FD_MAX) return NULL;
+    char tmp[64];
+    if (task_dump_fd_pid(e->pid, fd, tmp, sizeof(tmp)) == 0) return NULL;
+    return &e->fd_files[fd];
 }
 
 static struct dirent *proc_pid_readdir(fs_node_t *node, uint32_t index)
@@ -175,6 +262,21 @@ static struct dirent *proc_pid_readdir(fs_node_t *node, uint32_t index)
         e->dirent.ino = e->stat.inode;
         return &e->dirent;
     }
+    if (index == 2) {
+        strcpy(e->dirent.name, "cmdline");
+        e->dirent.ino = e->cmdline.inode;
+        return &e->dirent;
+    }
+    if (index == 3) {
+        strcpy(e->dirent.name, "status");
+        e->dirent.ino = e->status.inode;
+        return &e->dirent;
+    }
+    if (index == 4) {
+        strcpy(e->dirent.name, "fd");
+        e->dirent.ino = e->fd_dir.inode;
+        return &e->dirent;
+    }
     return NULL;
 }
 
@@ -187,6 +289,9 @@ static fs_node_t *proc_pid_finddir(fs_node_t *node, char *name)
     if (!e->used) return NULL;
     if (!strcmp(name, "maps")) return &e->maps;
     if (!strcmp(name, "stat")) return &e->stat;
+    if (!strcmp(name, "cmdline")) return &e->cmdline;
+    if (!strcmp(name, "status")) return &e->status;
+    if (!strcmp(name, "fd")) return &e->fd_dir;
     return NULL;
 }
 
@@ -245,6 +350,40 @@ static fs_node_t *proc_get_pid_dir(uint32_t pid)
             e->stat.length = 256;
             e->stat.read = &proc_read_pid_stat;
             e->stat.impl = pid;
+
+            memset(&e->cmdline, 0, sizeof(e->cmdline));
+            strcpy(e->cmdline.name, "cmdline");
+            e->cmdline.flags = FS_FILE;
+            e->cmdline.inode = 0x4000 + i;
+            e->cmdline.length = 256;
+            e->cmdline.read = &proc_read_pid_cmdline;
+            e->cmdline.impl = pid;
+
+            memset(&e->status, 0, sizeof(e->status));
+            strcpy(e->status.name, "status");
+            e->status.flags = FS_FILE;
+            e->status.inode = 0x5000 + i;
+            e->status.length = 256;
+            e->status.read = &proc_read_pid_status;
+            e->status.impl = pid;
+
+            memset(&e->fd_dir, 0, sizeof(e->fd_dir));
+            strcpy(e->fd_dir.name, "fd");
+            e->fd_dir.flags = FS_DIRECTORY;
+            e->fd_dir.inode = 0x6000 + i;
+            e->fd_dir.readdir = &proc_pid_fd_readdir;
+            e->fd_dir.finddir = &proc_pid_fd_finddir;
+            e->fd_dir.impl = i;
+
+            for (uint32_t fd = 0; fd < TASK_FD_MAX; fd++) {
+                memset(&e->fd_files[fd], 0, sizeof(e->fd_files[fd]));
+                itoa((int)fd, 10, e->fd_files[fd].name);
+                e->fd_files[fd].flags = FS_FILE;
+                e->fd_files[fd].inode = 0x7000 + i * TASK_FD_MAX + fd;
+                e->fd_files[fd].length = 256;
+                e->fd_files[fd].read = &proc_read_pid_fd;
+                e->fd_files[fd].impl = (i << 16) | fd;
+            }
 
             return &e->dir;
         }
