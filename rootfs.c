@@ -5,6 +5,7 @@
 typedef struct {
     fs_node_t *initrd;
     fs_node_t *proc;
+    fs_node_t *dev;
     struct dirent dirent;
 } rootfs_state_t;
 
@@ -24,8 +25,13 @@ static struct dirent *rootfs_readdir(fs_node_t *node, uint32_t index)
         st->dirent.ino = st->proc ? st->proc->inode : 0;
         return &st->dirent;
     }
+    if (index == 1) {
+        strcpy(st->dirent.name, "dev");
+        st->dirent.ino = st->dev ? st->dev->inode : 0;
+        return &st->dirent;
+    }
     if (!st->initrd) return NULL;
-    return readdir_fs(st->initrd, index - 1);
+    return readdir_fs(st->initrd, index - 2);
 }
 
 static fs_node_t *rootfs_finddir(fs_node_t *node, char *name)
@@ -33,11 +39,12 @@ static fs_node_t *rootfs_finddir(fs_node_t *node, char *name)
     rootfs_state_t *st = (rootfs_state_t*)(uintptr_t)node->impl;
     if (!st || !name) return NULL;
     if (!strcmp(name, "proc")) return st->proc;
+    if (!strcmp(name, "dev")) return st->dev;
     if (!st->initrd) return NULL;
     return finddir_fs(st->initrd, name);
 }
 
-fs_node_t *rootfs_make(fs_node_t *initrd, fs_node_t *proc)
+fs_node_t *rootfs_make(fs_node_t *initrd, fs_node_t *proc, fs_node_t *dev)
 {
     fs_node_t *root = (fs_node_t*)kmalloc(sizeof(fs_node_t));
     rootfs_state_t *st = (rootfs_state_t*)kmalloc(sizeof(rootfs_state_t));
@@ -47,6 +54,7 @@ fs_node_t *rootfs_make(fs_node_t *initrd, fs_node_t *proc)
     memset(st, 0, sizeof(*st));
     st->initrd = initrd;
     st->proc = proc;
+    st->dev = dev;
 
     strcpy(root->name, "/");
     root->flags = FS_DIRECTORY;

@@ -14,6 +14,7 @@
 #include "task.h"
 #include "syscall.h"
 #include "procfs.h"
+#include "devfs.h"
 #include "rootfs.h"
 #include "fs.h"
 
@@ -592,7 +593,8 @@ void kernel_main(multiboot_info_t* mbi, uint32_t magic)
                 fs_root = init_initrd(initrd_location);
                 if (fs_root) {
                     fs_node_t *proc_root = procfs_init();
-                    fs_root = rootfs_make(fs_root, proc_root);
+                    fs_node_t *dev_root = devfs_init();
+                    fs_root = rootfs_make(fs_root, proc_root, dev_root);
                     serial_write("Ramdisk loaded.\n");
                     terminal_writestring("Ramdisk loaded.\n");
                 } else {

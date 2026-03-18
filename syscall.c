@@ -114,6 +114,28 @@ void syscall_handler(registers_t *regs)
         }
     } else if (regs->eax == SYS_CLOSE) {
     } else if (regs->eax == SYS_BRK) {
+    } else if (regs->eax == SYS_READFD) {
+        if (regs->edx > 4096) {
+            regs->eax = (uint32_t)-1;
+            return;
+        }
+        if (from_user) {
+            if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ecx, regs->edx, 1)) {
+                regs->eax = (uint32_t)-1;
+                return;
+            }
+        }
+    } else if (regs->eax == SYS_WRITEFD) {
+        if (regs->edx > 4096) {
+            regs->eax = (uint32_t)-1;
+            return;
+        }
+        if (from_user) {
+            if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ecx, regs->edx, 0)) {
+                regs->eax = (uint32_t)-1;
+                return;
+            }
+        }
     }
 
     switch (regs->eax) {
@@ -217,6 +239,88 @@ void syscall_handler(registers_t *regs)
                 }
             }
             regs->eax = task_brk(req);
+            break;
+        }
+        case SYS_READFD: {
+            int fd = (int)regs->ebx;
+            char tmp[256];
+            uint32_t off = 0;
+            uint32_t want = regs->edx;
+            while (off < want) {
+                uint32_t chunk = want - off;
+                if (chunk > sizeof(tmp)) chunk = sizeof(tmp);
+
+                uint32_t n = 0;
+                if (fd == 0) {
+                    n = shell_read_blocking(tmp, chunk);
+                } else {
+                    task_fd_t *d = task_fd_get(fd);
+                    if (!d) {
+                        regs->eax = (uint32_t)-1;
+                        break;
+                    }
+                    n = read_fs(d->node, d->offset, chunk, (uint8_t*)tmp);
+                    d->offset += n;
+                }
+
+                if (n == 0) break;
+                if (from_user) {
+                    if (vmm_copyout((void*)(regs->ecx + off), tmp, n) != 0) {
+                        regs->eax = (uint32_t)-1;
+                        return;
+                    }
+                } else {
+                    memcpy((void*)(regs->ecx + off), tmp, n);
+                }
+                off += n;
+                if (n < chunk) break;
+            }
+            if ((int32_t)regs->eax != -1) {
+                regs->eax = off;
+            }
+            break;
+        }
+        case SYS_WRITEFD: {
+            int fd = (int)regs->ebx;
+            char tmp[256];
+            uint32_t off = 0;
+            uint32_t want = regs->edx;
+            while (off < want) {
+                uint32_t chunk = want - off;
+                if (chunk > sizeof(tmp)) chunk = sizeof(tmp);
+
+                if (from_user) {
+                    if (vmm_copyin(tmp, (void*)(regs->ecx + off), chunk) != 0) {
+                        regs->eax = (uint32_t)-1;
+                        return;
+                    }
+                } else {
+                    memcpy(tmp, (void*)(regs->ecx + off), chunk);
+                }
+
+                uint32_t n = 0;
+                if (fd == 1 || fd == 2) {
+                    for (uint32_t i = 0; i < chunk; i++) {
+                        terminal_putchar(tmp[i]);
+                    }
+                    n = chunk;
+                } else {
+                    task_fd_t *d = task_fd_get(fd);
+                    if (!d) {
+                        regs->eax = (uint32_t)-1;
+                        break;
+                    }
+                    n = write_fs(d->node, d->offset, chunk, (uint8_t*)tmp);
+                    d->offset += n;
+                }
+
+                if (n == 0) break;
+                off += n;
+                if (n < chunk) break;
+            }
+            if ((int32_t)regs->eax != -1) {
+                regs->eax = off;
+            }
             break;
         }
         default:
