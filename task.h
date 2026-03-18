@@ -28,6 +28,7 @@ int task_wait(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0, 
 void task_set_current_page_directory(uint32_t* dir);
 void task_set_user_info(uint32_t base, uint32_t pages, uint32_t stack_base);
 void task_get_user_info(uint32_t *base, uint32_t *pages, uint32_t *stack_base);
+int task_user_vma_allows(uint32_t addr, int is_write, int is_exec);
 const char *task_get_current_program(void);
 uint32_t task_get_current_id(void);
 void task_set_demo_enabled(int enabled);

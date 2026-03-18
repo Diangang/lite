@@ -343,14 +343,7 @@ void page_fault_handler(registers_t *regs)
 
         uint32_t page_base = faulting_address & 0xFFFFF000;
         if (is_user) {
-            uint32_t user_base = 0;
-            uint32_t user_pages = 0;
-            uint32_t user_stack_base = 0;
-            task_get_user_info(&user_base, &user_pages, &user_stack_base);
-            uint32_t user_end = user_base + user_pages * 4096;
-            int in_text = user_pages && page_base >= user_base && page_base < user_end;
-            int in_stack = user_stack_base && page_base == user_stack_base;
-            if (!in_text && !in_stack) {
+            if (!task_user_vma_allows(page_base, is_write, is_instr_fetch)) {
                 printf("User Page Fault: out of range.\n");
                 task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
                 return;

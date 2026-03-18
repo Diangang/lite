@@ -9,6 +9,19 @@
 #include "syscall.h"
 #include "tss.h"
 
+enum {
+    VMA_READ = 1 << 0,
+    VMA_WRITE = 1 << 1,
+    VMA_EXEC = 1 << 2
+};
+
+typedef struct vma {
+    uint32_t start;
+    uint32_t end;
+    uint32_t flags;
+    struct vma *next;
+} vma_t;
+
 typedef struct task {
     uint32_t id;
     uint32_t parent_id;
@@ -26,6 +39,7 @@ typedef struct task {
     uint32_t exit_info0;
     uint32_t exit_info1;
     char program[32];
+    vma_t *vma_list;
     void *waitq;
     struct task *wait_next;
     struct task *next;
@@ -64,6 +78,31 @@ static void task_idle(void)
     for (;;) {
         __asm__ volatile ("hlt");
     }
+}
+
+static void vma_list_free(task_t *task)
+{
+    if (!task) return;
+    vma_t *v = task->vma_list;
+    while (v) {
+        vma_t *next = v->next;
+        kfree(v);
+        v = next;
+    }
+    task->vma_list = NULL;
+}
+
+static void vma_add(task_t *task, uint32_t start, uint32_t end, uint32_t flags)
+{
+    if (!task) return;
+    if (start >= end) return;
+    vma_t *v = (vma_t*)kmalloc(sizeof(vma_t));
+    if (!v) return;
+    v->start = start;
+    v->end = end;
+    v->flags = flags;
+    v->next = task->vma_list;
+    task->vma_list = v;
 }
 
 static registers_t *task_build_regs(uint32_t *stack, void (*entry)(void))
@@ -112,6 +151,7 @@ void tasking_init(void)
     task->exit_info0 = 0;
     task->exit_info1 = 0;
     task->program[0] = 0;
+    task->vma_list = NULL;
     task->waitq = NULL;
     task->wait_next = NULL;
     task->next = task;
@@ -161,6 +201,7 @@ static int task_create_internal(void (*entry)(void), const char *program)
     task->exit_info0 = 0;
     task->exit_info1 = 0;
     task_set_program_name(task, program);
+    task->vma_list = NULL;
     task->waitq = NULL;
     task->wait_next = NULL;
 
@@ -237,6 +278,7 @@ static void task_free_user_memory(task_t *task)
     }
 
     pmm_free_page(task->page_directory);
+    vma_list_free(task);
 }
 
 static void task_destroy(task_t *prev, task_t *task)
@@ -400,6 +442,13 @@ void task_set_user_info(uint32_t base, uint32_t pages, uint32_t stack_base)
     task_current->user_base = base;
     task_current->user_pages = pages;
     task_current->user_stack_base = stack_base;
+    vma_list_free(task_current);
+    if (base && pages) {
+        vma_add(task_current, base, base + pages * 4096, VMA_READ | VMA_WRITE | VMA_EXEC);
+    }
+    if (stack_base) {
+        vma_add(task_current, stack_base, stack_base + 4096, VMA_READ | VMA_WRITE);
+    }
 }
 
 void task_get_user_info(uint32_t *base, uint32_t *pages, uint32_t *stack_base)
@@ -407,6 +456,22 @@ void task_get_user_info(uint32_t *base, uint32_t *pages, uint32_t *stack_base)
     if (base) *base = task_current ? task_current->user_base : 0;
     if (pages) *pages = task_current ? task_current->user_pages : 0;
     if (stack_base) *stack_base = task_current ? task_current->user_stack_base : 0;
+}
+
+int task_user_vma_allows(uint32_t addr, int is_write, int is_exec)
+{
+    if (!task_current) return 0;
+    vma_t *v = task_current->vma_list;
+    while (v) {
+        if (addr >= v->start && addr < v->end) {
+            if (is_exec && !(v->flags & VMA_EXEC)) return 0;
+            if (is_write && !(v->flags & VMA_WRITE)) return 0;
+            if (!is_write && !(v->flags & VMA_READ)) return 0;
+            return 1;
+        }
+        v = v->next;
+    }
+    return 0;
 }
 
 void task_exit(void)
