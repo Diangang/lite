@@ -112,3 +112,4 @@ qemu-system-i386 -kernel myos.bin -initrd initrd.img -m 512M
 此外，在 `docs/` 目录下还提供了以下参考资料：
 - [all_issues_summary.md](./docs/all_issues_summary.md)：项目开发过程中的疑难 Bug 及排查过程汇总（包含 InitRD 和串口交互等经典问题）。
 - [os_knowledge_qa.md](./docs/os_knowledge_qa.md)：操作系统底层核心概念（如 IDT、PIC、分页恒等映射等）的 Q&A 问答指南。
+- [roadmap_v4.md](./docs/roadmap_v4.md)：面向 Linux-like 内核的最新演进路线图（v4）。
