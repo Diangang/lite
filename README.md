@@ -44,6 +44,8 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `/proc/sched`：tick 与上下文切换统计（`cat proc/sched`）。
   - `/proc/irq`：IRQ0/IRQ1/IRQ4 与 syscall 计数（`cat proc/irq`）。
   - `/proc/maps`：当前任务的 VMA 列表（`cat proc/maps`）。
+  - `/proc/self/maps`：当前任务 VMA（更 Linux-like 的路径形式）。
+  - `/proc/<pid>/maps`：指定 pid 的 VMA（例如 `cat proc/1/maps`）。
 - **devfs（最小设备节点）**：
   - `/dev/console`：控制台设备（字符设备），用于 stdin/stdout 类 I/O（可通过 `open dev/console` + `read` 读取）。
 - **交互式 Shell**：

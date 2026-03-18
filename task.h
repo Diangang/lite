@@ -34,6 +34,7 @@ void task_user_vma_add(uint32_t start, uint32_t end, uint32_t flags);
 uint32_t task_get_switch_count(void);
 uint32_t task_dump_tasks(char *buf, uint32_t len);
 uint32_t task_dump_maps(char *buf, uint32_t len);
+uint32_t task_dump_maps_pid(uint32_t pid, char *buf, uint32_t len);
 void task_user_heap_init(uint32_t heap_base, uint32_t stack_base);
 uint32_t task_brk(uint32_t new_end);
 int task_fd_alloc(fs_node_t *node);

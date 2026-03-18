@@ -742,6 +742,45 @@ uint32_t task_dump_maps(char *buf, uint32_t len)
     return off;
 }
 
+uint32_t task_dump_maps_pid(uint32_t pid, char *buf, uint32_t len)
+{
+    if (!buf || len == 0) return 0;
+    if (!task_head) return 0;
+
+    uint32_t flags = irq_save();
+    task_t *t = task_head;
+    int found = 0;
+    do {
+        if (t->id == pid) {
+            found = 1;
+            break;
+        }
+        t = t->next;
+    } while (t && t != task_head);
+    if (!found) {
+        irq_restore(flags);
+        return 0;
+    }
+
+    uint32_t off = 0;
+    vma_t *v = t->vma_list;
+    while (v) {
+        buf_append_hex(buf, &off, len, v->start);
+        buf_append(buf, &off, len, "-");
+        buf_append_hex(buf, &off, len, v->end);
+        buf_append(buf, &off, len, " ");
+        buf_append(buf, &off, len, (v->flags & VMA_READ) ? "r" : "-");
+        buf_append(buf, &off, len, (v->flags & VMA_WRITE) ? "w" : "-");
+        buf_append(buf, &off, len, (v->flags & VMA_EXEC) ? "x" : "-");
+        buf_append(buf, &off, len, "\n");
+        if (off >= len) break;
+        v = v->next;
+    }
+    if (off < len) buf[off] = 0;
+    irq_restore(flags);
+    return off;
+}
+
 int task_fd_alloc(fs_node_t *node)
 {
     if (!task_current || !node) return -1;
