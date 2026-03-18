@@ -68,6 +68,9 @@ $(CAT_ELF): $(CAT_OBJ) userprog.ld
 run: $(KERNEL) initrd.img
 	qemu-system-i386 -kernel $(KERNEL) -initrd initrd.img -m 512M
 
+smoke:
+	bash ./smoke_test.sh
+
 clean:
 	rm -f $(OBJECTS) $(KERNEL) $(ISO) mkinitrd initrd.img $(USER_OBJ) $(USER_ELF) $(CAT_OBJ) $(CAT_ELF)
 	rm -rf isodir

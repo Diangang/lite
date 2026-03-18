@@ -25,6 +25,8 @@ typedef struct task {
     uint32_t exit_info0;
     uint32_t exit_info1;
     char program[32];
+    int waiting;
+    struct task *wait_next;
     struct task *next;
 } task_t;
 
@@ -32,11 +34,13 @@ static task_t *task_head = NULL;
 static task_t *task_current = NULL;
 static uint32_t next_task_id = 1;
 static int demo_enabled = 0;
+static task_t *wait_event_waiters = NULL;
 
 enum {
     TASK_RUNNABLE = 0,
     TASK_SLEEPING = 1,
-    TASK_ZOMBIE = 2
+    TASK_BLOCKED = 2,
+    TASK_ZOMBIE = 3
 };
 
 static void task_idle(void)
@@ -91,6 +95,8 @@ void tasking_init(void)
     task->exit_info0 = 0;
     task->exit_info1 = 0;
     task->program[0] = 0;
+    task->waiting = 0;
+    task->wait_next = NULL;
     task->next = task;
 
     task_head = task;
@@ -136,6 +142,8 @@ static int task_create_internal(void (*entry)(void), const char *program)
     task->exit_info0 = 0;
     task->exit_info1 = 0;
     task_set_program_name(task, program);
+    task->waiting = 0;
+    task->wait_next = NULL;
 
     task->next = task_head->next;
     task_head->next = task;
@@ -226,6 +234,31 @@ static void task_destroy(task_t *prev, task_t *task)
     task_free_user_memory(task);
     kfree(task->stack);
     kfree(task);
+}
+
+static void wait_event_add_current(void)
+{
+    if (!task_current) return;
+    if (task_current->waiting) return;
+    task_current->waiting = 1;
+    task_current->wait_next = wait_event_waiters;
+    wait_event_waiters = task_current;
+    task_current->state = TASK_BLOCKED;
+}
+
+static void wait_event_wake_all(void)
+{
+    task_t *t = wait_event_waiters;
+    wait_event_waiters = NULL;
+    while (t) {
+        task_t *next = t->wait_next;
+        t->wait_next = NULL;
+        t->waiting = 0;
+        if (t->state == TASK_BLOCKED) {
+            t->state = TASK_RUNNABLE;
+        }
+        t = next;
+    }
 }
 
 registers_t *task_schedule(registers_t *regs)
@@ -328,6 +361,7 @@ void task_exit_with_reason(int code, int reason, uint32_t info0, uint32_t info1)
         shell_on_user_exit();
     }
     task_current->state = TASK_ZOMBIE;
+    wait_event_wake_all();
     task_yield();
 }
 
@@ -358,6 +392,7 @@ int task_wait(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0, 
         if (!t || t == task_head) {
             return -1;
         }
+        wait_event_add_current();
         task_yield();
     }
 }
@@ -388,6 +423,8 @@ void task_list(void)
         const char *state = "RUNNABLE";
         if (task->state == TASK_SLEEPING) {
             state = "SLEEPING";
+        } else if (task->state == TASK_BLOCKED) {
+            state = "BLOCKED";
         } else if (task->state == TASK_ZOMBIE) {
             state = "ZOMBIE";
         }
