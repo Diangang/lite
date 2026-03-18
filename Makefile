@@ -8,7 +8,7 @@ CFLAGS = -m32 -ffreestanding -O2 -Wall -Wextra -fno-pie -fno-builtin
 LDFLAGS = -m elf_i386 -T linker.ld -nostdlib
 
 SOURCES_S = boot.s gdt_flush.s idt_flush.s interrupt.s tss_flush.s
-SOURCES_C = kernel.c gdt.c idt.c isr.c keyboard.c shell.c libc.c timer.c pmm.c vmm.c kheap.c fs.c file.c vfs.c initrd.c task.c syscall.c tss.c procfs.c devfs.c sysfs.c rootfs.c
+SOURCES_C = kernel.c gdt.c idt.c isr.c keyboard.c shell.c libc.c timer.c pmm.c vmm.c kheap.c fs.c file.c vfs.c initrd.c task.c syscall.c tss.c procfs.c devfs.c sysfs.c
 OBJECTS = $(SOURCES_S:.s=.o) $(SOURCES_C:.c=.o)
 
 KERNEL = myos.bin

@@ -7,6 +7,7 @@ static uint32_t vfs_mount_count = 0;
 static fs_node_t vfs_root_node;
 static fs_node_t *vfs_base_root = NULL;
 static struct dirent vfs_root_dirent;
+static char vfs_cwd[128];
 
 void vfs_init(void)
 {
@@ -19,6 +20,7 @@ void vfs_init(void)
     vfs_root_node.readdir = NULL;
     vfs_root_node.finddir = NULL;
     vfs_base_root = NULL;
+    strcpy(vfs_cwd, "/");
 }
 
 static int vfs_path_is_prefix(const char *path, const char *prefix, uint32_t *out_tail_off)
@@ -45,15 +47,115 @@ static int vfs_path_is_prefix(const char *path, const char *prefix, uint32_t *ou
     return 0;
 }
 
-static int vfs_path_is_prefix_rel(const char *path, const char *mount_path, uint32_t *out_tail_off)
+static int vfs_append_component(char *out, uint32_t *len, uint32_t cap, const char *start, uint32_t n)
 {
-    if (!path || !mount_path) return 0;
-    if (mount_path[0] != '/') return 0;
-    if (mount_path[1] == 0) {
-        if (out_tail_off) *out_tail_off = 0;
-        return 1;
+    if (!out || !len || !start) return 0;
+    if (n == 0) return 1;
+    if (*len == 0) {
+        if (cap < 2) return 0;
+        out[0] = '/';
+        out[1] = 0;
+        *len = 1;
     }
-    return vfs_path_is_prefix(path, mount_path + 1, out_tail_off);
+    if (*len + 1 >= cap) return 0;
+    if (out[*len - 1] != '/') {
+        out[*len] = '/';
+        (*len)++;
+        out[*len] = 0;
+    }
+    if (*len + n >= cap) return 0;
+    memcpy(out + *len, start, n);
+    *len += n;
+    out[*len] = 0;
+    return 1;
+}
+
+static void vfs_pop_component(char *out, uint32_t *len)
+{
+    if (!out || !len) return;
+    if (*len <= 1) {
+        out[0] = '/';
+        out[1] = 0;
+        *len = 1;
+        return;
+    }
+    while (*len > 1 && out[*len - 1] == '/') {
+        out[*len - 1] = 0;
+        (*len)--;
+    }
+    while (*len > 1 && out[*len - 1] != '/') {
+        out[*len - 1] = 0;
+        (*len)--;
+    }
+    while (*len > 1 && out[*len - 1] == '/') {
+        out[*len - 1] = 0;
+        (*len)--;
+    }
+    if (*len == 0) {
+        out[0] = '/';
+        out[1] = 0;
+        *len = 1;
+    }
+}
+
+static int vfs_normalize_path(const char *path, char *out, uint32_t cap)
+{
+    if (!path || !out || cap < 2) return 0;
+    out[0] = '/';
+    out[1] = 0;
+    uint32_t out_len = 1;
+
+    const char *p = path;
+    while (*p == '/') p++;
+
+    while (*p) {
+        const char *seg = p;
+        while (*p && *p != '/') p++;
+        uint32_t n = (uint32_t)(p - seg);
+        while (*p == '/') p++;
+
+        if (n == 0) continue;
+        if (n == 1 && seg[0] == '.') continue;
+        if (n == 2 && seg[0] == '.' && seg[1] == '.') {
+            vfs_pop_component(out, &out_len);
+            continue;
+        }
+        if (!vfs_append_component(out, &out_len, cap, seg, n)) return 0;
+    }
+
+    if (out_len == 0) {
+        out[0] = '/';
+        out[1] = 0;
+    }
+    return 1;
+}
+
+static int vfs_build_abs(const char *path, char *abs, uint32_t cap)
+{
+    if (!path || !abs || cap < 2) return 0;
+    if (path[0] == '/') return vfs_normalize_path(path, abs, cap);
+
+    char tmp[256];
+    uint32_t off = 0;
+    uint32_t cwd_len = (uint32_t)strlen(vfs_cwd);
+    if (cwd_len == 0) strcpy(vfs_cwd, "/");
+    if (cwd_len >= sizeof(tmp) - 1) return 0;
+    memcpy(tmp, vfs_cwd, cwd_len);
+    off = cwd_len;
+    if (off == 0) {
+        tmp[off++] = '/';
+    } else if (tmp[off - 1] != '/') {
+        if (off + 1 >= sizeof(tmp)) return 0;
+        tmp[off++] = '/';
+    }
+    tmp[off] = 0;
+
+    uint32_t path_len = (uint32_t)strlen(path);
+    if (off + path_len >= sizeof(tmp)) return 0;
+    memcpy(tmp + off, path, path_len);
+    off += path_len;
+    tmp[off] = 0;
+    return vfs_normalize_path(tmp, abs, cap);
 }
 
 static int vfs_is_root_child_mount(const char *mount_path)
@@ -65,6 +167,26 @@ static int vfs_is_root_child_mount(const char *mount_path)
         if (*p == '/') return 0;
     }
     return 1;
+}
+
+const char *vfs_getcwd(void)
+{
+    return vfs_cwd;
+}
+
+int vfs_chdir(const char *path)
+{
+    if (!path || !*path) return -1;
+    char abs[256];
+    if (!vfs_build_abs(path, abs, sizeof(abs))) return -1;
+    fs_node_t *node = vfs_resolve(abs);
+    if (!node) return -1;
+    if ((node->flags & 0x7) != FS_DIRECTORY) return -1;
+    uint32_t n = (uint32_t)strlen(abs);
+    if (n >= sizeof(vfs_cwd)) n = sizeof(vfs_cwd) - 1;
+    memcpy(vfs_cwd, abs, n);
+    vfs_cwd[n] = 0;
+    return 0;
 }
 
 static struct dirent *vfs_root_readdir(fs_node_t *node, uint32_t index)
@@ -154,33 +276,12 @@ static vfs_mount_t *vfs_find_mount(const char *path, uint32_t *out_tail_off)
 fs_node_t *vfs_resolve(const char *path)
 {
     if (!path || !*path) return NULL;
-    if (path[0] != '/') {
-        vfs_mount_t *best = NULL;
-        uint32_t best_len = 0;
-        uint32_t tail = 0;
-
-        for (uint32_t i = 0; i < vfs_mount_count; i++) {
-            vfs_mount_t *m = &vfs_mounts[i];
-            if (!m->path || !m->sb || !m->sb->root) continue;
-            uint32_t off = 0;
-            if (!vfs_path_is_prefix_rel(path, m->path, &off)) continue;
-            uint32_t len = (uint32_t)strlen(m->path);
-            if (len >= best_len) {
-                best = m;
-                best_len = len;
-                tail = off;
-            }
-        }
-
-        if (!best) return NULL;
-        const char *sub = path + tail;
-        if (*sub == 0) return best->sb->root;
-        return finddir_fs(best->sb->root, (char*)sub);
-    }
+    char abs[256];
+    if (!vfs_build_abs(path, abs, sizeof(abs))) return NULL;
     uint32_t tail = 0;
-    vfs_mount_t *m = vfs_find_mount(path, &tail);
+    vfs_mount_t *m = vfs_find_mount(abs, &tail);
     if (!m || !m->sb || !m->sb->root) return NULL;
-    const char *sub = path + tail;
+    const char *sub = abs + tail;
     if (*sub == 0) return m->sb->root;
     return finddir_fs(m->sb->root, (char*)sub);
 }

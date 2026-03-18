@@ -56,6 +56,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - 已引入最小 VFS 层（mount 表 + super_block/inode/dentry/file 结构雏形），并用 mount 表驱动 `/` 下的挂载点展示与路径解析。
 - **交互式 Shell**：
   - 内置极简内核态 Shell，支持 `help`, `clear`, `info`, `echo`, `uptime`, `meminfo`, `alloc`, `vmmtest`, `heaptest`, `ls`, `cat`, `demo`, `yield`, `sleep`, `ps`, `syscall`, `run`, `user` 等命令（demo 默认关闭）。
+  - 支持 `cd`/`pwd` 与相对路径；`ls` 默认列出当前目录。
   - **双模式输入输出**：同时支持 VGA 显示器+键盘 和 **串口 (COM1)** 终端交互。
   - `user` 进入用户态后切换输入前台为 `user>`，用户任务退出后自动恢复 `lite-os>`。
   - `run <file>` 从 InitRD 启动指定用户程序，并在退出后打印退出信息。

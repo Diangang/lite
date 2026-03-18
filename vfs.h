@@ -34,6 +34,8 @@ typedef struct vfs_mount {
 
 void vfs_init(void);
 int vfs_mount_root(const char *path, fs_node_t *root_node);
+int vfs_chdir(const char *path);
+const char *vfs_getcwd(void);
 fs_node_t *vfs_resolve(const char *path);
 vfs_file_t *vfs_open(const char *path, uint32_t flags);
 vfs_file_t *vfs_open_node(fs_node_t *node, uint32_t flags);

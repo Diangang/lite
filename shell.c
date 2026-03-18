@@ -106,6 +106,20 @@ static void shell_execute(void)
     else if (strcmp(cmd_buffer, "meminfo") == 0) {
         pmm_print_memory_map();
     }
+    else if (strcmp(cmd_buffer, "pwd") == 0) {
+        printf("%s\n", vfs_getcwd());
+    }
+    else if (strcmp(cmd_buffer, "cd") == 0 || strncmp(cmd_buffer, "cd ", 3) == 0) {
+        const char *path = "/";
+        if (strncmp(cmd_buffer, "cd ", 3) == 0) {
+            path = cmd_buffer + 3;
+            while (*path == ' ') path++;
+            if (*path == 0) path = "/";
+        }
+        if (vfs_chdir(path) != 0) {
+            printf("cd: %s\n", path);
+        }
+    }
     else if (strcmp(cmd_buffer, "alloc") == 0) {
         terminal_writestring("Allocating 3 pages...\n");
         void* p1 = pmm_alloc_page();
@@ -232,7 +246,7 @@ static void shell_execute(void)
         if (!fs_root) {
             terminal_writestring("No file system mounted!\n");
         } else {
-            fs_node_t *dir = vfs_resolve("/");
+            fs_node_t *dir = vfs_resolve(".");
             if (strncmp(cmd_buffer, "ls ", 3) == 0) {
                 char *path = cmd_buffer + 3;
                 if (path[0]) {
