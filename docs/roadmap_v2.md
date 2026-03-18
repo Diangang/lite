@@ -82,7 +82,7 @@
 目标：
 - 核心 I/O syscall 收敛为 `open/read/write/close`（fdtable + file offset + ops）。
 - fd=0/1/2 通过 task 创建时预置打开的 `/dev/console` 提供，而不是在 syscall 层永久特判。
-- 逐步淘汰过渡接口（例如 `SYS_FREAD`、无 fd 的 `SYS_READ/SYS_WRITE` 或 `SYS_READFD/SYS_WRITEFD` 的并行形态），避免 ABI 分叉。
+  - 逐步淘汰过渡接口（例如 `SYS_FREAD`、`SYS_READFD/SYS_WRITEFD` 等并行形态），避免 ABI 分叉。
 
 状态：
 - 已落地（用户态与内核态测试路径已切换到 fd 风格 `SYS_READ/SYS_WRITE`，移除并行 I/O syscall）。

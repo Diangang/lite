@@ -7,6 +7,7 @@
 #include "pmm.h"
 #include "kheap.h"
 #include "fs.h"
+#include "file.h"
 
 #define CMD_BUF_SIZE 256
 #define INPUT_BUF_SIZE 256
@@ -261,17 +262,28 @@ static void shell_execute(void)
             terminal_writestring("No file system mounted!\n");
         } else {
             char* filename = cmd_buffer + 4;
-            fs_node_t *fsnode = finddir_fs(fs_root, filename);
-            if (fsnode) {
-                uint8_t *buf = (uint8_t*)kmalloc(fsnode->length + 1);
-                uint32_t sz = read_fs(fsnode, 0, fsnode->length, buf);
-                buf[sz] = 0;
-                terminal_writestring((char*)buf);
-                terminal_writestring("\n");
-                kfree(buf);
-            } else {
+            file_t *f = file_open_path(filename, 0);
+            if (!f) {
                 printf("File not found: %s\n", filename);
+                cmd_index = 0;
+                return;
             }
+            if ((f->node->flags & 0x7) == FS_DIRECTORY) {
+                printf("Not a file: %s\n", filename);
+                file_close(f);
+                cmd_index = 0;
+                return;
+            }
+            uint8_t buf[256];
+            while (1) {
+                uint32_t n = file_read(f, buf, sizeof(buf));
+                if (n == 0) break;
+                for (uint32_t i = 0; i < n; i++) {
+                    terminal_putchar((char)buf[i]);
+                }
+            }
+            terminal_writestring("\n");
+            file_close(f);
         }
     }
     else if (strncmp(cmd_buffer, "echo ", 5) == 0) {

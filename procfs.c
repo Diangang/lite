@@ -4,6 +4,7 @@
 #include "timer.h"
 #include "isr.h"
 #include "kheap.h"
+#include "pmm.h"
 
 static struct dirent proc_dirent;
 static fs_node_t proc_root;
@@ -11,12 +12,14 @@ static fs_node_t proc_tasks;
 static fs_node_t proc_sched;
 static fs_node_t proc_irq;
 static fs_node_t proc_maps;
+static fs_node_t proc_meminfo;
 
 typedef struct {
     int used;
     uint32_t pid;
     fs_node_t dir;
     fs_node_t maps;
+    fs_node_t stat;
     struct dirent dirent;
 } proc_pid_entry_t;
 
@@ -107,6 +110,40 @@ static uint32_t proc_read_maps(fs_node_t *node, uint32_t offset, uint32_t size, 
     return size;
 }
 
+static uint32_t proc_read_meminfo(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+{
+    (void)node;
+    static char tmp[256];
+    uint32_t off = 0;
+    uint32_t total_kb = pmm_get_total_kb();
+    uint32_t free_kb = pmm_get_free_kb();
+    buf_append(tmp, &off, sizeof(tmp), "MemTotal: ");
+    buf_append_u32(tmp, &off, sizeof(tmp), total_kb);
+    buf_append(tmp, &off, sizeof(tmp), " kB\nMemFree: ");
+    buf_append_u32(tmp, &off, sizeof(tmp), free_kb);
+    buf_append(tmp, &off, sizeof(tmp), " kB\n");
+    if (off < sizeof(tmp)) tmp[off] = 0;
+    if (offset >= off) return 0;
+    uint32_t remain = off - offset;
+    if (size > remain) size = remain;
+    memcpy(buffer, tmp + offset, size);
+    return size;
+}
+
+static uint32_t proc_read_pid_stat(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+{
+    if (!node) return 0;
+    static char tmp[256];
+    uint32_t pid = node->impl;
+    if (pid == 0xFFFFFFFF) pid = task_get_current_id();
+    uint32_t n = task_dump_stat_pid(pid, tmp, sizeof(tmp));
+    if (offset >= n) return 0;
+    uint32_t remain = n - offset;
+    if (size > remain) size = remain;
+    memcpy(buffer, tmp + offset, size);
+    return size;
+}
+
 static uint32_t proc_read_pid_maps(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!node) return 0;
@@ -133,6 +170,11 @@ static struct dirent *proc_pid_readdir(fs_node_t *node, uint32_t index)
         e->dirent.ino = e->maps.inode;
         return &e->dirent;
     }
+    if (index == 1) {
+        strcpy(e->dirent.name, "stat");
+        e->dirent.ino = e->stat.inode;
+        return &e->dirent;
+    }
     return NULL;
 }
 
@@ -144,6 +186,7 @@ static fs_node_t *proc_pid_finddir(fs_node_t *node, char *name)
     proc_pid_entry_t *e = &proc_pids[slot];
     if (!e->used) return NULL;
     if (!strcmp(name, "maps")) return &e->maps;
+    if (!strcmp(name, "stat")) return &e->stat;
     return NULL;
 }
 
@@ -195,6 +238,14 @@ static fs_node_t *proc_get_pid_dir(uint32_t pid)
             e->maps.read = &proc_read_pid_maps;
             e->maps.impl = pid;
 
+            memset(&e->stat, 0, sizeof(e->stat));
+            strcpy(e->stat.name, "stat");
+            e->stat.flags = FS_FILE;
+            e->stat.inode = 0x3000 + i;
+            e->stat.length = 256;
+            e->stat.read = &proc_read_pid_stat;
+            e->stat.impl = pid;
+
             return &e->dir;
         }
     }
@@ -225,6 +276,11 @@ static struct dirent *proc_readdir(fs_node_t *node, uint32_t index)
         return &proc_dirent;
     }
     if (index == 4) {
+        strcpy(proc_dirent.name, "meminfo");
+        proc_dirent.ino = proc_meminfo.inode;
+        return &proc_dirent;
+    }
+    if (index == 5) {
         strcpy(proc_dirent.name, "self");
         proc_dirent.ino = 0x1000;
         return &proc_dirent;
@@ -240,6 +296,7 @@ static fs_node_t *proc_finddir(fs_node_t *node, char *name)
     if (!strcmp(name, "sched")) return &proc_sched;
     if (!strcmp(name, "irq")) return &proc_irq;
     if (!strcmp(name, "maps")) return &proc_maps;
+    if (!strcmp(name, "meminfo")) return &proc_meminfo;
     if (!strcmp(name, "self")) return proc_get_pid_dir(0xFFFFFFFF);
     uint32_t pid = 0;
     if (parse_u32(name, &pid) == 0) {
@@ -286,6 +343,13 @@ fs_node_t *procfs_init(void)
     proc_maps.inode = 4;
     proc_maps.length = 2048;
     proc_maps.read = &proc_read_maps;
+
+    memset(&proc_meminfo, 0, sizeof(proc_meminfo));
+    strcpy(proc_meminfo.name, "meminfo");
+    proc_meminfo.flags = FS_FILE;
+    proc_meminfo.inode = 5;
+    proc_meminfo.length = 256;
+    proc_meminfo.read = &proc_read_meminfo;
 
     return &proc_root;
 }

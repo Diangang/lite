@@ -1,0 +1,19 @@
+#ifndef FILE_H
+#define FILE_H
+
+#include <stdint.h>
+#include "fs.h"
+
+typedef struct file {
+    fs_node_t *node;
+    uint32_t pos;
+    uint32_t flags;
+} file_t;
+
+file_t *file_open_node(fs_node_t *node, uint32_t flags);
+file_t *file_open_path(const char *path, uint32_t flags);
+uint32_t file_read(file_t *f, uint8_t *buf, uint32_t len);
+uint32_t file_write(file_t *f, const uint8_t *buf, uint32_t len);
+void file_close(file_t *f);
+
+#endif

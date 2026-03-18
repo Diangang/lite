@@ -46,8 +46,12 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `/proc/maps`：当前任务的 VMA 列表（`cat proc/maps`）。
   - `/proc/self/maps`：当前任务 VMA（更 Linux-like 的路径形式）。
   - `/proc/<pid>/maps`：指定 pid 的 VMA（例如 `cat proc/1/maps`）。
+  - `/proc/meminfo`：物理内存总量与空闲量（`cat proc/meminfo`）。
+  - `/proc/<pid>/stat`：任务基础状态（`cat proc/1/stat`）。
 - **devfs（最小设备节点）**：
   - `/dev/console`：控制台设备（字符设备），用于 stdin/stdout 类 I/O（可通过 `open dev/console` + `read` 读取）。
+- **sysfs（最小自描述接口）**：
+  - `/sys/kernel/version`、`/sys/kernel/uptime`、`/sys/devices/*`。
 - **交互式 Shell**：
   - 内置极简内核态 Shell，支持 `help`, `clear`, `info`, `echo`, `uptime`, `meminfo`, `alloc`, `vmmtest`, `heaptest`, `ls`, `cat`, `demo`, `yield`, `sleep`, `ps`, `syscall`, `run`, `user` 等命令（demo 默认关闭）。
   - **双模式输入输出**：同时支持 VGA 显示器+键盘 和 **串口 (COM1)** 终端交互。
@@ -58,7 +62,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
 - **系统调用 (int 0x80)**：
   - 用户态 syscall 会进行用户指针校验，避免非法地址导致内核崩溃。
   - `SYS_WRITE/SYS_READ` 在内核侧通过 `copyin/copyout` 分段拷贝访问用户缓冲区。
-  - `SYS_READ/SYS_WRITE` 提供最小 `read(fd,...)` / `write(fd,...)` 风格接口（fd=0/1/2 为控制台），fdtable 为 per-task。
+  - `SYS_READ/SYS_WRITE` 提供最小 `read(fd,...)` / `write(fd,...)` 风格接口（fd=0/1/2 绑定 `/dev/console`），fdtable 为 per-task，fd 持有 file 对象与 offset。
   - `SYS_OPEN/SYS_CLOSE` 提供最小路径打开与关闭能力（当前用于 InitRD/procfs/devfs）。
   - `SYS_BRK` 提供最小用户堆扩展接口（基于堆 VMA 与按需缺页分配）。
   - syscall 入口使用 trap gate，不会隐式关闭中断，内核态具备可抢占的基础语义。

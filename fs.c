@@ -43,6 +43,9 @@ fs_node_t *finddir_fs(fs_node_t *node, char *name)
     if (!node || !name) return NULL;
     if ((node->flags & 0x7) != FS_DIRECTORY || node->finddir == NULL) return NULL;
 
+    while (*name == '/') name++;
+    if (*name == 0) return node;
+
     char *slash = NULL;
     for (char *p = name; *p; p++) {
         if (*p == '/') {

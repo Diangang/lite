@@ -9,6 +9,8 @@
 
 void pmm_init(multiboot_info_t* mbi);
 void pmm_print_memory_map(void);
+uint32_t pmm_get_total_kb(void);
+uint32_t pmm_get_free_kb(void);
 
 /* Allocation API */
 void* pmm_alloc_page(void);

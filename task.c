@@ -10,13 +10,6 @@
 #include "tss.h"
 #include "devfs.h"
 
-typedef struct vma {
-    uint32_t start;
-    uint32_t end;
-    uint32_t flags;
-    struct vma *next;
-} vma_t;
-
 typedef struct task {
     uint32_t id;
     uint32_t parent_id;
@@ -25,19 +18,13 @@ typedef struct task {
     uint32_t wake_tick;
     int state;
     int timeslice;
-    uint32_t* page_directory;
-    uint32_t user_base;
-    uint32_t user_pages;
-    uint32_t user_stack_base;
-    uint32_t heap_base;
-    uint32_t heap_brk;
+    mm_t *mm;
     int exit_code;
     int exit_reason;
     uint32_t exit_info0;
     uint32_t exit_info1;
     char program[32];
     task_fd_t fds[TASK_FD_MAX];
-    vma_t *vma_list;
     void *waitq;
     struct task *wait_next;
     struct task *next;
@@ -104,16 +91,16 @@ static void task_idle(void)
     }
 }
 
-static void vma_list_free(task_t *task)
+static void vma_list_free(mm_t *mm)
 {
-    if (!task) return;
-    vma_t *v = task->vma_list;
+    if (!mm) return;
+    vma_t *v = mm->vma_list;
     while (v) {
         vma_t *next = v->next;
         kfree(v);
         v = next;
     }
-    task->vma_list = NULL;
+    mm->vma_list = NULL;
 }
 
 static void task_fdtable_init(task_t *task)
@@ -121,9 +108,31 @@ static void task_fdtable_init(task_t *task)
     if (!task) return;
     for (int i = 0; i < TASK_FD_MAX; i++) {
         task->fds[i].used = 0;
-        task->fds[i].node = NULL;
-        task->fds[i].offset = 0;
+        task->fds[i].file = NULL;
     }
+}
+
+static void task_fdtable_close_all(task_t *task)
+{
+    if (!task) return;
+    for (int i = 0; i < TASK_FD_MAX; i++) {
+        if (task->fds[i].used) {
+            if (task->fds[i].file) {
+                file_close(task->fds[i].file);
+            }
+            task->fds[i].used = 0;
+            task->fds[i].file = NULL;
+        }
+    }
+}
+
+static mm_t *mm_create(void)
+{
+    mm_t *mm = (mm_t*)kmalloc(sizeof(mm_t));
+    if (!mm) return NULL;
+    memset(mm, 0, sizeof(*mm));
+    mm->page_directory = vmm_get_current_directory();
+    return mm;
 }
 
 static int task_free_user_page_mapped(uint32_t *dir, uint32_t va_page)
@@ -144,26 +153,26 @@ static int task_free_user_page_mapped(uint32_t *dir, uint32_t va_page)
     return 1;
 }
 
-static void vma_add(task_t *task, uint32_t start, uint32_t end, uint32_t flags)
+static void vma_add(mm_t *mm, uint32_t start, uint32_t end, uint32_t flags)
 {
-    if (!task) return;
+    if (!mm) return;
     if (start >= end) return;
     vma_t *v = (vma_t*)kmalloc(sizeof(vma_t));
     if (!v) return;
     v->start = start;
     v->end = end;
     v->flags = flags;
-    v->next = task->vma_list;
-    task->vma_list = v;
+    v->next = mm->vma_list;
+    mm->vma_list = v;
 }
 
-static vma_t *vma_find_heap(task_t *task)
+static vma_t *vma_find_heap(mm_t *mm)
 {
-    if (!task) return NULL;
-    if (!task->heap_base) return NULL;
-    vma_t *v = task->vma_list;
+    if (!mm) return NULL;
+    if (!mm->heap_base) return NULL;
+    vma_t *v = mm->vma_list;
     while (v) {
-        if (v->start == task->heap_base && (v->flags & (VMA_READ | VMA_WRITE)) == (VMA_READ | VMA_WRITE)) {
+        if (v->start == mm->heap_base && (v->flags & (VMA_READ | VMA_WRITE)) == (VMA_READ | VMA_WRITE)) {
             return v;
         }
         v = v->next;
@@ -179,13 +188,15 @@ static uint32_t align_up(uint32_t value)
 void task_user_vmas_reset(void)
 {
     if (!task_current) return;
-    vma_list_free(task_current);
+    if (!task_current->mm) return;
+    vma_list_free(task_current->mm);
 }
 
 void task_user_vma_add(uint32_t start, uint32_t end, uint32_t flags)
 {
     if (!task_current) return;
-    vma_add(task_current, start, end, flags);
+    if (!task_current->mm) return;
+    vma_add(task_current->mm, start, end, flags);
 }
 
 static registers_t *task_build_regs(uint32_t *stack, void (*entry)(void))
@@ -225,18 +236,16 @@ void tasking_init(void)
     task->wake_tick = 0;
     task->state = TASK_RUNNABLE;
     task->timeslice = TASK_TIMESLICE_TICKS;
-    task->page_directory = vmm_get_current_directory();
-    task->user_base = 0;
-    task->user_pages = 0;
-    task->user_stack_base = 0;
-    task->heap_base = 0;
-    task->heap_brk = 0;
+    task->mm = mm_create();
+    if (!task->mm) {
+        printf("TASK: Failed to allocate mm.\n");
+        for(;;);
+    }
     task->exit_code = 0;
     task->exit_reason = 0;
     task->exit_info0 = 0;
     task->exit_info1 = 0;
     task->program[0] = 0;
-    task->vma_list = NULL;
     task_fdtable_init(task);
     task->waitq = NULL;
     task->wait_next = NULL;
@@ -278,18 +287,17 @@ static int task_create_internal(void (*entry)(void), const char *program)
     task->wake_tick = 0;
     task->state = TASK_RUNNABLE;
     task->timeslice = TASK_TIMESLICE_TICKS;
-    task->page_directory = vmm_get_current_directory();
-    task->user_base = 0;
-    task->user_pages = 0;
-    task->user_stack_base = 0;
-    task->heap_base = 0;
-    task->heap_brk = 0;
+    task->mm = mm_create();
+    if (!task->mm) {
+        kfree(task->stack);
+        kfree(task);
+        return -1;
+    }
     task->exit_code = 0;
     task->exit_reason = 0;
     task->exit_info0 = 0;
     task->exit_info1 = 0;
     task_set_program_name(task, program);
-    task->vma_list = NULL;
     task_fdtable_init(task);
     if (program) {
         task_t *prev = task_current;
@@ -322,15 +330,20 @@ int task_create_user(const char *program)
 static void task_free_user_memory(task_t *task)
 {
     if (!task) return;
-    if (!task->page_directory || task->page_directory == vmm_get_kernel_directory()) return;
+    if (!task->mm) return;
+    if (!task->mm->page_directory || task->mm->page_directory == vmm_get_kernel_directory()) {
+        kfree(task->mm);
+        task->mm = NULL;
+        return;
+    }
 
-    vma_t *v = task->vma_list;
+    vma_t *v = task->mm->vma_list;
     while (v) {
         uint32_t start = v->start & ~0xFFF;
         uint32_t end = (v->end + 0xFFF) & ~0xFFF;
         if (end > start) {
             for (uint32_t va = start; va < end; va += 4096) {
-                task_free_user_page_mapped(task->page_directory, va);
+                task_free_user_page_mapped(task->mm->page_directory, va);
             }
         }
         v = v->next;
@@ -338,7 +351,7 @@ static void task_free_user_memory(task_t *task)
 
     uint32_t *kernel_dir = vmm_get_kernel_directory();
     for (uint32_t i = 0; i < 1024; i++) {
-        uint32_t pde = task->page_directory[i];
+        uint32_t pde = task->mm->page_directory[i];
         if (!(pde & PTE_PRESENT)) continue;
 
         uint32_t pde_phys = pde & ~0xFFF;
@@ -352,8 +365,10 @@ static void task_free_user_memory(task_t *task)
         pmm_free_page((void*)pde_phys);
     }
 
-    pmm_free_page(task->page_directory);
-    vma_list_free(task);
+    pmm_free_page(task->mm->page_directory);
+    vma_list_free(task->mm);
+    kfree(task->mm);
+    task->mm = NULL;
 }
 
 static void task_destroy(task_t *prev, task_t *task)
@@ -370,6 +385,7 @@ static void task_destroy(task_t *prev, task_t *task)
     prev->next = next;
     irq_restore(flags);
 
+    task_fdtable_close_all(task);
     task_free_user_memory(task);
     kfree(task->stack);
     kfree(task);
@@ -467,8 +483,9 @@ registers_t *task_schedule(registers_t *regs)
                 sched_switch_count++;
             }
             task_current = candidate;
-            if (task_current->page_directory != vmm_get_current_directory()) {
-                vmm_switch_directory(task_current->page_directory);
+            if (task_current->mm && task_current->mm->page_directory &&
+                task_current->mm->page_directory != vmm_get_current_directory()) {
+                vmm_switch_directory(task_current->mm->page_directory);
             }
             tss_set_kernel_stack((uint32_t)task_current->stack + 4096);
             task_current->timeslice = TASK_TIMESLICE_TICKS;
@@ -510,36 +527,50 @@ int task_get_demo_enabled(void)
 void task_set_current_page_directory(uint32_t* dir)
 {
     if (!task_current || !dir) return;
-    task_current->page_directory = dir;
+    if (!task_current->mm) {
+        task_current->mm = mm_create();
+        if (!task_current->mm) return;
+    }
+    task_current->mm->page_directory = dir;
 }
 
 void task_set_user_info(uint32_t base, uint32_t pages, uint32_t stack_base)
 {
     if (!task_current) return;
-    task_current->user_base = base;
-    task_current->user_pages = pages;
-    task_current->user_stack_base = stack_base;
-    if (!task_current->vma_list) {
+    if (!task_current->mm) {
+        task_current->mm = mm_create();
+        if (!task_current->mm) return;
+    }
+    task_current->mm->user_base = base;
+    task_current->mm->user_pages = pages;
+    task_current->mm->user_stack_base = stack_base;
+    if (!task_current->mm->vma_list) {
         if (base && pages) {
-            vma_add(task_current, base, base + pages * 4096, VMA_READ | VMA_WRITE | VMA_EXEC);
+            vma_add(task_current->mm, base, base + pages * 4096, VMA_READ | VMA_WRITE | VMA_EXEC);
         }
         if (stack_base) {
-            vma_add(task_current, stack_base, stack_base + 4096, VMA_READ | VMA_WRITE);
+            vma_add(task_current->mm, stack_base, stack_base + 4096, VMA_READ | VMA_WRITE);
         }
     }
 }
 
 void task_get_user_info(uint32_t *base, uint32_t *pages, uint32_t *stack_base)
 {
-    if (base) *base = task_current ? task_current->user_base : 0;
-    if (pages) *pages = task_current ? task_current->user_pages : 0;
-    if (stack_base) *stack_base = task_current ? task_current->user_stack_base : 0;
+    if (!task_current || !task_current->mm) {
+        if (base) *base = 0;
+        if (pages) *pages = 0;
+        if (stack_base) *stack_base = 0;
+        return;
+    }
+    if (base) *base = task_current->mm->user_base;
+    if (pages) *pages = task_current->mm->user_pages;
+    if (stack_base) *stack_base = task_current->mm->user_stack_base;
 }
 
 int task_user_vma_allows(uint32_t addr, int is_write, int is_exec)
 {
-    if (!task_current) return 0;
-    vma_t *v = task_current->vma_list;
+    if (!task_current || !task_current->mm) return 0;
+    vma_t *v = task_current->mm->vma_list;
     while (v) {
         if (addr >= v->start && addr < v->end) {
             if (is_exec && !(v->flags & VMA_EXEC)) return 0;
@@ -573,7 +604,7 @@ void task_exit_with_reason(int code, int reason, uint32_t info0, uint32_t info1)
     task_current->exit_reason = reason;
     task_current->exit_info0 = info0;
     task_current->exit_info1 = info1;
-    if (task_current->user_pages || task_current->user_stack_base) {
+    if (task_current->mm && (task_current->mm->user_pages || task_current->mm->user_stack_base)) {
         shell_on_user_exit();
     }
     task_current->state = TASK_ZOMBIE;
@@ -627,47 +658,49 @@ const char *task_get_current_program(void)
 void task_user_heap_init(uint32_t heap_base, uint32_t stack_base)
 {
     if (!task_current) return;
+    if (!task_current->mm) return;
     if (heap_base < 0x1000) return;
     if (heap_base >= 0xC0000000) return;
     if (stack_base && heap_base + 0x1000 >= stack_base) return;
-    task_current->heap_base = heap_base;
-    task_current->heap_brk = heap_base;
+    task_current->mm->heap_base = heap_base;
+    task_current->mm->heap_brk = heap_base;
 
-    vma_t *heap = vma_find_heap(task_current);
+    vma_t *heap = vma_find_heap(task_current->mm);
     if (!heap) {
-        vma_add(task_current, heap_base, heap_base, VMA_READ | VMA_WRITE);
+        vma_add(task_current->mm, heap_base, heap_base, VMA_READ | VMA_WRITE);
     }
 }
 
 uint32_t task_brk(uint32_t new_end)
 {
     if (!task_current) return 0;
-    if (task_current->heap_base == 0) return 0;
+    if (!task_current->mm) return 0;
+    if (task_current->mm->heap_base == 0) return 0;
 
     if (new_end == 0) {
-        return task_current->heap_brk;
+        return task_current->mm->heap_brk;
     }
 
-    if (new_end < task_current->heap_base) {
-        return task_current->heap_brk;
+    if (new_end < task_current->mm->heap_base) {
+        return task_current->mm->heap_brk;
     }
     if (new_end >= 0xC0000000) {
-        return task_current->heap_brk;
+        return task_current->mm->heap_brk;
     }
-    if (task_current->user_stack_base && align_up(new_end) + 0x1000 > task_current->user_stack_base) {
-        return task_current->heap_brk;
+    if (task_current->mm->user_stack_base && align_up(new_end) + 0x1000 > task_current->mm->user_stack_base) {
+        return task_current->mm->heap_brk;
     }
 
-    task_current->heap_brk = new_end;
+    task_current->mm->heap_brk = new_end;
 
-    vma_t *heap = vma_find_heap(task_current);
+    vma_t *heap = vma_find_heap(task_current->mm);
     if (heap) {
         uint32_t end = align_up(new_end);
         if (end < heap->start) end = heap->start;
         heap->end = end;
     }
 
-    return task_current->heap_brk;
+    return task_current->mm->heap_brk;
 }
 
 uint32_t task_get_current_id(void)
@@ -722,10 +755,10 @@ uint32_t task_dump_tasks(char *buf, uint32_t len)
 uint32_t task_dump_maps(char *buf, uint32_t len)
 {
     if (!buf || len == 0) return 0;
-    if (!task_current) return 0;
+    if (!task_current || !task_current->mm) return 0;
 
     uint32_t off = 0;
-    vma_t *v = task_current->vma_list;
+    vma_t *v = task_current->mm->vma_list;
     while (v) {
         buf_append_hex(buf, &off, len, v->start);
         buf_append(buf, &off, len, "-");
@@ -761,9 +794,13 @@ uint32_t task_dump_maps_pid(uint32_t pid, char *buf, uint32_t len)
         irq_restore(flags);
         return 0;
     }
+    if (!t->mm) {
+        irq_restore(flags);
+        return 0;
+    }
 
     uint32_t off = 0;
-    vma_t *v = t->vma_list;
+    vma_t *v = t->mm->vma_list;
     while (v) {
         buf_append_hex(buf, &off, len, v->start);
         buf_append(buf, &off, len, "-");
@@ -781,14 +818,54 @@ uint32_t task_dump_maps_pid(uint32_t pid, char *buf, uint32_t len)
     return off;
 }
 
-int task_fd_alloc(fs_node_t *node)
+uint32_t task_dump_stat_pid(uint32_t pid, char *buf, uint32_t len)
 {
-    if (!task_current || !node) return -1;
+    if (!buf || len == 0) return 0;
+    if (!task_head) return 0;
+
+    uint32_t flags = irq_save();
+    task_t *t = task_head;
+    int found = 0;
+    do {
+        if (t->id == pid) {
+            found = 1;
+            break;
+        }
+        t = t->next;
+    } while (t && t != task_head);
+    if (!found) {
+        irq_restore(flags);
+        return 0;
+    }
+
+    const char *name = t->program[0] ? t->program : "-";
+    char state = 'R';
+    if (t->state == TASK_SLEEPING) state = 'S';
+    else if (t->state == TASK_BLOCKED) state = 'D';
+    else if (t->state == TASK_ZOMBIE) state = 'Z';
+
+    uint32_t off = 0;
+    buf_append_u32(buf, &off, len, t->id);
+    buf_append(buf, &off, len, " (");
+    buf_append(buf, &off, len, name);
+    buf_append(buf, &off, len, ") ");
+    char st[2] = { state, 0 };
+    buf_append(buf, &off, len, st);
+    buf_append(buf, &off, len, " ");
+    buf_append_u32(buf, &off, len, t->wake_tick);
+    buf_append(buf, &off, len, "\n");
+    if (off < len) buf[off] = 0;
+    irq_restore(flags);
+    return off;
+}
+
+int task_fd_alloc(file_t *file)
+{
+    if (!task_current || !file) return -1;
     for (int i = 3; i < TASK_FD_MAX; i++) {
         if (!task_current->fds[i].used) {
             task_current->fds[i].used = 1;
-            task_current->fds[i].node = node;
-            task_current->fds[i].offset = 0;
+            task_current->fds[i].file = file;
             return i;
         }
     }
@@ -800,7 +877,7 @@ task_fd_t *task_fd_get(int fd)
     if (!task_current) return NULL;
     if (fd < 0 || fd >= TASK_FD_MAX) return NULL;
     if (!task_current->fds[fd].used) return NULL;
-    if (!task_current->fds[fd].node) return NULL;
+    if (!task_current->fds[fd].file) return NULL;
     return &task_current->fds[fd];
 }
 
@@ -809,9 +886,9 @@ int task_fd_close(int fd)
     if (fd < 3) return -1;
     task_fd_t *d = task_fd_get(fd);
     if (!d) return -1;
+    if (d->file) file_close(d->file);
     d->used = 0;
-    d->node = NULL;
-    d->offset = 0;
+    d->file = NULL;
     return 0;
 }
 
@@ -821,16 +898,13 @@ void task_install_stdio(fs_node_t *console)
     if (!console) return;
 
     task_current->fds[0].used = 1;
-    task_current->fds[0].node = console;
-    task_current->fds[0].offset = 0;
+    task_current->fds[0].file = file_open_node(console, 0);
 
     task_current->fds[1].used = 1;
-    task_current->fds[1].node = console;
-    task_current->fds[1].offset = 0;
+    task_current->fds[1].file = file_open_node(console, 0);
 
     task_current->fds[2].used = 1;
-    task_current->fds[2].node = console;
-    task_current->fds[2].offset = 0;
+    task_current->fds[2].file = file_open_node(console, 0);
 }
 
 void task_list(void)

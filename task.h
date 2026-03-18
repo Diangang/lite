@@ -3,16 +3,32 @@
 
 #include <stdint.h>
 #include "isr.h"
-#include "fs.h"
+#include "file.h"
 
 typedef struct wait_queue {
     void *head;
 } wait_queue_t;
 
+typedef struct vma {
+    uint32_t start;
+    uint32_t end;
+    uint32_t flags;
+    struct vma *next;
+} vma_t;
+
+typedef struct mm {
+    uint32_t *page_directory;
+    uint32_t user_base;
+    uint32_t user_pages;
+    uint32_t user_stack_base;
+    uint32_t heap_base;
+    uint32_t heap_brk;
+    vma_t *vma_list;
+} mm_t;
+
 typedef struct task_fd {
     int used;
-    fs_node_t *node;
-    uint32_t offset;
+    struct file *file;
 } task_fd_t;
 
 enum { TASK_FD_MAX = 32 };
@@ -35,9 +51,10 @@ uint32_t task_get_switch_count(void);
 uint32_t task_dump_tasks(char *buf, uint32_t len);
 uint32_t task_dump_maps(char *buf, uint32_t len);
 uint32_t task_dump_maps_pid(uint32_t pid, char *buf, uint32_t len);
+uint32_t task_dump_stat_pid(uint32_t pid, char *buf, uint32_t len);
 void task_user_heap_init(uint32_t heap_base, uint32_t stack_base);
 uint32_t task_brk(uint32_t new_end);
-int task_fd_alloc(fs_node_t *node);
+int task_fd_alloc(file_t *file);
 task_fd_t *task_fd_get(int fd);
 int task_fd_close(int fd);
 void task_install_stdio(fs_node_t *console);

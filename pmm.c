@@ -186,3 +186,27 @@ void pmm_print_memory_map(void)
         printf("BIOS did not provide a memory map.\n");
     }
 }
+
+uint32_t pmm_get_total_kb(void)
+{
+    return total_memory_kb;
+}
+
+uint32_t pmm_get_free_kb(void)
+{
+    if (!pmm_bitmap || total_pages == 0) return 0;
+    uint32_t free_pages = 0;
+    uint32_t bits = total_pages;
+    for (uint32_t i = 0; i < bitmap_size; i++) {
+        uint32_t v = pmm_bitmap[i];
+        if (v == 0xFFFFFFFF) {
+            bits -= bits >= 32 ? 32 : bits;
+            continue;
+        }
+        for (uint32_t j = 0; j < 32 && bits > 0; j++) {
+            if (!(v & (1u << j))) free_pages++;
+            bits--;
+        }
+    }
+    return free_pages * (PMM_PAGE_SIZE / 1024);
+}

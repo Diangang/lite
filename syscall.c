@@ -4,6 +4,7 @@
 #include "shell.h"
 #include "vmm.h"
 #include "fs.h"
+#include "file.h"
 
 static int copyin_cstr(char *dst, uint32_t dst_len, const char *src_user)
 {
@@ -86,8 +87,7 @@ void syscall_handler(registers_t *regs)
                     memcpy(tmp, (void*)(regs->ecx + off), chunk);
                 }
 
-                uint32_t n = write_fs(d->node, d->offset, chunk, (uint8_t*)tmp);
-                d->offset += n;
+                uint32_t n = file_write(d->file, (uint8_t*)tmp, chunk);
                 if (n == 0) break;
                 off += n;
                 if (n < chunk) break;
@@ -128,8 +128,7 @@ void syscall_handler(registers_t *regs)
                 uint32_t chunk = want - off;
                 if (chunk > sizeof(tmp)) chunk = sizeof(tmp);
 
-                uint32_t n = read_fs(d->node, d->offset, chunk, (uint8_t*)tmp);
-                d->offset += n;
+                uint32_t n = file_read(d->file, (uint8_t*)tmp, chunk);
                 if (n == 0) break;
 
                 if (from_user) {
@@ -164,12 +163,12 @@ void syscall_handler(registers_t *regs)
                 regs->eax = (uint32_t)-1;
                 break;
             }
-            fs_node_t *node = finddir_fs(fs_root, name);
-            if (!node) {
+            file_t *f = file_open_path(name, 0);
+            if (!f) {
                 regs->eax = (uint32_t)-1;
                 break;
             }
-            regs->eax = (uint32_t)task_fd_alloc(node);
+            regs->eax = (uint32_t)task_fd_alloc(f);
             break;
         }
         case SYS_CLOSE: {
