@@ -40,7 +40,28 @@ struct dirent *readdir_fs(fs_node_t *node, uint32_t index)
 
 fs_node_t *finddir_fs(fs_node_t *node, char *name)
 {
-    if ((node->flags & 0x7) == FS_DIRECTORY && node->finddir != NULL)
-        return node->finddir(node, name);
-    return NULL;
+    if (!node || !name) return NULL;
+    if ((node->flags & 0x7) != FS_DIRECTORY || node->finddir == NULL) return NULL;
+
+    char *slash = NULL;
+    for (char *p = name; *p; p++) {
+        if (*p == '/') {
+            slash = p;
+            break;
+        }
+    }
+    if (!slash) return node->finddir(node, name);
+
+    char part[128];
+    uint32_t n = (uint32_t)(slash - name);
+    if (n == 0 || n >= sizeof(part)) return NULL;
+    memcpy(part, name, n);
+    part[n] = 0;
+
+    fs_node_t *child = node->finddir(node, part);
+    if (!child) return NULL;
+
+    while (*slash == '/') slash++;
+    if (*slash == 0) return child;
+    return finddir_fs(child, slash);
 }

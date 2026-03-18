@@ -226,15 +226,28 @@ static void shell_execute(void)
             }
         }
     }
-    else if (strcmp(cmd_buffer, "ls") == 0) {
+    else if (strcmp(cmd_buffer, "ls") == 0 || strncmp(cmd_buffer, "ls ", 3) == 0) {
         if (!fs_root) {
             terminal_writestring("No file system mounted!\n");
         } else {
+            fs_node_t *dir = fs_root;
+            if (strncmp(cmd_buffer, "ls ", 3) == 0) {
+                char *path = cmd_buffer + 3;
+                if (path[0]) {
+                    fs_node_t *found = finddir_fs(fs_root, path);
+                    if (!found || ((found->flags & 0x7) != FS_DIRECTORY)) {
+                        printf("Directory not found: %s\n", path);
+                        cmd_index = 0;
+                        return;
+                    }
+                    dir = found;
+                }
+            }
             int i = 0;
             struct dirent *node = 0;
-            while ((node = readdir_fs(fs_root, i)) != 0) {
+            while ((node = readdir_fs(dir, i)) != 0) {
                 printf("Found file: %s\n", node->name);
-                fs_node_t *fsnode = finddir_fs(fs_root, node->name);
+                fs_node_t *fsnode = finddir_fs(dir, node->name);
                 if ((fsnode->flags & 0x7) == FS_DIRECTORY)
                     printf("\t(directory)\n");
                 else

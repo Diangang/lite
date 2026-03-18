@@ -13,6 +13,8 @@
 #include "initrd.h"
 #include "task.h"
 #include "syscall.h"
+#include "procfs.h"
+#include "rootfs.h"
 #include "fs.h"
 
 /* Check if the compiler thinks we are targeting the wrong operating system. */
@@ -587,6 +589,8 @@ void kernel_main(multiboot_info_t* mbi, uint32_t magic)
 
                 fs_root = init_initrd(initrd_location);
                 if (fs_root) {
+                    fs_node_t *proc_root = procfs_init();
+                    fs_root = rootfs_make(fs_root, proc_root);
                     serial_write("Ramdisk loaded.\n");
                     terminal_writestring("Ramdisk loaded.\n");
                 } else {

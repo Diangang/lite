@@ -4,6 +4,7 @@
 #include "task.h"
 
 isr_t interrupt_handlers[256];
+static uint32_t interrupt_count[256];
 
 /* Defined in interrupt.s */
 extern void isr0();
@@ -121,6 +122,9 @@ char *exception_messages[] = {
 /* Common handler for all ISRs */
 void isr_handler(registers_t *regs)
 {
+    if (regs->int_no < 256) {
+        interrupt_count[regs->int_no]++;
+    }
     if (interrupt_handlers[regs->int_no] != 0)
     {
         isr_t handler = interrupt_handlers[regs->int_no];
@@ -155,6 +159,9 @@ void isr_handler(registers_t *regs)
 /* Common handler for all IRQs */
 registers_t *irq_handler(registers_t *regs)
 {
+    if (regs->int_no < 256) {
+        interrupt_count[regs->int_no]++;
+    }
     /* Send EOI (End of Interrupt) signal to PICs */
     /* If IRQ >= 8 (slave), send to slave PIC */
     if (regs->int_no >= 40)
@@ -182,6 +189,11 @@ registers_t *irq_handler(registers_t *regs)
     }
 
     return regs;
+}
+
+uint32_t isr_get_count(uint8_t vector)
+{
+    return interrupt_count[vector];
 }
 
 void isr_install(void)

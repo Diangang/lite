@@ -22,6 +22,9 @@ void wait_queue_wake_all(wait_queue_t *q);
 void task_user_vmas_reset(void);
 void task_user_vma_add(uint32_t start, uint32_t end, uint32_t flags);
 
+uint32_t task_get_switch_count(void);
+uint32_t task_dump_tasks(char *buf, uint32_t len);
+
 void tasking_init(void);
 int task_create(void (*entry)(void));
 int task_create_user(const char *program);

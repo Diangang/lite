@@ -24,6 +24,8 @@ void register_interrupt_handler(uint8_t n, isr_t handler);
 void irq_install(void);
 registers_t *irq_handler(registers_t *regs);
 
+uint32_t isr_get_count(uint8_t vector);
+
 #define IRQ0 32
 #define IRQ1 33
 

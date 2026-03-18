@@ -45,6 +45,7 @@ static uint32_t next_task_id = 1;
 static int demo_enabled = 0;
 static wait_queue_t exit_waitq = {0};
 static int need_resched = 0;
+static uint32_t sched_switch_count = 0;
 
 enum { TASK_TIMESLICE_TICKS = 3 };
 
@@ -65,6 +66,23 @@ static uint32_t irq_save(void)
 static void irq_restore(uint32_t flags)
 {
     __asm__ volatile("push %0; popf" :: "r"(flags) : "memory", "cc");
+}
+
+static void buf_append(char *buf, uint32_t *off, uint32_t cap, const char *s)
+{
+    if (!buf || !off || cap == 0 || !s) return;
+    while (*s && *off + 1 < cap) {
+        buf[*off] = *s;
+        (*off)++;
+        s++;
+    }
+}
+
+static void buf_append_u32(char *buf, uint32_t *off, uint32_t cap, uint32_t v)
+{
+    char tmp[32];
+    itoa((int)v, 10, tmp);
+    buf_append(buf, off, cap, tmp);
 }
 
 static void task_idle(void)
@@ -395,6 +413,9 @@ registers_t *task_schedule(registers_t *regs)
     task_t *candidate = task_current->next;
     while (candidate) {
         if (candidate->state == TASK_RUNNABLE) {
+            if (candidate != task_current) {
+                sched_switch_count++;
+            }
             task_current = candidate;
             if (task_current->page_directory != vmm_get_current_directory()) {
                 vmm_switch_directory(task_current->page_directory);
@@ -557,6 +578,49 @@ uint32_t task_get_current_id(void)
 {
     if (!task_current) return 0;
     return task_current->id;
+}
+
+uint32_t task_get_switch_count(void)
+{
+    return sched_switch_count;
+}
+
+uint32_t task_dump_tasks(char *buf, uint32_t len)
+{
+    if (!buf || len == 0) return 0;
+    if (!task_head) {
+        const char *s = "No tasks.\n";
+        uint32_t n = (uint32_t)strlen(s);
+        if (n > len) n = len;
+        memcpy(buf, s, n);
+        return n;
+    }
+
+    uint32_t off = 0;
+    buf_append(buf, &off, len, "ID   STATE     WAKE    CURRENT  NAME\n");
+    task_t *task = task_head;
+    do {
+        const char *state = "RUNNABLE";
+        if (task->state == TASK_SLEEPING) state = "SLEEPING";
+        else if (task->state == TASK_BLOCKED) state = "BLOCKED";
+        else if (task->state == TASK_ZOMBIE) state = "ZOMBIE";
+
+        const char *name = task->program[0] ? task->program : "-";
+        buf_append_u32(buf, &off, len, task->id);
+        buf_append(buf, &off, len, "    ");
+        buf_append(buf, &off, len, state);
+        buf_append(buf, &off, len, "  ");
+        buf_append_u32(buf, &off, len, task->wake_tick);
+        buf_append(buf, &off, len, "    ");
+        buf_append(buf, &off, len, task == task_current ? "yes" : "no");
+        buf_append(buf, &off, len, "     ");
+        buf_append(buf, &off, len, name);
+        buf_append(buf, &off, len, "\n");
+        if (off >= len) break;
+        task = task->next;
+    } while (task && task != task_head);
+    if (off < len) buf[off] = 0;
+    return off;
 }
 
 void task_list(void)
