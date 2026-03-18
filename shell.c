@@ -438,12 +438,16 @@ uint32_t shell_read_blocking(char *buf, uint32_t len)
 void shell_on_user_exit(void)
 {
     shell_set_foreground(0);
+    terminal_writestring("\n");
+    shell_prompt();
 }
 
 void shell_task(void)
 {
     terminal_writestring("\n--- Lite OS Shell Started ---\n");
-    shell_prompt();
+    if (!foreground_is_user) {
+        shell_prompt();
+    }
     for (;;) {
         if (foreground_is_user) {
             task_yield();

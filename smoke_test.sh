@@ -22,20 +22,30 @@ qemu-system-i386 -kernel myos.bin -initrd initrd.img -m 512M -display none -seri
 qemu_pid=$!
 
 exec 3>"$in_fifo"
-printf "ps\n" >&3
-printf "run cat.elf\n" >&3
 
 deadline=$((SECONDS + 10))
 while [[ $SECONDS -lt $deadline ]]; do
-  if grep -q "lite-os> " "$out_file"; then break; fi
+  if grep -q "ush\\$ " "$out_file" || grep -q "lite-os> " "$out_file"; then break; fi
   sleep 0.1
 done
+
+if grep -q "ush\\$ " "$out_file"; then
+  printf "exit\n" >&3
+  deadline=$((SECONDS + 10))
+  while [[ $SECONDS -lt $deadline ]]; do
+    if grep -q "lite-os> " "$out_file"; then break; fi
+    sleep 0.1
+  done
+fi
 
 if ! grep -q "lite-os> " "$out_file"; then
   echo "boot timeout"
   tail -n 200 "$out_file" || true
   exit 1
 fi
+
+printf "ps\n" >&3
+printf "run cat.elf\n" >&3
 
 deadline=$((SECONDS + 10))
 while [[ $SECONDS -lt $deadline ]]; do
