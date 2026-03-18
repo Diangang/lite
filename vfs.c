@@ -399,6 +399,12 @@ uint32_t vfs_write(vfs_file_t *f, const uint8_t *buf, uint32_t len)
     return n;
 }
 
+int vfs_ioctl(vfs_file_t *f, uint32_t request, uint32_t arg)
+{
+    if (!f || !f->dentry || !f->dentry->inode || !f->dentry->inode->node) return -1;
+    return ioctl_fs(f->dentry->inode->node, request, arg);
+}
+
 void vfs_close(vfs_file_t *f)
 {
     if (!f) return;

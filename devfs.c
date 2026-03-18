@@ -26,6 +26,14 @@ static uint32_t dev_console_write(fs_node_t *node, uint32_t offset, uint32_t siz
     return size;
 }
 
+static int dev_console_ioctl(fs_node_t *node, uint32_t request, uint32_t arg)
+{
+    (void)node;
+    (void)request;
+    (void)arg;
+    return 0;
+}
+
 static struct dirent *dev_readdir(fs_node_t *node, uint32_t index)
 {
     (void)node;
@@ -60,6 +68,7 @@ fs_node_t *devfs_init(void)
     dev_console.length = 0;
     dev_console.read = &dev_console_read;
     dev_console.write = &dev_console_write;
+    dev_console.ioctl = &dev_console_ioctl;
 
     return &dev_root;
 }

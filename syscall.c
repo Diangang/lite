@@ -102,6 +102,13 @@ void syscall_handler(registers_t *regs)
                 return;
             }
         }
+    } else if (regs->eax == SYS_IOCTL) {
+        if (from_user && regs->edx != 0) {
+            if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->edx, 4, 1)) {
+                regs->eax = (uint32_t)-1;
+                return;
+            }
+        }
     }
 
     switch (regs->eax) {
@@ -359,6 +366,18 @@ void syscall_handler(registers_t *regs)
                 memcpy((void*)regs->ecx, tmp, 16);
             }
             regs->eax = 0;
+            break;
+        }
+        case SYS_IOCTL: {
+            int fd = (int)regs->ebx;
+            uint32_t req = regs->ecx;
+            uint32_t arg = regs->edx;
+            task_fd_t *d = task_fd_get(fd);
+            if (!d || !d->file || !d->file->node) {
+                regs->eax = (uint32_t)-1;
+                break;
+            }
+            regs->eax = (uint32_t)file_ioctl(d->file, req, arg);
             break;
         }
         default:

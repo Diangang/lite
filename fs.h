@@ -21,6 +21,7 @@ typedef void (*open_type_t)(struct fs_node*);
 typedef void (*close_type_t)(struct fs_node*);
 typedef struct dirent * (*readdir_type_t)(struct fs_node*, uint32_t);
 typedef struct fs_node * (*finddir_type_t)(struct fs_node*, char *name);
+typedef int (*ioctl_type_t)(struct fs_node*, uint32_t, uint32_t);
 
 /* File System Node (Inode) */
 typedef struct fs_node {
@@ -40,6 +41,7 @@ typedef struct fs_node {
     close_type_t close;
     readdir_type_t readdir;
     finddir_type_t finddir;
+    ioctl_type_t ioctl;
 
     struct fs_node *ptr; /* Used for mount points and symlinks */
 } fs_node_t;
@@ -57,6 +59,7 @@ void open_fs(fs_node_t *node, uint8_t read, uint8_t write);
 void close_fs(fs_node_t *node);
 struct dirent *readdir_fs(fs_node_t *node, uint32_t index);
 fs_node_t *finddir_fs(fs_node_t *node, char *name);
+int ioctl_fs(fs_node_t *node, uint32_t request, uint32_t arg);
 
 /* Root of the filesystem */
 extern fs_node_t *fs_root;

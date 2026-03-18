@@ -51,6 +51,12 @@ uint32_t file_write(file_t *f, const uint8_t *buf, uint32_t len)
     return vfs_write(f->vf, buf, len);
 }
 
+int file_ioctl(file_t *f, uint32_t request, uint32_t arg)
+{
+    if (!f || !f->node) return -1;
+    return ioctl_fs(f->node, request, arg);
+}
+
 void file_close(file_t *f)
 {
     if (!f) return;

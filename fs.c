@@ -68,3 +68,9 @@ fs_node_t *finddir_fs(fs_node_t *node, char *name)
     if (*slash == 0) return child;
     return finddir_fs(child, slash);
 }
+
+int ioctl_fs(fs_node_t *node, uint32_t request, uint32_t arg)
+{
+    if (!node || node->ioctl == NULL) return -1;
+    return node->ioctl(node, request, arg);
+}

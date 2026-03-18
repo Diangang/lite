@@ -47,6 +47,7 @@ vfs_file_t *vfs_open(const char *path, uint32_t flags);
 vfs_file_t *vfs_open_node(fs_node_t *node, uint32_t flags);
 uint32_t vfs_read(vfs_file_t *f, uint8_t *buf, uint32_t len);
 uint32_t vfs_write(vfs_file_t *f, const uint8_t *buf, uint32_t len);
+int vfs_ioctl(vfs_file_t *f, uint32_t request, uint32_t arg);
 void vfs_close(vfs_file_t *f);
 
 #endif
