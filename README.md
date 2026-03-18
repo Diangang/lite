@@ -64,6 +64,8 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - **双模式输入输出**：同时支持 VGA 显示器+键盘 和 **串口 (COM1)** 终端交互。
   - `user` 进入用户态后切换输入前台为 `user>`，用户任务退出后自动恢复 `lite-os>`。
   - `run <file>` 从 InitRD 启动指定用户程序，并在退出后打印退出信息。
+  - `run mmap.elf` 可验证匿名 mmap/munmap 与 `/proc/self/maps` 输出一致性。
+  - 用户态 `ush` 支持 `run <file>`，行为等价于 `exec`（替换当前 shell 进程）。
   - 启动后默认运行 `init.elf`（PID1），由 init 负责拉起用户态 shell。
   - 用户态 `ush` 支持输入回显与退格显示。
   - Shell 以独立内核任务运行，中断回调仅负责字符入队，避免在中断上下文执行命令。
@@ -78,6 +80,9 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `SYS_WAITPID` 支持用户态等待子进程退出并获取退出信息。
   - `SYS_IOCTL` 提供最小设备控制入口（`/dev/console` 支持获取/设置 tty flags）。
   - `SYS_KILL` 提供最小信号投递入口（当前支持 SIGINT 中断前台任务）。
+  - `SYS_MMAP/SYS_MUNMAP` 提供匿名映射与回收（缺页按 VMA 规则处理，`/proc/<pid>/maps` 可观测）。
+  - 缺页处理支持将 VMA 允许的 supervisor 映射修正为用户页。
+  - 低端恒等映射区域的用户访问已通过缺页修正兼容（避免 present fault）。
   - `SYS_BRK` 提供最小用户堆扩展接口（基于堆 VMA 与按需缺页分配）。
   - syscall 入口使用 trap gate，不会隐式关闭中断，内核态具备可抢占的基础语义。
   - shell 的 `syscall` 命令运行在内核态，允许传入内核指针用于演示。

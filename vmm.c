@@ -180,6 +180,24 @@ uint32_t vmm_virt_to_phys_ex(uint32_t* dir, void* virt_addr)
     return (pte & ~0xFFF) + (va & 0xFFF);
 }
 
+uint32_t vmm_get_pte_flags_ex(uint32_t* dir, void* virt_addr)
+{
+    if (!dir) return 0;
+
+    uint32_t va = (uint32_t)virt_addr;
+    uint32_t pde_idx = va / (1024 * 4096);
+    uint32_t pte_idx = (va % (1024 * 4096)) / 4096;
+
+    uint32_t pde = dir[pde_idx];
+    if (!(pde & PTE_PRESENT)) return 0;
+
+    uint32_t* table = (uint32_t*)(pde & ~0xFFF);
+    uint32_t pte = table[pte_idx];
+    if (!(pte & PTE_PRESENT)) return 0;
+
+    return pte;
+}
+
 void vmm_set_page_user(void* virt_addr)
 {
     vmm_set_page_user_ex(page_directory, virt_addr);
@@ -389,6 +407,28 @@ void page_fault_handler(registers_t *regs)
         memset((void*)page_base, 0, 4096);
         printf("Page Fault handled: mapped 0x%x -> 0x%x\n", page_base, (uint32_t)phys);
         return;
+    }
+
+    if (is_user && is_present && !is_reserved) {
+        uint32_t page_base = faulting_address & 0xFFFFF000;
+        if (task_user_vma_allows(page_base, is_write, is_instr_fetch)) {
+            uint32_t pte = vmm_get_pte_flags_ex(page_directory, (void*)page_base);
+            if (pte && (!(pte & PTE_USER) || (is_write && !(pte & PTE_READ_WRITE)))) {
+                void *phys = pmm_alloc_page();
+                if (!phys) {
+                    printf("KERNEL PANIC: Out of physical memory in Page Fault handler.\n");
+                    for(;;);
+                }
+                uint32_t flags = PTE_PRESENT | PTE_USER;
+                if (task_user_vma_allows(page_base, 1, 0)) {
+                    flags |= PTE_READ_WRITE;
+                }
+                vmm_map_page_ex(page_directory, phys, (void*)page_base, flags);
+                memset((void*)page_base, 0, 4096);
+                printf("Page Fault handled: remapped 0x%x -> 0x%x\n", page_base, (uint32_t)phys);
+                return;
+            }
+        }
     }
 
     if (is_user) {

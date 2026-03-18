@@ -52,6 +52,10 @@ enum {
 
 static int task_free_user_page_mapped(uint32_t *dir, uint32_t va_page);
 static task_t *task_find_by_pid(uint32_t pid);
+static uint32_t align_up(uint32_t value);
+static void vma_add(mm_t *mm, uint32_t start, uint32_t end, uint32_t flags);
+static int vma_range_free(mm_t *mm, uint32_t start, uint32_t end);
+static uint32_t vma_find_gap(mm_t *mm, uint32_t size, uint32_t limit);
 
 static uint32_t irq_save(void)
 {
@@ -244,6 +248,100 @@ int task_execve(const char *program, registers_t *regs)
     return 0;
 }
 
+uint32_t task_mmap(uint32_t addr, uint32_t length, uint32_t prot)
+{
+    if (!task_current || !task_current->mm) return 0;
+    if (length == 0) return 0;
+    uint32_t len = align_up(length);
+    if (len == 0) return 0;
+    uint32_t limit = task_current->mm->user_stack_base ? task_current->mm->user_stack_base : 0xC0000000;
+    if (limit <= 0x1000) return 0;
+
+    if (addr != 0) {
+        if (addr < 0x1000) return 0;
+        if (addr & 0xFFF) return 0;
+        if (addr + len > limit) return 0;
+        if (!vma_range_free(task_current->mm, addr, addr + len)) return 0;
+    } else {
+        addr = vma_find_gap(task_current->mm, len, limit);
+        if (addr == 0) return 0;
+    }
+
+    uint32_t flags = 0;
+    if (prot & VMA_READ) flags |= VMA_READ;
+    if (prot & VMA_WRITE) flags |= VMA_WRITE;
+    if (prot & VMA_EXEC) flags |= VMA_EXEC;
+    vma_add(task_current->mm, addr, addr + len, flags);
+    return addr;
+}
+
+int task_munmap(uint32_t addr, uint32_t length)
+{
+    if (!task_current || !task_current->mm) return -1;
+    if (length == 0) return -1;
+    if (addr < 0x1000) return -1;
+    if (addr & 0xFFF) return -1;
+    uint32_t len = align_up(length);
+    if (len == 0) return -1;
+    uint32_t end = addr + len;
+    if (end <= addr) return -1;
+
+    uint32_t flags = irq_save();
+    vma_t *v = task_current->mm->vma_list;
+    vma_t *prev = NULL;
+    while (v) {
+        if (end <= v->start || addr >= v->end) {
+            prev = v;
+            v = v->next;
+            continue;
+        }
+        if (addr <= v->start && end >= v->end) {
+            vma_t *next = v->next;
+            if (prev) prev->next = next;
+            else task_current->mm->vma_list = next;
+            kfree(v);
+            v = next;
+            continue;
+        }
+        if (addr <= v->start && end < v->end) {
+            v->start = end;
+            prev = v;
+            v = v->next;
+            continue;
+        }
+        if (addr > v->start && end >= v->end) {
+            v->end = addr;
+            prev = v;
+            v = v->next;
+            continue;
+        }
+        if (addr > v->start && end < v->end) {
+            vma_t *right = (vma_t*)kmalloc(sizeof(vma_t));
+            if (right) {
+                right->start = end;
+                right->end = v->end;
+                right->flags = v->flags;
+                right->next = v->next;
+                v->end = addr;
+                v->next = right;
+            } else {
+                v->end = addr;
+            }
+            prev = v;
+            v = v->next;
+            continue;
+        }
+    }
+    irq_restore(flags);
+
+    uint32_t page_start = addr & ~0xFFF;
+    uint32_t page_end = (end + 0xFFF) & ~0xFFF;
+    for (uint32_t va = page_start; va < page_end; va += 4096) {
+        task_free_user_page_mapped(task_current->mm->page_directory, va);
+    }
+    return 0;
+}
+
 static int task_free_user_page_mapped(uint32_t *dir, uint32_t va_page)
 {
     if (!dir) return 0;
@@ -273,6 +371,38 @@ static void vma_add(mm_t *mm, uint32_t start, uint32_t end, uint32_t flags)
     v->flags = flags;
     v->next = mm->vma_list;
     mm->vma_list = v;
+}
+
+static int vma_range_free(mm_t *mm, uint32_t start, uint32_t end)
+{
+    if (!mm) return 0;
+    vma_t *v = mm->vma_list;
+    while (v) {
+        if (end <= v->start || start >= v->end) {
+            v = v->next;
+            continue;
+        }
+        return 0;
+    }
+    return 1;
+}
+
+static uint32_t vma_find_gap(mm_t *mm, uint32_t size, uint32_t limit)
+{
+    if (!mm) return 0;
+    if (size == 0) return 0;
+    uint32_t start = mm->heap_brk ? align_up(mm->heap_brk) : 0x400000;
+    if (mm->user_base && mm->user_pages) {
+        uint32_t min = mm->user_base + mm->user_pages * 4096;
+        if (start < min) start = align_up(min);
+    }
+    if (start < 0x1000) start = 0x1000;
+    if (limit <= start) return 0;
+    while (start + size <= limit) {
+        if (vma_range_free(mm, start, start + size)) return start;
+        start += 0x1000;
+    }
+    return 0;
 }
 
 static vma_t *vma_find_heap(mm_t *mm)

@@ -21,7 +21,9 @@ enum {
     SYS_EXECVE = 14,
     SYS_WAITPID = 15,
     SYS_IOCTL = 16,
-    SYS_KILL = 17
+    SYS_KILL = 17,
+    SYS_MMAP = 18,
+    SYS_MUNMAP = 19
 };
 
 void syscall_init(void);

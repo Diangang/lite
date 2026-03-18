@@ -10,6 +10,7 @@
 .equ SYS_GETCWD, 11
 .equ SYS_GETDENT, 12
 .equ SYS_MKDIR, 13
+.equ SYS_EXECVE, 14
 
 .equ O_CREAT, (1<<6)
 .equ O_TRUNC, (1<<9)
@@ -117,6 +118,12 @@ have_cmd:
     cmp $1, %eax
     je do_writefile
 
+    mov $cmd_run, %esi
+    mov %ebp, %edi
+    call streq
+    cmp $1, %eax
+    je do_run
+
     mov $cmd_exit, %esi
     mov %ebp, %edi
     call streq
@@ -197,7 +204,7 @@ ls_loop:
     cmp $0xFFFFFFFF, %eax
     je ls_close
     mov $1, %ebx
-    lea 4+dent, %ecx
+    lea dent, %ecx
     mov $128, %edx
     call cstr_len
     mov %eax, %edx
@@ -297,6 +304,16 @@ do_writefile:
     int $0x80
     jmp main_loop
 
+do_run:
+    mov %ecx, %eax
+    call skip_spaces_ptr
+    mov %eax, %ebx
+    cmpb $0, (%ebx)
+    je main_loop
+    mov $SYS_EXECVE, %eax
+    int $0x80
+    jmp main_loop
+
 do_exit:
     xor %ebx, %ebx
     mov $SYS_EXIT, %eax
@@ -388,6 +405,8 @@ cmd_mkdir:
     .ascii "mkdir\0"
 cmd_writefile:
     .ascii "writefile\0"
+cmd_run:
+    .ascii "run\0"
 cmd_exit:
     .ascii "exit\0"
 slash:

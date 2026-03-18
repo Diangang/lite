@@ -118,6 +118,11 @@
   - 缺页处理路径检查 VMA 失败，判定 out-of-range 并 kill。
 - **解决**：将 `load_user_program` 中的 `user_stack_base` 修正为 `0xBFFFF000`，使栈 VMA 与实际栈顶一致（同时映射该页）。
 
+### 6.6 用户态 mmap 写入触发 present fault（低端恒等映射权限冲突）
+- **现象**：执行 `mmap.elf` 后输出 `Page Fault! ( write user ) at 0x403000`，并显示 `User Page Fault: unhandled.`。
+- **定位**：用户 VMA 位于 `0x400000` 低端区域，但内核在 `vmm_init` 里对 `0~128MB` 做了 supervisor-only 恒等映射。用户写入时触发“present but no user permission”类型缺页，现有缺页处理只处理 not-present 分支，导致直接杀死用户进程。
+- **解决**：在缺页处理里增加 “present fault 且 VMA 允许访问” 的修正路径：为该页重新分配物理页，设置 `PTE_USER` 并按 VMA 设定读写权限，确保用户映射可写。
+
 ---
 
 ## 总结

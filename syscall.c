@@ -110,6 +110,8 @@ void syscall_handler(registers_t *regs)
             }
         }
     } else if (regs->eax == SYS_KILL) {
+    } else if (regs->eax == SYS_MMAP) {
+    } else if (regs->eax == SYS_MUNMAP) {
     }
 
     switch (regs->eax) {
@@ -385,6 +387,20 @@ void syscall_handler(registers_t *regs)
             uint32_t pid = regs->ebx;
             int sig = (int)regs->ecx;
             regs->eax = (uint32_t)(task_kill(pid, sig) == 0 ? 0 : (uint32_t)-1);
+            break;
+        }
+        case SYS_MMAP: {
+            uint32_t addr = regs->ebx;
+            uint32_t len = regs->ecx;
+            uint32_t prot = regs->edx;
+            uint32_t res = task_mmap(addr, len, prot);
+            regs->eax = res ? res : (uint32_t)-1;
+            break;
+        }
+        case SYS_MUNMAP: {
+            uint32_t addr = regs->ebx;
+            uint32_t len = regs->ecx;
+            regs->eax = (uint32_t)(task_munmap(addr, len) == 0 ? 0 : (uint32_t)-1);
             break;
         }
         default:
