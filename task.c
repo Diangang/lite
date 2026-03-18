@@ -9,12 +9,6 @@
 #include "syscall.h"
 #include "tss.h"
 
-enum {
-    VMA_READ = 1 << 0,
-    VMA_WRITE = 1 << 1,
-    VMA_EXEC = 1 << 2
-};
-
 typedef struct vma {
     uint32_t start;
     uint32_t end;
@@ -103,6 +97,18 @@ static void vma_add(task_t *task, uint32_t start, uint32_t end, uint32_t flags)
     v->flags = flags;
     v->next = task->vma_list;
     task->vma_list = v;
+}
+
+void task_user_vmas_reset(void)
+{
+    if (!task_current) return;
+    vma_list_free(task_current);
+}
+
+void task_user_vma_add(uint32_t start, uint32_t end, uint32_t flags)
+{
+    if (!task_current) return;
+    vma_add(task_current, start, end, flags);
 }
 
 static registers_t *task_build_regs(uint32_t *stack, void (*entry)(void))
@@ -442,12 +448,13 @@ void task_set_user_info(uint32_t base, uint32_t pages, uint32_t stack_base)
     task_current->user_base = base;
     task_current->user_pages = pages;
     task_current->user_stack_base = stack_base;
-    vma_list_free(task_current);
-    if (base && pages) {
-        vma_add(task_current, base, base + pages * 4096, VMA_READ | VMA_WRITE | VMA_EXEC);
-    }
-    if (stack_base) {
-        vma_add(task_current, stack_base, stack_base + 4096, VMA_READ | VMA_WRITE);
+    if (!task_current->vma_list) {
+        if (base && pages) {
+            vma_add(task_current, base, base + pages * 4096, VMA_READ | VMA_WRITE | VMA_EXEC);
+        }
+        if (stack_base) {
+            vma_add(task_current, stack_base, stack_base + 4096, VMA_READ | VMA_WRITE);
+        }
     }
 }
 

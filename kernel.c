@@ -293,6 +293,8 @@ static int load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
         return -1;
     }
 
+    enum { PF_X = 1, PF_W = 2, PF_R = 4 };
+
     uint32_t* user_dir = vmm_clone_kernel_directory();
     if (!user_dir) {
         terminal_writestring("User page directory alloc failed.\n");
@@ -305,19 +307,37 @@ static int load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
     uint32_t user_stack_base = 0xBFF000;
     uint32_t pages = (user_end - user_base) / 4096;
 
-    ensure_private_table_range(user_dir, user_base, user_end);
     ensure_private_table(user_dir, user_stack_base / (1024 * 4096));
 
-    for (uint32_t i = 0; i < pages; i++) {
-        void *phys = pmm_alloc_page();
-        if (!phys) {
-            terminal_writestring("User program page alloc failed.\n");
-            kfree(buf);
-            return -1;
+    task_user_vmas_reset();
+    for (uint16_t i = 0; i < ehdr->e_phnum; i++) {
+        Elf32_Phdr *phdr = (Elf32_Phdr*)(buf + ehdr->e_phoff + i * ehdr->e_phentsize);
+        if (phdr->p_type != 1 || phdr->p_memsz == 0) {
+            continue;
         }
-        vmm_map_page_ex(user_dir, phys, (void*)(user_base + i * 4096),
-                        PTE_PRESENT | PTE_READ_WRITE | PTE_USER);
+        uint32_t seg_start = align_down(phdr->p_vaddr);
+        uint32_t seg_end = align_up(phdr->p_vaddr + phdr->p_memsz);
+        uint32_t vma_flags = VMA_READ;
+        if (phdr->p_flags & PF_W) vma_flags |= VMA_WRITE;
+        if (phdr->p_flags & PF_X) vma_flags |= VMA_EXEC;
+        task_user_vma_add(seg_start, seg_end, vma_flags);
+
+        ensure_private_table_range(user_dir, seg_start, seg_end);
+        for (uint32_t va = seg_start; va < seg_end; va += 4096) {
+            uint32_t old_phys = vmm_virt_to_phys_ex(user_dir, (void*)va);
+            if (old_phys != 0xFFFFFFFF && ((old_phys & ~0xFFF) != va)) {
+                continue;
+            }
+            void *phys = pmm_alloc_page();
+            if (!phys) {
+                terminal_writestring("User program page alloc failed.\n");
+                kfree(buf);
+                return -1;
+            }
+            vmm_map_page_ex(user_dir, phys, (void*)va, PTE_PRESENT | PTE_READ_WRITE | PTE_USER);
+        }
     }
+    task_user_vma_add(user_stack_base, user_stack_base + 4096, VMA_READ | VMA_WRITE);
 
     void *stack_phys = pmm_alloc_page();
     if (!stack_phys) {
@@ -331,13 +351,23 @@ static int load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
     uint32_t entry_point = ehdr->e_entry;
     uint32_t* old_dir = vmm_get_current_directory();
     vmm_switch_directory(user_dir);
-    memset((void*)user_base, 0, user_end - user_base);
+
     for (uint16_t i = 0; i < ehdr->e_phnum; i++) {
         Elf32_Phdr *phdr = (Elf32_Phdr*)(buf + ehdr->e_phoff + i * ehdr->e_phentsize);
-        if (phdr->p_type != 1 || phdr->p_filesz == 0) {
+        if (phdr->p_type != 1 || phdr->p_memsz == 0) {
             continue;
         }
-        memcpy((void*)phdr->p_vaddr, buf + phdr->p_offset, phdr->p_filesz);
+        memset((void*)phdr->p_vaddr, 0, phdr->p_memsz);
+        if (phdr->p_filesz > 0) {
+            memcpy((void*)phdr->p_vaddr, buf + phdr->p_offset, phdr->p_filesz);
+        }
+        if (!(phdr->p_flags & PF_W)) {
+            uint32_t seg_start = align_down(phdr->p_vaddr);
+            uint32_t seg_end = align_up(phdr->p_vaddr + phdr->p_memsz);
+            for (uint32_t va = seg_start; va < seg_end; va += 4096) {
+                vmm_set_page_readonly_ex(user_dir, (void*)va);
+            }
+        }
     }
     vmm_switch_directory(old_dir);
     kfree(buf);

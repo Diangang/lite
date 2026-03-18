@@ -206,6 +206,25 @@ void vmm_set_page_user_ex(uint32_t* dir, void* virt_addr)
     __asm__ volatile("invlpg (%0)" :: "r" (virt_addr) : "memory");
 }
 
+void vmm_set_page_readonly_ex(uint32_t* dir, void* virt_addr)
+{
+    if (!dir) return;
+
+    uint32_t va = (uint32_t)virt_addr;
+    uint32_t pde_idx = va / (1024 * 4096);
+    uint32_t pte_idx = (va % (1024 * 4096)) / 4096;
+
+    uint32_t pde = dir[pde_idx];
+    if (!(pde & PTE_PRESENT)) return;
+
+    uint32_t* table = (uint32_t*)(pde & ~0xFFF);
+    uint32_t pte = table[pte_idx];
+    if (!(pte & PTE_PRESENT)) return;
+
+    table[pte_idx] = pte & ~PTE_READ_WRITE;
+    __asm__ volatile("invlpg (%0)" :: "r" (virt_addr) : "memory");
+}
+
 uint32_t* vmm_clone_kernel_directory(void)
 {
     if (!kernel_directory) return NULL;
@@ -356,8 +375,15 @@ void page_fault_handler(registers_t *regs)
             for(;;);
         }
 
-        uint32_t flags = PTE_READ_WRITE | PTE_PRESENT;
-        if (is_user) flags |= PTE_USER;
+        uint32_t flags = PTE_PRESENT;
+        if (is_user) {
+            flags |= PTE_USER;
+            if (task_user_vma_allows(page_base, 1, 0)) {
+                flags |= PTE_READ_WRITE;
+            }
+        } else {
+            flags |= PTE_READ_WRITE;
+        }
         vmm_map_page_ex(page_directory, phys, (void*)page_base, flags);
 
         memset((void*)page_base, 0, 4096);

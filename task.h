@@ -8,10 +8,19 @@ typedef struct wait_queue {
     void *head;
 } wait_queue_t;
 
+enum {
+    VMA_READ = 1 << 0,
+    VMA_WRITE = 1 << 1,
+    VMA_EXEC = 1 << 2
+};
+
 void wait_queue_init(wait_queue_t *q);
 void wait_queue_block(wait_queue_t *q);
 void wait_queue_block_locked(wait_queue_t *q);
 void wait_queue_wake_all(wait_queue_t *q);
+
+void task_user_vmas_reset(void);
+void task_user_vma_add(uint32_t start, uint32_t end, uint32_t flags);
 
 void tasking_init(void);
 int task_create(void (*entry)(void));
