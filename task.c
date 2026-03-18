@@ -9,6 +9,7 @@
 #include "syscall.h"
 #include "tss.h"
 #include "devfs.h"
+#include "vfs.h"
 
 typedef struct task {
     uint32_t id;
@@ -24,6 +25,7 @@ typedef struct task {
     uint32_t exit_info0;
     uint32_t exit_info1;
     char program[32];
+    char cwd[128];
     task_fd_t fds[TASK_FD_MAX];
     void *waitq;
     struct task *wait_next;
@@ -135,6 +137,22 @@ static mm_t *mm_create(void)
     return mm;
 }
 
+const char *task_get_cwd(void)
+{
+    if (!task_current) return NULL;
+    return task_current->cwd;
+}
+
+int task_set_cwd(const char *cwd)
+{
+    if (!task_current || !cwd) return -1;
+    uint32_t n = (uint32_t)strlen(cwd);
+    if (n >= sizeof(task_current->cwd)) n = sizeof(task_current->cwd) - 1;
+    memcpy(task_current->cwd, cwd, n);
+    task_current->cwd[n] = 0;
+    return 0;
+}
+
 static int task_free_user_page_mapped(uint32_t *dir, uint32_t va_page)
 {
     if (!dir) return 0;
@@ -236,16 +254,13 @@ void tasking_init(void)
     task->wake_tick = 0;
     task->state = TASK_RUNNABLE;
     task->timeslice = TASK_TIMESLICE_TICKS;
-    task->mm = mm_create();
-    if (!task->mm) {
-        printf("TASK: Failed to allocate mm.\n");
-        for(;;);
-    }
+    task->mm = NULL;
     task->exit_code = 0;
     task->exit_reason = 0;
     task->exit_info0 = 0;
     task->exit_info1 = 0;
     task->program[0] = 0;
+    task->cwd[0] = 0;
     task_fdtable_init(task);
     task->waitq = NULL;
     task->wait_next = NULL;
@@ -253,6 +268,8 @@ void tasking_init(void)
 
     task_head = task;
     task_current = task;
+    const char *boot_cwd = vfs_getcwd();
+    if (boot_cwd) task_set_cwd(boot_cwd);
     wait_queue_init(&exit_waitq);
     tss_set_kernel_stack((uint32_t)task_current->stack + 4096);
 }
@@ -287,17 +304,35 @@ static int task_create_internal(void (*entry)(void), const char *program)
     task->wake_tick = 0;
     task->state = TASK_RUNNABLE;
     task->timeslice = TASK_TIMESLICE_TICKS;
-    task->mm = mm_create();
-    if (!task->mm) {
-        kfree(task->stack);
-        kfree(task);
-        return -1;
+    task->mm = NULL;
+    if (program) {
+        task->mm = mm_create();
+        if (!task->mm) {
+            kfree(task->stack);
+            kfree(task);
+            return -1;
+        }
     }
     task->exit_code = 0;
     task->exit_reason = 0;
     task->exit_info0 = 0;
     task->exit_info1 = 0;
     task_set_program_name(task, program);
+    task->cwd[0] = 0;
+    if (task_current && task_current->cwd[0]) {
+        uint32_t n = (uint32_t)strlen(task_current->cwd);
+        if (n >= sizeof(task->cwd)) n = sizeof(task->cwd) - 1;
+        memcpy(task->cwd, task_current->cwd, n);
+        task->cwd[n] = 0;
+    } else {
+        const char *boot_cwd = vfs_getcwd();
+        if (boot_cwd) {
+            uint32_t n = (uint32_t)strlen(boot_cwd);
+            if (n >= sizeof(task->cwd)) n = sizeof(task->cwd) - 1;
+            memcpy(task->cwd, boot_cwd, n);
+            task->cwd[n] = 0;
+        }
+    }
     task_fdtable_init(task);
     if (program) {
         task_t *prev = task_current;
@@ -917,6 +952,30 @@ uint32_t task_dump_status_pid(uint32_t pid, char *buf, uint32_t len)
     buf_append(buf, &off, len, state);
     buf_append(buf, &off, len, "\nPid:\t");
     buf_append_u32(buf, &off, len, t->id);
+    buf_append(buf, &off, len, "\nType:\t");
+    buf_append(buf, &off, len, t->mm ? "user" : "kthread");
+    buf_append(buf, &off, len, "\nCwd:\t");
+    buf_append(buf, &off, len, t->cwd[0] ? t->cwd : "/");
+    buf_append(buf, &off, len, "\n");
+    if (off < len) buf[off] = 0;
+    irq_restore(flags);
+    return off;
+}
+
+uint32_t task_dump_cwd_pid(uint32_t pid, char *buf, uint32_t len)
+{
+    if (!buf || len == 0) return 0;
+    if (!task_head) return 0;
+    if (pid == 0xFFFFFFFF) pid = task_get_current_id();
+
+    uint32_t flags = irq_save();
+    task_t *t = task_find_by_pid(pid);
+    if (!t) {
+        irq_restore(flags);
+        return 0;
+    }
+    uint32_t off = 0;
+    buf_append(buf, &off, len, t->cwd[0] ? t->cwd : "/");
     buf_append(buf, &off, len, "\n");
     if (off < len) buf[off] = 0;
     irq_restore(flags);

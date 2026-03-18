@@ -22,6 +22,7 @@ typedef struct {
     fs_node_t stat;
     fs_node_t cmdline;
     fs_node_t status;
+    fs_node_t cwd;
     fs_node_t fd_dir;
     fs_node_t fd_files[TASK_FD_MAX];
     struct dirent dirent;
@@ -176,6 +177,19 @@ static uint32_t proc_read_pid_status(fs_node_t *node, uint32_t offset, uint32_t 
     return size;
 }
 
+static uint32_t proc_read_pid_cwd(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+{
+    if (!node) return 0;
+    static char tmp[256];
+    uint32_t pid = node->impl;
+    uint32_t n = task_dump_cwd_pid(pid, tmp, sizeof(tmp));
+    if (offset >= n) return 0;
+    uint32_t remain = n - offset;
+    if (size > remain) size = remain;
+    memcpy(buffer, tmp + offset, size);
+    return size;
+}
+
 static uint32_t proc_read_pid_fd(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!node) return 0;
@@ -273,6 +287,11 @@ static struct dirent *proc_pid_readdir(fs_node_t *node, uint32_t index)
         return &e->dirent;
     }
     if (index == 4) {
+        strcpy(e->dirent.name, "cwd");
+        e->dirent.ino = e->cwd.inode;
+        return &e->dirent;
+    }
+    if (index == 5) {
         strcpy(e->dirent.name, "fd");
         e->dirent.ino = e->fd_dir.inode;
         return &e->dirent;
@@ -291,6 +310,7 @@ static fs_node_t *proc_pid_finddir(fs_node_t *node, char *name)
     if (!strcmp(name, "stat")) return &e->stat;
     if (!strcmp(name, "cmdline")) return &e->cmdline;
     if (!strcmp(name, "status")) return &e->status;
+    if (!strcmp(name, "cwd")) return &e->cwd;
     if (!strcmp(name, "fd")) return &e->fd_dir;
     return NULL;
 }
@@ -366,6 +386,14 @@ static fs_node_t *proc_get_pid_dir(uint32_t pid)
             e->status.length = 256;
             e->status.read = &proc_read_pid_status;
             e->status.impl = pid;
+
+            memset(&e->cwd, 0, sizeof(e->cwd));
+            strcpy(e->cwd.name, "cwd");
+            e->cwd.flags = FS_FILE;
+            e->cwd.inode = 0x5100 + i;
+            e->cwd.length = 256;
+            e->cwd.read = &proc_read_pid_cwd;
+            e->cwd.impl = pid;
 
             memset(&e->fd_dir, 0, sizeof(e->fd_dir));
             strcpy(e->fd_dir.name, "fd");

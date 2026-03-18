@@ -2,13 +2,14 @@
 #include "kheap.h"
 #include "libc.h"
 #include "ramfs.h"
+#include "task.h"
 
 static vfs_mount_t vfs_mounts[8];
 static uint32_t vfs_mount_count = 0;
 static fs_node_t vfs_root_node;
 static fs_node_t *vfs_base_root = NULL;
 static struct dirent vfs_root_dirent;
-static char vfs_cwd[128];
+static char vfs_boot_cwd[128];
 
 void vfs_init(void)
 {
@@ -21,7 +22,7 @@ void vfs_init(void)
     vfs_root_node.readdir = NULL;
     vfs_root_node.finddir = NULL;
     vfs_base_root = NULL;
-    strcpy(vfs_cwd, "/");
+    strcpy(vfs_boot_cwd, "/");
 }
 
 static int vfs_path_is_prefix(const char *path, const char *prefix, uint32_t *out_tail_off)
@@ -138,10 +139,11 @@ static int vfs_build_abs(const char *path, char *abs, uint32_t cap)
 
     char tmp[256];
     uint32_t off = 0;
-    uint32_t cwd_len = (uint32_t)strlen(vfs_cwd);
-    if (cwd_len == 0) strcpy(vfs_cwd, "/");
+    const char *cwd = task_get_cwd();
+    if (!cwd || !*cwd) cwd = vfs_boot_cwd;
+    uint32_t cwd_len = (uint32_t)strlen(cwd);
     if (cwd_len >= sizeof(tmp) - 1) return 0;
-    memcpy(tmp, vfs_cwd, cwd_len);
+    memcpy(tmp, cwd, cwd_len);
     off = cwd_len;
     if (off == 0) {
         tmp[off++] = '/';
@@ -172,7 +174,9 @@ static int vfs_is_root_child_mount(const char *mount_path)
 
 const char *vfs_getcwd(void)
 {
-    return vfs_cwd;
+    const char *cwd = task_get_cwd();
+    if (cwd && *cwd) return cwd;
+    return vfs_boot_cwd;
 }
 
 int vfs_chdir(const char *path)
@@ -183,10 +187,11 @@ int vfs_chdir(const char *path)
     fs_node_t *node = vfs_resolve(abs);
     if (!node) return -1;
     if ((node->flags & 0x7) != FS_DIRECTORY) return -1;
+    if (task_set_cwd(abs) == 0) return 0;
     uint32_t n = (uint32_t)strlen(abs);
-    if (n >= sizeof(vfs_cwd)) n = sizeof(vfs_cwd) - 1;
-    memcpy(vfs_cwd, abs, n);
-    vfs_cwd[n] = 0;
+    if (n >= sizeof(vfs_boot_cwd)) n = sizeof(vfs_boot_cwd) - 1;
+    memcpy(vfs_boot_cwd, abs, n);
+    vfs_boot_cwd[n] = 0;
     return 0;
 }
 
