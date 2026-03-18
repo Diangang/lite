@@ -669,7 +669,7 @@ void kernel_main(multiboot_info_t* mbi, uint32_t magic)
         shell_set_foreground(0);
         terminal_writestring("init.elf not found, staying in kernel shell.\n");
     } else {
-        shell_set_foreground(1);
+        shell_set_foreground_pid((uint32_t)init_pid);
         terminal_writestring("init task created.\n");
     }
     task_create(shell_task);

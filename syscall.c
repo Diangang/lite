@@ -109,6 +109,7 @@ void syscall_handler(registers_t *regs)
                 return;
             }
         }
+    } else if (regs->eax == SYS_KILL) {
     }
 
     switch (regs->eax) {
@@ -378,6 +379,12 @@ void syscall_handler(registers_t *regs)
                 break;
             }
             regs->eax = (uint32_t)file_ioctl(d->file, req, arg);
+            break;
+        }
+        case SYS_KILL: {
+            uint32_t pid = regs->ebx;
+            int sig = (int)regs->ecx;
+            regs->eax = (uint32_t)(task_kill(pid, sig) == 0 ? 0 : (uint32_t)-1);
             break;
         }
         default:

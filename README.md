@@ -77,6 +77,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `SYS_EXECVE` 支持在用户态替换当前进程映像（最小 exec）。
   - `SYS_WAITPID` 支持用户态等待子进程退出并获取退出信息。
   - `SYS_IOCTL` 提供最小设备控制入口（`/dev/console` 支持获取/设置 tty flags）。
+  - `SYS_KILL` 提供最小信号投递入口（当前支持 SIGINT 中断前台任务）。
   - `SYS_BRK` 提供最小用户堆扩展接口（基于堆 VMA 与按需缺页分配）。
   - syscall 入口使用 trap gate，不会隐式关闭中断，内核态具备可抢占的基础语义。
   - shell 的 `syscall` 命令运行在内核态，允许传入内核指针用于演示。

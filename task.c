@@ -51,6 +51,7 @@ enum {
 };
 
 static int task_free_user_page_mapped(uint32_t *dir, uint32_t va_page);
+static task_t *task_find_by_pid(uint32_t pid);
 
 static uint32_t irq_save(void)
 {
@@ -735,6 +736,39 @@ int task_wait(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0, 
         irq_restore(flags);
         task_yield();
     }
+}
+
+int task_kill(uint32_t id, int sig)
+{
+    if (id == 0) return -1;
+    if (!task_head) return -1;
+    uint32_t flags = irq_save();
+    task_t *t = task_find_by_pid(id);
+    if (!t || t->id == 0) {
+        irq_restore(flags);
+        return -1;
+    }
+    if (t->state == TASK_ZOMBIE) {
+        irq_restore(flags);
+        return 0;
+    }
+    if (!t->mm) {
+        irq_restore(flags);
+        return -1;
+    }
+    if (t == task_current) {
+        irq_restore(flags);
+        task_exit_with_reason(128 + sig, TASK_EXIT_SIGNAL, (uint32_t)sig, 0);
+        return 0;
+    }
+    t->exit_code = 128 + sig;
+    t->exit_reason = TASK_EXIT_SIGNAL;
+    t->exit_info0 = (uint32_t)sig;
+    t->exit_info1 = 0;
+    t->state = TASK_ZOMBIE;
+    wait_queue_wake_all(&exit_waitq);
+    irq_restore(flags);
+    return 0;
 }
 
 const char *task_get_current_program(void)

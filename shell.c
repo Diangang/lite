@@ -25,6 +25,7 @@ static uint32_t tty_flags = 0x3;
 static char tty_linebuf[256];
 static uint32_t tty_line_len = 0;
 static uint32_t tty_line_pos = 0;
+static uint32_t foreground_pid = 0;
 
 static uint32_t irq_save(void)
 {
@@ -261,12 +262,12 @@ static void shell_execute(void)
         );
     }
     else if (strcmp(cmd_buffer, "user") == 0) {
-        shell_set_foreground(1);
         int pid = task_create_user("user.elf");
         if (pid < 0) {
             terminal_writestring("Failed to create user task.\n");
             shell_set_foreground(0);
         } else {
+            shell_set_foreground_pid((uint32_t)pid);
             int code = 0;
             int reason = 0;
             uint32_t info0 = 0;
@@ -280,12 +281,12 @@ static void shell_execute(void)
         if (!filename[0]) {
             terminal_writestring("usage: run <file>\n");
         } else {
-            shell_set_foreground(1);
             int pid = task_create_user(filename);
             if (pid < 0) {
                 terminal_writestring("Failed to create user task.\n");
                 shell_set_foreground(0);
             } else {
+                shell_set_foreground_pid((uint32_t)pid);
                 int code = 0;
                 int reason = 0;
                 uint32_t info0 = 0;
@@ -389,6 +390,9 @@ void shell_set_foreground(int is_user)
     input_head = input_tail = input_count = 0;
     tty_line_len = 0;
     tty_line_pos = 0;
+    if (!foreground_is_user) {
+        foreground_pid = 0;
+    }
 }
 
 void shell_process_char(char c)
@@ -437,6 +441,17 @@ void shell_tty_set_flags(uint32_t flags)
     tty_line_pos = 0;
 }
 
+void shell_set_foreground_pid(uint32_t pid)
+{
+    foreground_pid = pid;
+    shell_set_foreground(pid ? 1 : 0);
+}
+
+uint32_t shell_get_foreground_pid(void)
+{
+    return foreground_pid;
+}
+
 uint32_t shell_tty_read_blocking(char *buf, uint32_t len)
 {
     if (!buf || len == 0) return 0;
@@ -457,6 +472,15 @@ uint32_t shell_tty_read_blocking(char *buf, uint32_t len)
             tty_line_pos = 0;
             for (;;) {
                 char c = shell_getchar_blocking();
+                if (c == 0x03) {
+                    if (foreground_pid != 0) {
+                        task_kill(foreground_pid, SIGINT);
+                        foreground_pid = 0;
+                        shell_on_user_exit();
+                    }
+                    terminal_writestring("^C\n");
+                    return 0;
+                }
                 if (c == '\r') c = '\n';
                 if (c == '\n') {
                     if (tty_line_len + 1 < sizeof(tty_linebuf)) {
@@ -483,6 +507,15 @@ uint32_t shell_tty_read_blocking(char *buf, uint32_t len)
             }
         } else {
             char c = shell_getchar_blocking();
+            if (c == 0x03) {
+                if (foreground_pid != 0) {
+                    task_kill(foreground_pid, SIGINT);
+                    foreground_pid = 0;
+                    shell_on_user_exit();
+                }
+                terminal_writestring("^C\n");
+                return 0;
+            }
             if (c == '\r') c = '\n';
             buf[read++] = c;
             if (tty_flags & 0x1) terminal_putchar(c);
