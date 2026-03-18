@@ -100,6 +100,11 @@
 - **定位**：用户 ELF 含 `.note.gnu.property` 段，链接器将其映射到 `0x08048000` 附近，加载器按段映射导致用户访问落在未预期区域，引发连锁缺页。
 - **解决**：为用户程序提供独立链接脚本，丢弃 `.note*` 段，只保留 `.text/.rodata/.data/.bss`，确保 ELF PT_LOAD 段落在 `0x400000` 附近并稳定可控。
 
+### 6.3 用户态 ELF 段越界检查导致加载失败
+- **现象**：执行 `user` 提示 `User program segment out of range.`。
+- **定位**：ELF 中存在 `p_filesz=0` 的 BSS 段，但 `p_offset` 仍位于文件尾部之后，加载器用 `p_offset + p_filesz > file_size` 直接判定越界，导致误报。
+- **解决**：仅在 `p_filesz > 0` 时进行 `p_offset + p_filesz` 的范围检查，允许纯 BSS 段通过。
+
 ---
 
 ## 总结

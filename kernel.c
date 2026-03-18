@@ -124,7 +124,7 @@ static void enter_user_mode(uint32_t entry, uint32_t user_stack)
     );
 }
 
-typedef struct {
+typedef struct __attribute__((packed)) {
     unsigned char e_ident[16];
     uint16_t e_type;
     uint16_t e_machine;
@@ -141,7 +141,7 @@ typedef struct {
     uint16_t e_shstrndx;
 } Elf32_Ehdr;
 
-typedef struct {
+typedef struct __attribute__((packed)) {
     uint32_t p_type;
     uint32_t p_offset;
     uint32_t p_vaddr;
@@ -240,6 +240,21 @@ static int load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
         kfree(buf);
         return -1;
     }
+    if (ehdr->e_ehsize != sizeof(Elf32_Ehdr)) {
+        terminal_writestring("User program ELF header size mismatch.\n");
+        kfree(buf);
+        return -1;
+    }
+    if (ehdr->e_phentsize != sizeof(Elf32_Phdr)) {
+        terminal_writestring("User program ELF phdr size mismatch.\n");
+        kfree(buf);
+        return -1;
+    }
+    if (ehdr->e_type != 2 || ehdr->e_machine != 3 || ehdr->e_version != 1) {
+        terminal_writestring("User program ELF header invalid.\n");
+        kfree(buf);
+        return -1;
+    }
     if (ehdr->e_phoff + (uint32_t)ehdr->e_phnum * ehdr->e_phentsize > node->length) {
         terminal_writestring("User program header out of range.\n");
         kfree(buf);
@@ -258,7 +273,7 @@ static int load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
             kfree(buf);
             return -1;
         }
-        if (phdr->p_offset + phdr->p_filesz > node->length) {
+        if (phdr->p_filesz > 0 && phdr->p_offset + phdr->p_filesz > node->length) {
             terminal_writestring("User program segment out of range.\n");
             kfree(buf);
             return -1;
@@ -346,6 +361,7 @@ static void user_task(void)
     uint32_t user_stack_base = 0;
     if (load_user_program("user.elf", &entry, &stack, &user_dir,
                           &user_base, &user_pages, &user_stack_base) != 0) {
+        task_exit();
         return;
     }
 

@@ -9,9 +9,14 @@
 #include "fs.h"
 
 #define CMD_BUF_SIZE 256
+#define INPUT_BUF_SIZE 256
 
 static char cmd_buffer[CMD_BUF_SIZE];
 static int cmd_index = 0;
+static char input_buffer[INPUT_BUF_SIZE];
+static uint32_t input_head = 0;
+static uint32_t input_tail = 0;
+static uint32_t input_count = 0;
 
 static void shell_prompt(void)
 {
@@ -216,6 +221,14 @@ void shell_init(void)
 
 void shell_process_char(char c)
 {
+    if (c == '\r') {
+        c = '\n';
+    }
+    if (input_count < INPUT_BUF_SIZE) {
+        input_buffer[input_head] = c;
+        input_head = (input_head + 1) % INPUT_BUF_SIZE;
+        input_count++;
+    }
     if (c == '\n' || c == '\r') {
         /* Enter key */
         terminal_putchar('\n');
@@ -236,4 +249,16 @@ void shell_process_char(char c)
             terminal_putchar(c); /* Echo to screen */
         }
     }
+}
+
+uint32_t shell_read(char *buf, uint32_t len)
+{
+    if (!buf || len == 0) return 0;
+    uint32_t read = 0;
+    while (read < len && input_count > 0) {
+        buf[read++] = input_buffer[input_tail];
+        input_tail = (input_tail + 1) % INPUT_BUF_SIZE;
+        input_count--;
+    }
+    return read;
 }

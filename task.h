@@ -13,6 +13,7 @@ void task_list(void);
 void task_exit(void);
 void task_set_current_page_directory(uint32_t* dir);
 void task_set_user_info(uint32_t base, uint32_t pages, uint32_t stack_base);
+uint32_t task_get_current_id(void);
 void task_set_demo_enabled(int enabled);
 int task_get_demo_enabled(void);
 

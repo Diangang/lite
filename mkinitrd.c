@@ -34,7 +34,7 @@ int main(int argc, char **argv)
         headers[i].offset = off;
         headers[i].magic = 0xBF;
 
-        FILE *stream = fopen(argv[i+1], "r");
+        FILE *stream = fopen(argv[i+1], "rb");
         if (stream == 0) {
             printf("Error: File not found: %s\n", argv[i+1]);
             return 1;
@@ -46,13 +46,13 @@ int main(int argc, char **argv)
         headers[i].magic = 0xBF;
     }
 
-    FILE *wstream = fopen("initrd.img", "w");
+    FILE *wstream = fopen("initrd.img", "wb");
     unsigned char *data = (unsigned char *)malloc(off);
     fwrite(&nheaders, sizeof(int), 1, wstream);
     fwrite(headers, sizeof(struct initrd_file_header), 64, wstream);
 
     for (int i = 0; i < nheaders; i++) {
-        FILE *stream = fopen(argv[i+1], "r");
+        FILE *stream = fopen(argv[i+1], "rb");
         unsigned char *buf = (unsigned char *)malloc(headers[i].length);
         fread(buf, 1, headers[i].length, stream);
         fwrite(buf, 1, headers[i].length, wstream);

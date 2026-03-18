@@ -234,6 +234,12 @@ void task_exit(void)
     task_yield();
 }
 
+uint32_t task_get_current_id(void)
+{
+    if (!task_current) return 0;
+    return task_current->id;
+}
+
 void task_list(void)
 {
     if (!task_head) {
