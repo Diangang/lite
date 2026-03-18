@@ -164,6 +164,28 @@ VGA (Video Graphics Array) 是 IBM 于 1987 年提出的显示标准。虽然现
     -   在 `terminal_putchar` 函数中，我们先调用 `write_serial(c)` 把字符发给串口，然后紧接着把它写入 `0xB8000` 显存。
     -   **结论**：如果你用 QEMU 图形窗口，你看到的是 VGA 输出；如果你用终端（`-nographic`），你看到的是串口输出。两者内容完全一致。
 
+### Q6.6: 用户态 shell 和内核态 shell 的输出到底走哪条路径？
+**问题背景**：看到用户态 `ush` 与内核态 shell 都能输出，想确认到底走 VGA 还是串口。
+**回答**：
+两者最终都调用 `terminal_putchar`，因此输出是 **VGA + 串口同时输出**：
+- `terminal_putchar` 内部先写串口，再写 `0xB8000` 显存。
+- 是否“看得到 VGA 或串口”，取决于 QEMU 启动方式：
+  - 图形窗口：你看到 VGA。
+  - `-display none -serial stdio`：你看到串口。
+
+### Q6.7: 在 shell 里输入的字符是否都经过 `/dev/console`？
+**问题背景**：用户态 shell 和内核态 shell 的输入路径是否一致。
+**回答**：
+- **内核态 shell**：直接从内核输入队列读取（`shell_getchar_blocking`），**不经过 `/dev/console`**。
+- **用户态 `ush`**：通过 `SYS_READ` 读取 `fd=0`，而 `fd=0` 绑定 `/dev/console`，因此 **经过 `/dev/console`**。
+
+### Q6.8: tty 和 console 有什么关系与区别？
+**问题背景**：看到 `/dev/console` 和“tty 行规程”，不清楚两者层级与职责。
+**回答**：
+- **tty** 是“终端设备抽象 + 行规程语义”（回显、规范模式、退格等）。
+- **console** 通常是“一个具体的 tty 实例或别名”（系统主控制台）。
+- **在本项目当前阶段**：没有完整 tty 子系统，`/dev/console` 内嵌了最小 tty 行规程语义，因此 **console 暂时承担 tty 的角色**；后续会把 tty 抽象独立出来。
+
 ---
 
 ## 7. 键盘与输入设备 (PS/2)

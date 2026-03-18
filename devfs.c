@@ -12,7 +12,7 @@ static uint32_t dev_console_read(fs_node_t *node, uint32_t offset, uint32_t size
     (void)node;
     (void)offset;
     if (!buffer || size == 0) return 0;
-    return shell_read_blocking((char*)buffer, size);
+    return shell_tty_read_blocking((char*)buffer, size);
 }
 
 static uint32_t dev_console_write(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
@@ -29,9 +29,14 @@ static uint32_t dev_console_write(fs_node_t *node, uint32_t offset, uint32_t siz
 static int dev_console_ioctl(fs_node_t *node, uint32_t request, uint32_t arg)
 {
     (void)node;
-    (void)request;
-    (void)arg;
-    return 0;
+    if (request == CONSOLE_IOCTL_GETFLAGS) {
+        return (int)shell_tty_get_flags();
+    }
+    if (request == CONSOLE_IOCTL_SETFLAGS) {
+        shell_tty_set_flags(arg);
+        return 0;
+    }
+    return -1;
 }
 
 static struct dirent *dev_readdir(fs_node_t *node, uint32_t index)

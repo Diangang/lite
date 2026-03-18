@@ -53,7 +53,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `/proc/<pid>/cwd`：任务 cwd（`cat proc/1/cwd`）。
   - `/proc/<pid>/fd/<n>`：fd 指向的节点名（`cat proc/1/fd/0`）。
 - **devfs（最小设备节点）**：
-  - `/dev/console`：控制台设备（字符设备），用于 stdin/stdout 类 I/O（可通过 `open dev/console` + `read` 读取）。
+  - `/dev/console`：控制台设备（字符设备），用于 stdin/stdout 类 I/O（可通过 `open dev/console` + `read` 读取），支持最小 tty 行规程（回显/规范模式）。
 - **sysfs（最小自描述接口）**：
   - `/sys/kernel/version`、`/sys/kernel/uptime`、`/sys/devices/*`。
 - **VFS（对象化进行中）**：
@@ -76,7 +76,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `SYS_CHDIR/SYS_GETCWD/SYS_GETDENT/SYS_MKDIR` 支持用户态 shell 做路径切换、目录遍历与创建目录。
   - `SYS_EXECVE` 支持在用户态替换当前进程映像（最小 exec）。
   - `SYS_WAITPID` 支持用户态等待子进程退出并获取退出信息。
-  - `SYS_IOCTL` 提供最小设备控制入口（当前 `/dev/console` 默认返回成功）。
+  - `SYS_IOCTL` 提供最小设备控制入口（`/dev/console` 支持获取/设置 tty flags）。
   - `SYS_BRK` 提供最小用户堆扩展接口（基于堆 VMA 与按需缺页分配）。
   - syscall 入口使用 trap gate，不会隐式关闭中断，内核态具备可抢占的基础语义。
   - shell 的 `syscall` 命令运行在内核态，允许传入内核指针用于演示。

@@ -54,31 +54,16 @@ read_line:
     jae read_line
     mov %al, (%edi,%esi,1)
     inc %esi
-    mov $1, %ebx
-    mov $chbuf, %ecx
-    mov $1, %edx
-    mov $SYS_WRITE, %eax
-    int $0x80
     jmp read_line
 
 backspace:
     cmp $0, %esi
     je read_line
     dec %esi
-    mov $1, %ebx
-    mov $bs_seq, %ecx
-    mov $3, %edx
-    mov $SYS_WRITE, %eax
-    int $0x80
     jmp read_line
 
 end_line:
     movb $0, (%edi,%esi,1)
-    mov $1, %ebx
-    mov $nl, %ecx
-    mov $1, %edx
-    mov $SYS_WRITE, %eax
-    int $0x80
 
     mov %edi, %eax
 skip_spaces:
@@ -388,8 +373,6 @@ prompt:
 prompt_len = . - prompt
 nl:
     .ascii "\n"
-bs_seq:
-    .ascii "\b \b"
 unk:
     .ascii "unknown\n"
 unk_len = . - unk

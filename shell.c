@@ -21,6 +21,10 @@ static uint32_t input_tail = 0;
 static uint32_t input_count = 0;
 static int foreground_is_user = 0;
 static wait_queue_t input_waitq;
+static uint32_t tty_flags = 0x3;
+static char tty_linebuf[256];
+static uint32_t tty_line_len = 0;
+static uint32_t tty_line_pos = 0;
 
 static uint32_t irq_save(void)
 {
@@ -383,6 +387,8 @@ void shell_set_foreground(int is_user)
     foreground_is_user = is_user ? 1 : 0;
     cmd_index = 0;
     input_head = input_tail = input_count = 0;
+    tty_line_len = 0;
+    tty_line_pos = 0;
 }
 
 void shell_process_char(char c)
@@ -416,22 +422,72 @@ uint32_t shell_read(char *buf, uint32_t len)
 
 uint32_t shell_read_blocking(char *buf, uint32_t len)
 {
+    return shell_tty_read_blocking(buf, len);
+}
+
+uint32_t shell_tty_get_flags(void)
+{
+    return tty_flags;
+}
+
+void shell_tty_set_flags(uint32_t flags)
+{
+    tty_flags = flags;
+    tty_line_len = 0;
+    tty_line_pos = 0;
+}
+
+uint32_t shell_tty_read_blocking(char *buf, uint32_t len)
+{
     if (!buf || len == 0) return 0;
+    uint32_t read = 0;
     for (;;) {
-        uint32_t read = 0;
-        uint32_t flags = irq_save();
-        while (read < len && input_count > 0) {
-            buf[read++] = input_buffer[input_tail];
-            input_tail = (input_tail + 1) % INPUT_BUF_SIZE;
-            input_count--;
+        if (tty_flags & 0x2) {
+            if (tty_line_pos < tty_line_len) {
+                while (read < len && tty_line_pos < tty_line_len) {
+                    buf[read++] = tty_linebuf[tty_line_pos++];
+                }
+                if (tty_line_pos >= tty_line_len) {
+                    tty_line_len = 0;
+                    tty_line_pos = 0;
+                }
+                return read;
+            }
+            tty_line_len = 0;
+            tty_line_pos = 0;
+            for (;;) {
+                char c = shell_getchar_blocking();
+                if (c == '\r') c = '\n';
+                if (c == '\n') {
+                    if (tty_line_len + 1 < sizeof(tty_linebuf)) {
+                        tty_linebuf[tty_line_len++] = c;
+                    }
+                    if (tty_flags & 0x1) terminal_putchar('\n');
+                    break;
+                }
+                if (c == '\b' || c == 0x7F) {
+                    if (tty_line_len > 0) {
+                        tty_line_len--;
+                        if (tty_flags & 0x1) {
+                            terminal_putchar('\b');
+                            terminal_putchar(' ');
+                            terminal_putchar('\b');
+                        }
+                    }
+                    continue;
+                }
+                if (tty_line_len + 1 < sizeof(tty_linebuf)) {
+                    tty_linebuf[tty_line_len++] = c;
+                    if (tty_flags & 0x1) terminal_putchar(c);
+                }
+            }
+        } else {
+            char c = shell_getchar_blocking();
+            if (c == '\r') c = '\n';
+            buf[read++] = c;
+            if (tty_flags & 0x1) terminal_putchar(c);
+            if (read > 0) return read;
         }
-        if (read > 0) {
-            irq_restore(flags);
-            return read;
-        }
-        wait_queue_block_locked(&input_waitq);
-        irq_restore(flags);
-        task_yield();
     }
 }
 
