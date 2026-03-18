@@ -116,13 +116,7 @@ static int syscall_read_user(char *buf_user, uint32_t len)
     if (len > 256) len = 256;
 
     char tmp[256];
-    uint32_t total = 0;
-    while (total == 0) {
-        total = shell_read(tmp, len);
-        if (total == 0) {
-            task_yield();
-        }
-    }
+    uint32_t total = shell_read_blocking(tmp, len);
     if (vmm_copyout(buf_user, tmp, total) != 0) {
         return -1;
     }
@@ -132,14 +126,7 @@ static int syscall_read_user(char *buf_user, uint32_t len)
 static int syscall_read_kernel(char *buf, uint32_t len)
 {
     if (!buf || len == 0) return 0;
-    uint32_t total = 0;
-    while (total == 0) {
-        total = shell_read(buf, len);
-        if (total == 0) {
-            task_yield();
-        }
-    }
-    return (int)total;
+    return (int)shell_read_blocking(buf, len);
 }
 
 void syscall_handler(registers_t *regs)

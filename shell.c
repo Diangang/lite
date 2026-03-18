@@ -18,6 +18,7 @@ static uint32_t input_head = 0;
 static uint32_t input_tail = 0;
 static uint32_t input_count = 0;
 static int foreground_is_user = 0;
+static wait_queue_t input_waitq;
 
 static uint32_t irq_save(void)
 {
@@ -47,6 +48,7 @@ static char shell_getchar_blocking(void)
             irq_restore(flags);
             return c;
         }
+        wait_queue_block_locked(&input_waitq);
         irq_restore(flags);
         task_yield();
     }
@@ -279,6 +281,7 @@ void shell_init(void)
     cmd_index = 0;
     input_head = input_tail = input_count = 0;
     foreground_is_user = 0;
+    wait_queue_init(&input_waitq);
 }
 
 void shell_set_foreground(int is_user)
@@ -298,6 +301,7 @@ void shell_process_char(char c)
         input_buffer[input_head] = c;
         input_head = (input_head + 1) % INPUT_BUF_SIZE;
         input_count++;
+        wait_queue_wake_all(&input_waitq);
     }
     irq_restore(flags);
 }
@@ -314,6 +318,27 @@ uint32_t shell_read(char *buf, uint32_t len)
     }
     irq_restore(flags);
     return read;
+}
+
+uint32_t shell_read_blocking(char *buf, uint32_t len)
+{
+    if (!buf || len == 0) return 0;
+    for (;;) {
+        uint32_t read = 0;
+        uint32_t flags = irq_save();
+        while (read < len && input_count > 0) {
+            buf[read++] = input_buffer[input_tail];
+            input_tail = (input_tail + 1) % INPUT_BUF_SIZE;
+            input_count--;
+        }
+        if (read > 0) {
+            irq_restore(flags);
+            return read;
+        }
+        wait_queue_block_locked(&input_waitq);
+        irq_restore(flags);
+        task_yield();
+    }
 }
 
 void shell_on_user_exit(void)

@@ -25,7 +25,7 @@ typedef struct task {
     uint32_t exit_info0;
     uint32_t exit_info1;
     char program[32];
-    int waiting;
+    void *waitq;
     struct task *wait_next;
     struct task *next;
 } task_t;
@@ -34,7 +34,7 @@ static task_t *task_head = NULL;
 static task_t *task_current = NULL;
 static uint32_t next_task_id = 1;
 static int demo_enabled = 0;
-static task_t *wait_event_waiters = NULL;
+static wait_queue_t exit_waitq = {0};
 
 enum {
     TASK_RUNNABLE = 0,
@@ -42,6 +42,18 @@ enum {
     TASK_BLOCKED = 2,
     TASK_ZOMBIE = 3
 };
+
+static uint32_t irq_save(void)
+{
+    uint32_t flags;
+    __asm__ volatile("pushf; pop %0; cli" : "=r"(flags) :: "memory");
+    return flags;
+}
+
+static void irq_restore(uint32_t flags)
+{
+    __asm__ volatile("push %0; popf" :: "r"(flags) : "memory", "cc");
+}
 
 static void task_idle(void)
 {
@@ -95,12 +107,13 @@ void tasking_init(void)
     task->exit_info0 = 0;
     task->exit_info1 = 0;
     task->program[0] = 0;
-    task->waiting = 0;
+    task->waitq = NULL;
     task->wait_next = NULL;
     task->next = task;
 
     task_head = task;
     task_current = task;
+    wait_queue_init(&exit_waitq);
     tss_set_kernel_stack((uint32_t)task_current->stack + 4096);
 }
 
@@ -142,11 +155,13 @@ static int task_create_internal(void (*entry)(void), const char *program)
     task->exit_info0 = 0;
     task->exit_info1 = 0;
     task_set_program_name(task, program);
-    task->waiting = 0;
+    task->waitq = NULL;
     task->wait_next = NULL;
 
+    uint32_t flags = irq_save();
     task->next = task_head->next;
     task_head->next = task;
+    irq_restore(flags);
 
     return (int)task->id;
 }
@@ -224,11 +239,13 @@ static void task_destroy(task_t *prev, task_t *task)
     if (!task_head || !task_current) return;
     if (task == task_current) return;
 
+    uint32_t flags = irq_save();
     task_t *next = task->next;
     if (task == task_head) {
         task_head = next;
     }
     prev->next = next;
+    irq_restore(flags);
 
     syscall_cleanup_task_fds(task->id);
     task_free_user_memory(task);
@@ -236,29 +253,50 @@ static void task_destroy(task_t *prev, task_t *task)
     kfree(task);
 }
 
-static void wait_event_add_current(void)
+void wait_queue_init(wait_queue_t *q)
 {
+    if (!q) return;
+    q->head = NULL;
+}
+
+void wait_queue_block(wait_queue_t *q)
+{
+    if (!q) return;
     if (!task_current) return;
-    if (task_current->waiting) return;
-    task_current->waiting = 1;
-    task_current->wait_next = wait_event_waiters;
-    wait_event_waiters = task_current;
+    uint32_t flags = irq_save();
+    wait_queue_block_locked(q);
+    irq_restore(flags);
+}
+
+void wait_queue_block_locked(wait_queue_t *q)
+{
+    if (!q) return;
+    if (!task_current) return;
+    if (task_current->waitq == q) return;
+    if (task_current->state == TASK_ZOMBIE) return;
+
+    task_current->waitq = q;
+    task_current->wait_next = (task_t*)q->head;
+    q->head = task_current;
     task_current->state = TASK_BLOCKED;
 }
 
-static void wait_event_wake_all(void)
+void wait_queue_wake_all(wait_queue_t *q)
 {
-    task_t *t = wait_event_waiters;
-    wait_event_waiters = NULL;
+    if (!q) return;
+    uint32_t flags = irq_save();
+    task_t *t = (task_t*)q->head;
+    q->head = NULL;
     while (t) {
         task_t *next = t->wait_next;
         t->wait_next = NULL;
-        t->waiting = 0;
+        t->waitq = NULL;
         if (t->state == TASK_BLOCKED) {
             t->state = TASK_RUNNABLE;
         }
         t = next;
     }
+    irq_restore(flags);
 }
 
 registers_t *task_schedule(registers_t *regs)
@@ -361,7 +399,7 @@ void task_exit_with_reason(int code, int reason, uint32_t info0, uint32_t info1)
         shell_on_user_exit();
     }
     task_current->state = TASK_ZOMBIE;
-    wait_event_wake_all();
+    wait_queue_wake_all(&exit_waitq);
     task_yield();
 }
 
@@ -372,11 +410,13 @@ int task_wait(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0, 
     if (task_current->id == id) return -1;
 
     for (;;) {
+        uint32_t flags = irq_save();
         task_t *prev = task_head;
         task_t *t = task_head->next;
         while (t && t != task_head) {
             if (t->id == id) {
                 if (t->state == TASK_ZOMBIE) {
+                    irq_restore(flags);
                     if (out_code) *out_code = t->exit_code;
                     if (out_reason) *out_reason = t->exit_reason;
                     if (out_info0) *out_info0 = t->exit_info0;
@@ -390,9 +430,11 @@ int task_wait(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0, 
             t = t->next;
         }
         if (!t || t == task_head) {
+            irq_restore(flags);
             return -1;
         }
-        wait_event_add_current();
+        wait_queue_block_locked(&exit_waitq);
+        irq_restore(flags);
         task_yield();
     }
 }
