@@ -13,7 +13,11 @@ enum {
     SYS_GETPID = 5,
     SYS_OPEN = 6,
     SYS_CLOSE = 8,
-    SYS_BRK = 9
+    SYS_BRK = 9,
+    SYS_CHDIR = 10,
+    SYS_GETCWD = 11,
+    SYS_GETDENT = 12,
+    SYS_MKDIR = 13
 };
 
 void syscall_init(void);

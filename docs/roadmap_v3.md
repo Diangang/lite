@@ -17,6 +17,7 @@
   - 退出回收基于 VMA 释放用户页与页表页（单一路径）。
 - **I/O ABI 收敛**：
   - `open/read/write/close` 风格 syscall；fdtable per-task；fd=0/1/2 绑定 `/dev/console`。
+  - 新增用户态 shell 相关 syscall：`chdir/getcwd/getdent/mkdir`。
 - **可观测性**：
   - procfs：`/proc/tasks /proc/sched /proc/irq /proc/maps /proc/self/maps /proc/<pid>/maps /proc/meminfo /proc/<pid>/stat /proc/<pid>/cmdline /proc/<pid>/status /proc/<pid>/fd/*`。
   - sysfs：`/sys/kernel/version /sys/kernel/uptime /sys/devices/*`。

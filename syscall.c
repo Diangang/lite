@@ -5,6 +5,7 @@
 #include "vmm.h"
 #include "fs.h"
 #include "file.h"
+#include "vfs.h"
 
 static int copyin_cstr(char *dst, uint32_t dst_len, const char *src_user)
 {
@@ -59,6 +60,34 @@ void syscall_handler(registers_t *regs)
         }
     } else if (regs->eax == SYS_CLOSE) {
     } else if (regs->eax == SYS_BRK) {
+    } else if (regs->eax == SYS_GETCWD) {
+        if (from_user) {
+            if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ebx, regs->ecx, 1)) {
+                regs->eax = (uint32_t)-1;
+                return;
+            }
+        }
+    } else if (regs->eax == SYS_GETDENT) {
+        if (from_user) {
+            if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ecx, regs->edx, 1)) {
+                regs->eax = (uint32_t)-1;
+                return;
+            }
+        }
+    } else if (regs->eax == SYS_CHDIR) {
+        if (from_user) {
+            if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ebx, 1, 0)) {
+                regs->eax = (uint32_t)-1;
+                return;
+            }
+        }
+    } else if (regs->eax == SYS_MKDIR) {
+        if (from_user) {
+            if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ebx, 1, 0)) {
+                regs->eax = (uint32_t)-1;
+                return;
+            }
+        }
     }
 
     switch (regs->eax) {
@@ -187,6 +216,91 @@ void syscall_handler(registers_t *regs)
                 }
             }
             regs->eax = task_brk(req);
+            break;
+        }
+        case SYS_CHDIR: {
+            char path[128];
+            if (from_user) {
+                if (copyin_cstr(path, sizeof(path), (const char*)regs->ebx) != 0) {
+                    regs->eax = (uint32_t)-1;
+                    break;
+                }
+            } else {
+                strcpy(path, (const char*)regs->ebx);
+            }
+            regs->eax = (uint32_t)(vfs_chdir(path) == 0 ? 0 : (uint32_t)-1);
+            break;
+        }
+        case SYS_GETCWD: {
+            uint32_t cap = regs->ecx;
+            if (cap == 0) {
+                regs->eax = 0;
+                break;
+            }
+            const char *cwd = vfs_getcwd();
+            if (!cwd) {
+                regs->eax = (uint32_t)-1;
+                break;
+            }
+            uint32_t n = (uint32_t)strlen(cwd) + 1;
+            if (n > cap) n = cap;
+            if (from_user) {
+                if (vmm_copyout((void*)regs->ebx, cwd, n) != 0) {
+                    regs->eax = (uint32_t)-1;
+                    break;
+                }
+            } else {
+                memcpy((void*)regs->ebx, cwd, n);
+            }
+            regs->eax = n;
+            break;
+        }
+        case SYS_MKDIR: {
+            char path[128];
+            if (from_user) {
+                if (copyin_cstr(path, sizeof(path), (const char*)regs->ebx) != 0) {
+                    regs->eax = (uint32_t)-1;
+                    break;
+                }
+            } else {
+                strcpy(path, (const char*)regs->ebx);
+            }
+            regs->eax = (uint32_t)(vfs_mkdir(path) == 0 ? 0 : (uint32_t)-1);
+            break;
+        }
+        case SYS_GETDENT: {
+            int fd = (int)regs->ebx;
+            task_fd_t *d = task_fd_get(fd);
+            if (!d || !d->file || !d->file->node || !d->file->vf) {
+                regs->eax = (uint32_t)-1;
+                break;
+            }
+            if ((d->file->node->flags & 0x7) != FS_DIRECTORY) {
+                regs->eax = (uint32_t)-1;
+                break;
+            }
+
+            struct dirent *de = readdir_fs(d->file->node, d->file->vf->pos);
+            if (!de) {
+                regs->eax = 0;
+                break;
+            }
+            d->file->vf->pos++;
+
+            uint32_t out_cap = regs->edx;
+            if (out_cap < sizeof(struct dirent)) {
+                regs->eax = (uint32_t)-1;
+                break;
+            }
+            if (from_user) {
+                if (vmm_copyout((void*)regs->ecx, de, sizeof(struct dirent)) != 0) {
+                    regs->eax = (uint32_t)-1;
+                    break;
+                }
+            } else {
+                memcpy((void*)regs->ecx, de, sizeof(struct dirent));
+            }
+            regs->eax = sizeof(struct dirent);
             break;
         }
         default:

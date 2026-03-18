@@ -110,6 +110,14 @@
 - **定位**：`syscall` 命令在内核态触发 `int 0x80`，传入的字符串指针位于内核地址空间；而 syscall 层新增了用户指针校验，把该指针当作非法用户指针拒绝，导致 `SYS_WRITE` 没有打印。
 - **解决**：仅当 syscall 来自 Ring3 时启用用户指针校验；内核态触发的 `int 0x80` 允许使用内核指针用于演示。
 
+### 6.5 用户态 shell 进入即 Page Fault（栈页基址设置错误）
+- **现象**：执行 `run ush.elf` 后立刻触发 `Page Fault! ( not-present write user ) at 0xbffffffc`，并显示 `User Page Fault: out of range.`，用户任务被终止。
+- **定位**：该地址位于用户栈顶页（`0xBFFFF000` - `0xBFFFFFFF`）。但加载器在建立用户 VMA/映射时，把 `user_stack_base` 误写成 `0xBFF000`，导致：
+  - VMA 仅覆盖低地址的“栈页”，不包含 `0xBFFFF000`；
+  - `enter_user_mode()` 传入的用户栈顶固定为 `0xC0000000`，首次压栈必然写到 `0xBFFFFFFC`，触发缺页；
+  - 缺页处理路径检查 VMA 失败，判定 out-of-range 并 kill。
+- **解决**：将 `load_user_program` 中的 `user_stack_base` 修正为 `0xBFFFF000`，使栈 VMA 与实际栈顶一致（同时映射该页）。
+
 ---
 
 ## 总结

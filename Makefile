@@ -18,7 +18,9 @@ USER_ELF = user.elf
 USER_OBJ = userprog.o
 CAT_ELF = cat.elf
 CAT_OBJ = catprog.o
-USER_ELFS = $(USER_ELF) $(CAT_ELF)
+USH_ELF = ush.elf
+USH_OBJ = ushprog.o
+USER_ELFS = $(USER_ELF) $(CAT_ELF) $(USH_ELF)
 
 all: $(KERNEL) $(INITRD)
 
@@ -65,6 +67,12 @@ $(CAT_OBJ): catprog.s
 $(CAT_ELF): $(CAT_OBJ) userprog.ld
 	$(LD) -m elf_i386 -T userprog.ld -o $@ $<
 
+$(USH_OBJ): ushprog.s
+	$(AS) --32 $< -o $@
+
+$(USH_ELF): $(USH_OBJ) userprog.ld
+	$(LD) -m elf_i386 -T userprog.ld -o $@ $<
+
 run: $(KERNEL) initrd.img
 	qemu-system-i386 -kernel $(KERNEL) -initrd initrd.img -m 512M
 
@@ -72,7 +80,7 @@ smoke:
 	bash ./smoke_test.sh
 
 clean:
-	rm -f $(OBJECTS) $(KERNEL) $(ISO) mkinitrd initrd.img $(USER_OBJ) $(USER_ELF) $(CAT_OBJ) $(CAT_ELF)
+	rm -f $(OBJECTS) $(KERNEL) $(ISO) mkinitrd initrd.img $(USER_OBJ) $(USER_ELF) $(CAT_OBJ) $(CAT_ELF) $(USH_OBJ) $(USH_ELF)
 	rm -rf isodir
 
 .PHONY: all iso run run-iso clean

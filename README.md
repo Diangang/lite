@@ -70,6 +70,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `SYS_WRITE/SYS_READ` 在内核侧通过 `copyin/copyout` 分段拷贝访问用户缓冲区。
   - `SYS_READ/SYS_WRITE` 提供最小 `read(fd,...)` / `write(fd,...)` 风格接口（fd=0/1/2 绑定 `/dev/console`），fdtable 为 per-task，fd 持有 file 对象与 offset。
   - `SYS_OPEN/SYS_CLOSE` 提供最小路径打开与关闭能力（路径解析基于 VFS mount 表）。
+  - `SYS_CHDIR/SYS_GETCWD/SYS_GETDENT/SYS_MKDIR` 支持用户态 shell 做路径切换、目录遍历与创建目录。
   - `SYS_BRK` 提供最小用户堆扩展接口（基于堆 VMA 与按需缺页分配）。
   - syscall 入口使用 trap gate，不会隐式关闭中断，内核态具备可抢占的基础语义。
   - shell 的 `syscall` 命令运行在内核态，允许传入内核指针用于演示。

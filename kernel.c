@@ -309,7 +309,7 @@ static int load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
 
     uint32_t user_base = align_down(min_vaddr);
     uint32_t user_end = align_up(max_vaddr);
-    uint32_t user_stack_base = 0xBFF000;
+    uint32_t user_stack_base = 0xBFFFF000;
     uint32_t pages = (user_end - user_base) / 4096;
     uint32_t heap_base = user_end;
 
