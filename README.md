@@ -40,6 +40,9 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
 - **交互式 Shell**：
   - 内置极简内核态 Shell，支持 `help`, `clear`, `info`, `echo`, `uptime`, `meminfo`, `alloc`, `vmmtest`, `heaptest`, `ls`, `cat`, `demo`, `yield`, `sleep`, `ps`, `syscall`, `user` 等命令（demo 默认关闭）。
   - **双模式输入输出**：同时支持 VGA 显示器+键盘 和 **串口 (COM1)** 终端交互。
+- **系统调用 (int 0x80)**：
+  - 用户态 syscall 会进行用户指针校验，避免非法地址导致内核崩溃。
+  - shell 的 `syscall` 命令运行在内核态，允许传入内核指针用于演示。
 
 ## 构建与运行
 

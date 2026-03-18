@@ -105,6 +105,11 @@
 - **定位**：ELF 中存在 `p_filesz=0` 的 BSS 段，但 `p_offset` 仍位于文件尾部之后，加载器用 `p_offset + p_filesz > file_size` 直接判定越界，导致误报。
 - **解决**：仅在 `p_filesz > 0` 时进行 `p_offset + p_filesz` 的范围检查，允许纯 BSS 段通过。
 
+### 6.4 内核态 syscall 演示无输出
+- **现象**：在 shell 执行 `syscall` 没有任何输出。
+- **定位**：`syscall` 命令在内核态触发 `int 0x80`，传入的字符串指针位于内核地址空间；而 syscall 层新增了用户指针校验，把该指针当作非法用户指针拒绝，导致 `SYS_WRITE` 没有打印。
+- **解决**：仅当 syscall 来自 Ring3 时启用用户指针校验；内核态触发的 `int 0x80` 允许使用内核指针用于演示。
+
 ---
 
 ## 总结

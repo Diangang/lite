@@ -32,6 +32,9 @@ uint32_t* vmm_clone_kernel_directory(void);
 void vmm_switch_directory(uint32_t* dir);
 uint32_t* vmm_get_current_directory(void);
 uint32_t* vmm_get_kernel_directory(void);
+int vmm_user_accessible(uint32_t* dir, void* addr, uint32_t len, int write);
+int vmm_copyin(void* dst, const void* src_user, uint32_t len);
+int vmm_copyout(void* dst_user, const void* src, uint32_t len);
 void page_fault_handler(registers_t *regs);
 
 #endif

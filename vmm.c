@@ -236,6 +236,72 @@ uint32_t* vmm_get_kernel_directory(void)
     return kernel_directory;
 }
 
+static int vmm_get_pte_ex(uint32_t* dir, uint32_t va, uint32_t* out_pde, uint32_t* out_pte)
+{
+    if (!dir) return 0;
+
+    uint32_t pde_idx = va / (1024 * 4096);
+    uint32_t pte_idx = (va % (1024 * 4096)) / 4096;
+    uint32_t pde = dir[pde_idx];
+    if (!(pde & PTE_PRESENT)) return 0;
+
+    uint32_t* table = (uint32_t*)(pde & ~0xFFF);
+    uint32_t pte = table[pte_idx];
+    if (!(pte & PTE_PRESENT)) return 0;
+
+    if (out_pde) *out_pde = pde;
+    if (out_pte) *out_pte = pte;
+    return 1;
+}
+
+int vmm_user_accessible(uint32_t* dir, void* addr, uint32_t len, int write)
+{
+    if (!dir) return 0;
+    if (len == 0) return 1;
+
+    uint32_t start = (uint32_t)addr;
+    uint32_t end = start + len - 1;
+
+    if (start < 0x1000) return 0;
+    if (end < start) return 0;
+    if (end >= 0xC0000000) return 0;
+
+    uint32_t page = start & ~0xFFF;
+    uint32_t last = end & ~0xFFF;
+    while (1) {
+        uint32_t pde, pte;
+        if (!vmm_get_pte_ex(dir, page, &pde, &pte)) return 0;
+        if (!(pde & PTE_USER)) return 0;
+        if (!(pte & PTE_USER)) return 0;
+        if (write) {
+            if (!(pde & PTE_READ_WRITE)) return 0;
+            if (!(pte & PTE_READ_WRITE)) return 0;
+        }
+        if (page == last) break;
+        page += 4096;
+    }
+
+    return 1;
+}
+
+int vmm_copyin(void* dst, const void* src_user, uint32_t len)
+{
+    if (!dst && len) return -1;
+    if (!src_user && len) return -1;
+    if (!vmm_user_accessible(vmm_get_current_directory(), (void*)src_user, len, 0)) return -1;
+    memcpy(dst, src_user, len);
+    return 0;
+}
+
+int vmm_copyout(void* dst_user, const void* src, uint32_t len)
+{
+    if (!dst_user && len) return -1;
+    if (!src && len) return -1;
+    if (!vmm_user_accessible(vmm_get_current_directory(), (void*)dst_user, len, 1)) return -1;
+    memcpy(dst_user, src, len);
+    return 0;
+}
+
 void page_fault_handler(registers_t *regs)
 {
     /* The faulting address is stored in the CR2 register */

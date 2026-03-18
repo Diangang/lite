@@ -2,6 +2,7 @@
 #include "kernel.h"
 #include "task.h"
 #include "shell.h"
+#include "vmm.h"
 
 void syscall_init(void)
 {
@@ -30,6 +31,31 @@ static uint32_t syscall_read(char *buf, uint32_t len)
 
 void syscall_handler(registers_t *regs)
 {
+    int from_user = (regs->cs & 0x3) == 0x3;
+    if (regs->eax == SYS_WRITE) {
+        if (regs->ecx > 4096) {
+            regs->eax = (uint32_t)-1;
+            return;
+        }
+        if (from_user) {
+            if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ebx, regs->ecx, 0)) {
+                regs->eax = (uint32_t)-1;
+                return;
+            }
+        }
+    } else if (regs->eax == SYS_READ) {
+        if (regs->ecx > 4096) {
+            regs->eax = (uint32_t)-1;
+            return;
+        }
+        if (from_user) {
+            if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ebx, regs->ecx, 1)) {
+                regs->eax = (uint32_t)-1;
+                return;
+            }
+        }
+    }
+
     switch (regs->eax) {
         case SYS_WRITE:
             syscall_write((const char *)regs->ebx, regs->ecx);
