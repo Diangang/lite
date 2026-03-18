@@ -176,6 +176,8 @@ registers_t *irq_handler(registers_t *regs)
 
     if (regs->int_no == IRQ0) {
         registers_t *task_schedule(registers_t *r);
+        void task_tick(void);
+        task_tick();
         regs = task_schedule(regs);
     }
 

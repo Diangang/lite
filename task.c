@@ -16,6 +16,7 @@ typedef struct task {
     uint32_t *stack;
     uint32_t wake_tick;
     int state;
+    int timeslice;
     uint32_t* page_directory;
     uint32_t user_base;
     uint32_t user_pages;
@@ -35,6 +36,9 @@ static task_t *task_current = NULL;
 static uint32_t next_task_id = 1;
 static int demo_enabled = 0;
 static wait_queue_t exit_waitq = {0};
+static int need_resched = 0;
+
+enum { TASK_TIMESLICE_TICKS = 3 };
 
 enum {
     TASK_RUNNABLE = 0,
@@ -98,6 +102,7 @@ void tasking_init(void)
     task->stack = stack;
     task->wake_tick = 0;
     task->state = TASK_RUNNABLE;
+    task->timeslice = TASK_TIMESLICE_TICKS;
     task->page_directory = vmm_get_current_directory();
     task->user_base = 0;
     task->user_pages = 0;
@@ -146,6 +151,7 @@ static int task_create_internal(void (*entry)(void), const char *program)
     task->stack = stack;
     task->wake_tick = 0;
     task->state = TASK_RUNNABLE;
+    task->timeslice = TASK_TIMESLICE_TICKS;
     task->page_directory = vmm_get_current_directory();
     task->user_base = 0;
     task->user_pages = 0;
@@ -299,27 +305,54 @@ void wait_queue_wake_all(wait_queue_t *q)
     irq_restore(flags);
 }
 
+void task_tick(void)
+{
+    uint32_t now = timer_get_ticks();
+    task_t *t = task_head;
+    if (!t) return;
+
+    do {
+        if (t->state == TASK_SLEEPING) {
+            if ((int32_t)(now - t->wake_tick) >= 0) {
+                t->state = TASK_RUNNABLE;
+            }
+        }
+        t = t->next;
+    } while (t && t != task_head);
+
+    if (!task_current) return;
+    if (task_current->state != TASK_RUNNABLE) {
+        need_resched = 1;
+        return;
+    }
+
+    task_current->timeslice--;
+    if (task_current->timeslice <= 0) {
+        need_resched = 1;
+    }
+}
+
 registers_t *task_schedule(registers_t *regs)
 {
     if (!task_current) return regs;
 
     task_current->regs = regs;
-    uint32_t now = timer_get_ticks();
+    if (task_current->state == TASK_RUNNABLE && !need_resched) {
+        return task_current->regs;
+    }
+
+    need_resched = 0;
+    task_current->timeslice = TASK_TIMESLICE_TICKS;
 
     task_t *candidate = task_current->next;
     while (candidate) {
-        if (candidate->state == TASK_SLEEPING) {
-            if ((int32_t)(now - candidate->wake_tick) >= 0) {
-                candidate->state = TASK_RUNNABLE;
-            }
-        }
-
         if (candidate->state == TASK_RUNNABLE) {
             task_current = candidate;
             if (task_current->page_directory != vmm_get_current_directory()) {
                 vmm_switch_directory(task_current->page_directory);
             }
             tss_set_kernel_stack((uint32_t)task_current->stack + 4096);
+            task_current->timeslice = TASK_TIMESLICE_TICKS;
             return task_current->regs;
         }
 
@@ -336,10 +369,12 @@ void task_sleep(uint32_t ticks)
     if (ticks == 0) return;
     task_current->wake_tick = timer_get_ticks() + ticks;
     task_current->state = TASK_SLEEPING;
+    need_resched = 1;
 }
 
 void task_yield(void)
 {
+    need_resched = 1;
     __asm__ volatile ("int $0x20");
 }
 

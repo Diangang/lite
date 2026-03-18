@@ -17,6 +17,7 @@ void tasking_init(void);
 int task_create(void (*entry)(void));
 int task_create_user(const char *program);
 registers_t *task_schedule(registers_t *regs);
+void task_tick(void);
 void task_sleep(uint32_t ticks);
 void task_yield(void);
 void task_list(void);
