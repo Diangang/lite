@@ -3,6 +3,7 @@
 #include "libc.h"
 #include "kernel.h"
 #include "isr.h"
+#include "task.h"
 
 /*
  * 1024 Page Directory Entries.
@@ -326,8 +327,34 @@ void page_fault_handler(registers_t *regs)
 
     if (!is_present && !is_reserved) {
         if (faulting_address < 0x1000) {
+            if (is_user) {
+                printf("User Page Fault: null access.\n");
+                task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
+                return;
+            }
             printf("KERNEL PANIC: Null pointer access.\n");
             for(;;);
+        }
+        if (is_user && faulting_address >= 0xC0000000) {
+            printf("User Page Fault: kernel address.\n");
+            task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
+            return;
+        }
+
+        uint32_t page_base = faulting_address & 0xFFFFF000;
+        if (is_user) {
+            uint32_t user_base = 0;
+            uint32_t user_pages = 0;
+            uint32_t user_stack_base = 0;
+            task_get_user_info(&user_base, &user_pages, &user_stack_base);
+            uint32_t user_end = user_base + user_pages * 4096;
+            int in_text = user_pages && page_base >= user_base && page_base < user_end;
+            int in_stack = user_stack_base && page_base == user_stack_base;
+            if (!in_text && !in_stack) {
+                printf("User Page Fault: out of range.\n");
+                task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
+                return;
+            }
         }
 
         void *phys = pmm_alloc_page();
@@ -336,21 +363,18 @@ void page_fault_handler(registers_t *regs)
             for(;;);
         }
 
-        uint32_t page_base = faulting_address & 0xFFFFF000;
-        vmm_map_page(phys, (void*)page_base);
-
         uint32_t flags = PTE_READ_WRITE | PTE_PRESENT;
         if (is_user) flags |= PTE_USER;
-
-        uint32_t pde_idx = page_base / (1024 * 4096);
-        uint32_t pte_idx = (page_base % (1024 * 4096)) / 4096;
-        uint32_t* table = (uint32_t*)(page_directory[pde_idx] & ~0xFFF);
-        table[pte_idx] = ((uint32_t)phys) | flags;
-
-        __asm__ volatile("invlpg (%0)" :: "r" ((void*)page_base) : "memory");
+        vmm_map_page_ex(page_directory, phys, (void*)page_base, flags);
 
         memset((void*)page_base, 0, 4096);
         printf("Page Fault handled: mapped 0x%x -> 0x%x\n", page_base, (uint32_t)phys);
+        return;
+    }
+
+    if (is_user) {
+        printf("User Page Fault: unhandled.\n");
+        task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
         return;
     }
 

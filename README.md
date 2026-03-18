@@ -38,11 +38,17 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
     - 实现了简单的只读文件系统解析，支持读取文件内容。
     - 支持从 InitRD 加载用户态程序（ELF32，含 BSS 段加载）。
 - **交互式 Shell**：
-  - 内置极简内核态 Shell，支持 `help`, `clear`, `info`, `echo`, `uptime`, `meminfo`, `alloc`, `vmmtest`, `heaptest`, `ls`, `cat`, `demo`, `yield`, `sleep`, `ps`, `syscall`, `user` 等命令（demo 默认关闭）。
+  - 内置极简内核态 Shell，支持 `help`, `clear`, `info`, `echo`, `uptime`, `meminfo`, `alloc`, `vmmtest`, `heaptest`, `ls`, `cat`, `demo`, `yield`, `sleep`, `ps`, `syscall`, `run`, `user` 等命令（demo 默认关闭）。
   - **双模式输入输出**：同时支持 VGA 显示器+键盘 和 **串口 (COM1)** 终端交互。
+  - `user` 进入用户态后切换输入前台为 `user>`，用户任务退出后自动恢复 `lite-os>`。
+  - `run <file>` 从 InitRD 启动指定用户程序，并在退出后打印退出信息。
+  - Shell 以独立内核任务运行，中断回调仅负责字符入队，避免在中断上下文执行命令。
 - **系统调用 (int 0x80)**：
   - 用户态 syscall 会进行用户指针校验，避免非法地址导致内核崩溃。
+  - `SYS_WRITE/SYS_READ` 在内核侧通过 `copyin/copyout` 分段拷贝访问用户缓冲区。
   - shell 的 `syscall` 命令运行在内核态，允许传入内核指针用于演示。
+- **用户态异常处理**：
+  - 用户态触发 `#PF/#GP/#UD` 等异常时，内核终止当前用户任务并继续运行 shell。
 
 ## 构建与运行
 

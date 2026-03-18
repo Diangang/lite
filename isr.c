@@ -1,6 +1,7 @@
 #include "isr.h"
 #include "idt.h"
 #include "kernel.h" /* For terminal_writestring and outb */
+#include "task.h"
 
 isr_t interrupt_handlers[256];
 
@@ -127,6 +128,16 @@ void isr_handler(registers_t *regs)
     }
     else
     {
+        if (regs->int_no < 32 && ((regs->cs & 0x3) == 0x3)) {
+            terminal_writestring("\nUser Exception: ");
+            terminal_writestring(exception_messages[regs->int_no]);
+            terminal_writestring("\n");
+            serial_write("User Exception: ");
+            serial_write(exception_messages[regs->int_no]);
+            serial_write("\n");
+            task_exit_with_reason(1, TASK_EXIT_EXCEPTION, regs->int_no, regs->eip);
+            return;
+        }
         /* Unhandled interrupt - Panic! */
         terminal_writestring("\nKERNEL PANIC! Exception: ");
         if (regs->int_no < 32) {

@@ -9,14 +9,52 @@ void syscall_init(void)
     register_interrupt_handler(128, syscall_handler);
 }
 
-static void syscall_write(const char *buf, uint32_t len)
+static int syscall_write_user(const char *buf_user, uint32_t len)
+{
+    char tmp[128];
+    uint32_t off = 0;
+    while (off < len) {
+        uint32_t chunk = len - off;
+        if (chunk > sizeof(tmp)) chunk = sizeof(tmp);
+        if (vmm_copyin(tmp, buf_user + off, chunk) != 0) {
+            return -1;
+        }
+        for (uint32_t i = 0; i < chunk; i++) {
+            terminal_putchar(tmp[i]);
+        }
+        off += chunk;
+    }
+    return (int)len;
+}
+
+static int syscall_write_kernel(const char *buf, uint32_t len)
 {
     for (uint32_t i = 0; i < len; i++) {
         terminal_putchar(buf[i]);
     }
+    return (int)len;
 }
 
-static uint32_t syscall_read(char *buf, uint32_t len)
+static int syscall_read_user(char *buf_user, uint32_t len)
+{
+    if (!buf_user || len == 0) return 0;
+    if (len > 256) len = 256;
+
+    char tmp[256];
+    uint32_t total = 0;
+    while (total == 0) {
+        total = shell_read(tmp, len);
+        if (total == 0) {
+            task_yield();
+        }
+    }
+    if (vmm_copyout(buf_user, tmp, total) != 0) {
+        return -1;
+    }
+    return (int)total;
+}
+
+static int syscall_read_kernel(char *buf, uint32_t len)
 {
     if (!buf || len == 0) return 0;
     uint32_t total = 0;
@@ -26,7 +64,7 @@ static uint32_t syscall_read(char *buf, uint32_t len)
             task_yield();
         }
     }
-    return total;
+    return (int)total;
 }
 
 void syscall_handler(registers_t *regs)
@@ -58,8 +96,11 @@ void syscall_handler(registers_t *regs)
 
     switch (regs->eax) {
         case SYS_WRITE:
-            syscall_write((const char *)regs->ebx, regs->ecx);
-            regs->eax = regs->ecx;
+            if (from_user) {
+                regs->eax = (uint32_t)syscall_write_user((const char *)regs->ebx, regs->ecx);
+            } else {
+                regs->eax = (uint32_t)syscall_write_kernel((const char *)regs->ebx, regs->ecx);
+            }
             break;
         case SYS_YIELD:
             task_yield();
@@ -71,11 +112,19 @@ void syscall_handler(registers_t *regs)
             regs->eax = 0;
             break;
         case SYS_EXIT:
-            task_exit();
+            if (from_user) {
+                task_exit_with_status((int)regs->ebx);
+            } else {
+                task_exit();
+            }
             regs->eax = 0;
             break;
         case SYS_READ:
-            regs->eax = syscall_read((char *)regs->ebx, regs->ecx);
+            if (from_user) {
+                regs->eax = (uint32_t)syscall_read_user((char *)regs->ebx, regs->ecx);
+            } else {
+                regs->eax = (uint32_t)syscall_read_kernel((char *)regs->ebx, regs->ecx);
+            }
             break;
         case SYS_GETPID:
             regs->eax = task_get_current_id();

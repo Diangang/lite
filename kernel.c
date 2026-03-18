@@ -31,14 +31,14 @@ void kernel_entry(uint32_t magic, multiboot_info_t* mbi)
 
 /* Serial Helper Functions */
 void serial_init() {
-   outb(0x3f8 + 1, 0x00);    // Disable all interrupts
-   outb(0x3f8 + 3, 0x80);    // Enable DLAB (set baud rate divisor)
-   outb(0x3f8 + 0, 0x03);    // Set divisor to 3 (lo byte) 38400 baud
-   outb(0x3f8 + 1, 0x00);    //                  (hi byte)
-   outb(0x3f8 + 3, 0x03);    // 8 bits, no parity, one stop bit
-   outb(0x3f8 + 2, 0xC7);    // Enable FIFO, clear them, with 14-byte threshold
-   outb(0x3f8 + 4, 0x0B);    // IRQs enabled, RTS/DSR set
-   outb(0x3f8 + 1, 0x01);    // Enable Received Data Available Interrupt
+   outb(0x3f8 + 1, 0x00); // Disable all interrupts
+   outb(0x3f8 + 3, 0x80); // Enable DLAB (set baud rate divisor)
+   outb(0x3f8 + 0, 0x03); // Set divisor to 3 (lo byte) 38400 baud
+   outb(0x3f8 + 1, 0x00); // (hi byte)
+   outb(0x3f8 + 3, 0x03); // 8 bits, no parity, one stop bit
+   outb(0x3f8 + 2, 0xC7); // Enable FIFO, clear them, with 14-byte threshold
+   outb(0x3f8 + 4, 0x0B); // IRQs enabled, RTS/DSR set
+   outb(0x3f8 + 1, 0x01); // Enable Received Data Available Interrupt
 }
 
 int is_transmit_empty() {
@@ -351,7 +351,7 @@ static int load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
     return 0;
 }
 
-static void user_task(void)
+void user_task(void)
 {
     uint32_t entry = 0;
     uint32_t stack = 0;
@@ -359,9 +359,11 @@ static void user_task(void)
     uint32_t user_base = 0;
     uint32_t user_pages = 0;
     uint32_t user_stack_base = 0;
-    if (load_user_program("user.elf", &entry, &stack, &user_dir,
+    const char *program = task_get_current_program();
+    if (!program) program = "user.elf";
+    if (load_user_program(program, &entry, &stack, &user_dir,
                           &user_base, &user_pages, &user_stack_base) != 0) {
-        task_exit();
+        task_exit_with_status(1);
         return;
     }
 
@@ -502,12 +504,7 @@ void terminal_writestring(const char* data)
 
 void user_mode_launch(void)
 {
-    static int started = 0;
-    if (started) {
-        terminal_writestring("User task already started.\n");
-        return;
-    }
-    started = 1;
+    shell_set_foreground(1);
     task_create(user_task);
     terminal_writestring("User task created.\n");
 }
@@ -613,6 +610,7 @@ void kernel_main(multiboot_info_t* mbi, uint32_t magic)
 
     /* Initialize the shell */
     shell_init();
+    task_create(shell_task);
 
     /* Infinite loop to keep the kernel running and responsive to interrupts */
     while (1) {

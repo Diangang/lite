@@ -17,10 +17,39 @@ static char input_buffer[INPUT_BUF_SIZE];
 static uint32_t input_head = 0;
 static uint32_t input_tail = 0;
 static uint32_t input_count = 0;
+static int foreground_is_user = 0;
+
+static uint32_t irq_save(void)
+{
+    uint32_t flags;
+    __asm__ volatile("pushf; pop %0; cli" : "=r"(flags) :: "memory");
+    return flags;
+}
+
+static void irq_restore(uint32_t flags)
+{
+    __asm__ volatile("push %0; popf" :: "r"(flags) : "memory", "cc");
+}
 
 static void shell_prompt(void)
 {
     terminal_writestring("lite-os> ");
+}
+
+static char shell_getchar_blocking(void)
+{
+    for (;;) {
+        uint32_t flags = irq_save();
+        if (input_count > 0) {
+            char c = input_buffer[input_tail];
+            input_tail = (input_tail + 1) % INPUT_BUF_SIZE;
+            input_count--;
+            irq_restore(flags);
+            return c;
+        }
+        irq_restore(flags);
+        task_yield();
+    }
 }
 
 static void shell_execute(void)
@@ -49,7 +78,8 @@ static void shell_execute(void)
         terminal_writestring("  sleep   - Sleep for 50 ticks\n");
         terminal_writestring("  ps      - List tasks\n");
         terminal_writestring("  syscall - Test syscall write/yield\n");
-        terminal_writestring("  user    - Start user-mode test task\n");
+        terminal_writestring("  user    - Run user.elf\n");
+        terminal_writestring("  run     - Run a user ELF from initrd\n");
         terminal_writestring("  ls      - List files in initrd\n");
         terminal_writestring("  cat     - Print file content\n");
     }
@@ -160,7 +190,39 @@ static void shell_execute(void)
         );
     }
     else if (strcmp(cmd_buffer, "user") == 0) {
-        user_mode_launch();
+        shell_set_foreground(1);
+        int pid = task_create_user("user.elf");
+        if (pid < 0) {
+            terminal_writestring("Failed to create user task.\n");
+            shell_set_foreground(0);
+        } else {
+            int code = 0;
+            int reason = 0;
+            uint32_t info0 = 0;
+            uint32_t info1 = 0;
+            task_wait((uint32_t)pid, &code, &reason, &info0, &info1);
+            printf("exit: code=%d reason=%d info0=0x%x info1=0x%x\n", code, reason, info0, info1);
+        }
+    }
+    else if (strncmp(cmd_buffer, "run ", 4) == 0) {
+        char *filename = cmd_buffer + 4;
+        if (!filename[0]) {
+            terminal_writestring("usage: run <file>\n");
+        } else {
+            shell_set_foreground(1);
+            int pid = task_create_user(filename);
+            if (pid < 0) {
+                terminal_writestring("Failed to create user task.\n");
+                shell_set_foreground(0);
+            } else {
+                int code = 0;
+                int reason = 0;
+                uint32_t info0 = 0;
+                uint32_t info1 = 0;
+                task_wait((uint32_t)pid, &code, &reason, &info0, &info1);
+                printf("exit: code=%d reason=%d info0=0x%x info1=0x%x\n", code, reason, info0, info1);
+            }
+        }
     }
     else if (strcmp(cmd_buffer, "ls") == 0) {
         if (!fs_root) {
@@ -215,8 +277,15 @@ static void shell_execute(void)
 void shell_init(void)
 {
     cmd_index = 0;
-    terminal_writestring("\n--- Lite OS Shell Started ---\n");
-    shell_prompt();
+    input_head = input_tail = input_count = 0;
+    foreground_is_user = 0;
+}
+
+void shell_set_foreground(int is_user)
+{
+    foreground_is_user = is_user ? 1 : 0;
+    cmd_index = 0;
+    input_head = input_tail = input_count = 0;
 }
 
 void shell_process_char(char c)
@@ -224,41 +293,64 @@ void shell_process_char(char c)
     if (c == '\r') {
         c = '\n';
     }
+    uint32_t flags = irq_save();
     if (input_count < INPUT_BUF_SIZE) {
         input_buffer[input_head] = c;
         input_head = (input_head + 1) % INPUT_BUF_SIZE;
         input_count++;
     }
-    if (c == '\n' || c == '\r') {
-        /* Enter key */
-        terminal_putchar('\n');
-        shell_execute();
-        shell_prompt();
-    }
-    else if (c == '\b' || c == 0x7F) {
-        /* Backspace or Delete */
-        if (cmd_index > 0) {
-            cmd_index--;
-            terminal_putchar('\b'); /* Visually erase on screen */
-        }
-    }
-    else {
-        /* Printable character */
-        if (cmd_index < CMD_BUF_SIZE - 1) {
-            cmd_buffer[cmd_index++] = c;
-            terminal_putchar(c); /* Echo to screen */
-        }
-    }
+    irq_restore(flags);
 }
 
 uint32_t shell_read(char *buf, uint32_t len)
 {
     if (!buf || len == 0) return 0;
     uint32_t read = 0;
+    uint32_t flags = irq_save();
     while (read < len && input_count > 0) {
         buf[read++] = input_buffer[input_tail];
         input_tail = (input_tail + 1) % INPUT_BUF_SIZE;
         input_count--;
     }
+    irq_restore(flags);
     return read;
+}
+
+void shell_on_user_exit(void)
+{
+    shell_set_foreground(0);
+}
+
+void shell_task(void)
+{
+    terminal_writestring("\n--- Lite OS Shell Started ---\n");
+    shell_prompt();
+    for (;;) {
+        if (foreground_is_user) {
+            task_yield();
+            continue;
+        }
+        char c = shell_getchar_blocking();
+        if (foreground_is_user) {
+            continue;
+        }
+        if (c == '\r') c = '\n';
+        if (c == '\n') {
+            terminal_putchar('\n');
+            shell_execute();
+            if (!foreground_is_user) {
+                shell_prompt();
+            }
+        } else if (c == '\b' || c == 0x7F) {
+            if (cmd_index > 0) {
+                cmd_index--;
+                terminal_putchar('\b');
+            }
+        } else {
+            if (cmd_index < CMD_BUF_SIZE - 1) {
+                cmd_buffer[cmd_index++] = c;
+                terminal_putchar(c);
+            }
+        }
+    }
 }
