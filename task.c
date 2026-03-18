@@ -8,6 +8,7 @@
 #include "shell.h"
 #include "syscall.h"
 #include "tss.h"
+#include "devfs.h"
 
 typedef struct vma {
     uint32_t start;
@@ -123,6 +124,24 @@ static void task_fdtable_init(task_t *task)
         task->fds[i].node = NULL;
         task->fds[i].offset = 0;
     }
+}
+
+static int task_free_user_page_mapped(uint32_t *dir, uint32_t va_page)
+{
+    if (!dir) return 0;
+    uint32_t pde_idx = va_page / (1024 * 4096);
+    uint32_t pte_idx = (va_page % (1024 * 4096)) / 4096;
+    uint32_t pde = dir[pde_idx];
+    if (!(pde & PTE_PRESENT)) return 0;
+    uint32_t *table = (uint32_t*)(pde & ~0xFFF);
+    uint32_t pte = table[pte_idx];
+    if (!(pte & PTE_PRESENT)) return 0;
+    if (!(pte & PTE_USER)) return 0;
+
+    uint32_t phys = pte & ~0xFFF;
+    table[pte_idx] = 0;
+    pmm_free_page((void*)phys);
+    return 1;
 }
 
 static void vma_add(task_t *task, uint32_t start, uint32_t end, uint32_t flags)
@@ -272,6 +291,12 @@ static int task_create_internal(void (*entry)(void), const char *program)
     task_set_program_name(task, program);
     task->vma_list = NULL;
     task_fdtable_init(task);
+    if (program) {
+        task_t *prev = task_current;
+        task_current = task;
+        task_install_stdio(devfs_get_console());
+        task_current = prev;
+    }
     task->waitq = NULL;
     task->wait_next = NULL;
 
@@ -299,52 +324,32 @@ static void task_free_user_memory(task_t *task)
     if (!task) return;
     if (!task->page_directory || task->page_directory == vmm_get_kernel_directory()) return;
 
-    if (task->user_pages && task->user_base) {
-        for (uint32_t i = 0; i < task->user_pages; i++) {
-            uint32_t va = task->user_base + i * 4096;
-            uint32_t phys = vmm_virt_to_phys_ex(task->page_directory, (void*)va);
-            if (phys != 0xFFFFFFFF) {
-                pmm_free_page((void*)(phys & ~0xFFF));
+    vma_t *v = task->vma_list;
+    while (v) {
+        uint32_t start = v->start & ~0xFFF;
+        uint32_t end = (v->end + 0xFFF) & ~0xFFF;
+        if (end > start) {
+            for (uint32_t va = start; va < end; va += 4096) {
+                task_free_user_page_mapped(task->page_directory, va);
             }
         }
-    }
-    if (task->user_stack_base) {
-        uint32_t phys = vmm_virt_to_phys_ex(task->page_directory, (void*)task->user_stack_base);
-        if (phys != 0xFFFFFFFF) {
-            pmm_free_page((void*)(phys & ~0xFFF));
-        }
+        v = v->next;
     }
 
-    if (task->user_pages && task->user_base) {
-        uint32_t start = task->user_base;
-        uint32_t end = task->user_base + task->user_pages * 4096;
-        uint32_t start_idx = start / (1024 * 4096);
-        uint32_t end_idx = (end - 1) / (1024 * 4096);
-        for (uint32_t i = start_idx; i <= end_idx; i++) {
-            uint32_t pde = task->page_directory[i];
-            if (pde & PTE_PRESENT) {
-                pmm_free_page((void*)(pde & ~0xFFF));
-            }
+    uint32_t *kernel_dir = vmm_get_kernel_directory();
+    for (uint32_t i = 0; i < 1024; i++) {
+        uint32_t pde = task->page_directory[i];
+        if (!(pde & PTE_PRESENT)) continue;
+
+        uint32_t pde_phys = pde & ~0xFFF;
+        uint32_t kernel_pde_phys = 0;
+        if (kernel_dir && (kernel_dir[i] & PTE_PRESENT)) {
+            kernel_pde_phys = kernel_dir[i] & ~0xFFF;
         }
-    }
-    if (task->user_stack_base) {
-        uint32_t pde_idx = task->user_stack_base / (1024 * 4096);
-        int in_range = 0;
-        if (task->user_pages && task->user_base) {
-            uint32_t start = task->user_base;
-            uint32_t end = task->user_base + task->user_pages * 4096;
-            uint32_t start_idx = start / (1024 * 4096);
-            uint32_t end_idx = (end - 1) / (1024 * 4096);
-            if (pde_idx >= start_idx && pde_idx <= end_idx) {
-                in_range = 1;
-            }
+        if (kernel_pde_phys && kernel_pde_phys == pde_phys) {
+            continue;
         }
-        if (!in_range) {
-            uint32_t pde = task->page_directory[pde_idx];
-            if (pde & PTE_PRESENT) {
-                pmm_free_page((void*)(pde & ~0xFFF));
-            }
-        }
+        pmm_free_page((void*)pde_phys);
     }
 
     pmm_free_page(task->page_directory);
@@ -740,12 +745,12 @@ uint32_t task_dump_maps(char *buf, uint32_t len)
 int task_fd_alloc(fs_node_t *node)
 {
     if (!task_current || !node) return -1;
-    for (int i = 0; i < TASK_FD_MAX; i++) {
+    for (int i = 3; i < TASK_FD_MAX; i++) {
         if (!task_current->fds[i].used) {
             task_current->fds[i].used = 1;
             task_current->fds[i].node = node;
             task_current->fds[i].offset = 0;
-            return i + 3;
+            return i;
         }
     }
     return -1;
@@ -754,22 +759,39 @@ int task_fd_alloc(fs_node_t *node)
 task_fd_t *task_fd_get(int fd)
 {
     if (!task_current) return NULL;
-    if (fd < 3) return NULL;
-    int idx = fd - 3;
-    if (idx < 0 || idx >= TASK_FD_MAX) return NULL;
-    if (!task_current->fds[idx].used) return NULL;
-    if (!task_current->fds[idx].node) return NULL;
-    return &task_current->fds[idx];
+    if (fd < 0 || fd >= TASK_FD_MAX) return NULL;
+    if (!task_current->fds[fd].used) return NULL;
+    if (!task_current->fds[fd].node) return NULL;
+    return &task_current->fds[fd];
 }
 
 int task_fd_close(int fd)
 {
+    if (fd < 3) return -1;
     task_fd_t *d = task_fd_get(fd);
     if (!d) return -1;
     d->used = 0;
     d->node = NULL;
     d->offset = 0;
     return 0;
+}
+
+void task_install_stdio(fs_node_t *console)
+{
+    if (!task_current) return;
+    if (!console) return;
+
+    task_current->fds[0].used = 1;
+    task_current->fds[0].node = console;
+    task_current->fds[0].offset = 0;
+
+    task_current->fds[1].used = 1;
+    task_current->fds[1].node = console;
+    task_current->fds[1].offset = 0;
+
+    task_current->fds[2].used = 1;
+    task_current->fds[2].node = console;
+    task_current->fds[2].offset = 0;
 }
 
 void task_list(void)

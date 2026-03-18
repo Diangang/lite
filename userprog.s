@@ -2,14 +2,16 @@
 .global _start
 
 _start:
-    mov $msg, %ebx
-    mov $msg_len, %ecx
+    mov $1, %ebx
+    mov $msg, %ecx
+    mov $msg_len, %edx
     mov $0, %eax
     int $0x80
 
 loop:
-    mov $buf, %ebx
-    mov $1, %ecx
+    mov $0, %ebx
+    mov $buf, %ecx
+    mov $1, %edx
     mov $4, %eax
     int $0x80
 
@@ -23,21 +25,24 @@ loop:
 
     cmpb $'b', buf
     jne 2f
-    mov $0x08000000, %ebx
-    mov $4, %ecx
+    mov $1, %ebx
+    mov $0x08000000, %ecx
+    mov $4, %edx
     mov $0, %eax
     int $0x80
 
     cmp $0xFFFFFFFF, %eax
     jne 2f
-    mov $badptr_reject, %ebx
-    mov $badptr_reject_len, %ecx
+    mov $1, %ebx
+    mov $badptr_reject, %ecx
+    mov $badptr_reject_len, %edx
     mov $0, %eax
     int $0x80
 2:
 
-    mov $buf, %ebx
-    mov $1, %ecx
+    mov $1, %ebx
+    mov $buf, %ecx
+    mov $1, %edx
     mov $0, %eax
     int $0x80
 

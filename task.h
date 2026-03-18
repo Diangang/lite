@@ -15,7 +15,7 @@ typedef struct task_fd {
     uint32_t offset;
 } task_fd_t;
 
-enum { TASK_FD_MAX = 16 };
+enum { TASK_FD_MAX = 32 };
 
 enum {
     VMA_READ = 1 << 0,
@@ -39,6 +39,7 @@ uint32_t task_brk(uint32_t new_end);
 int task_fd_alloc(fs_node_t *node);
 task_fd_t *task_fd_get(int fd);
 int task_fd_close(int fd);
+void task_install_stdio(fs_node_t *console);
 
 void tasking_init(void);
 int task_create(void (*entry)(void));

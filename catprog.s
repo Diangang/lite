@@ -14,15 +14,16 @@ loop:
     mov %esi, %ebx
     mov $buf, %ecx
     mov $128, %edx
-    mov $7, %eax
+    mov $4, %eax
     int $0x80
     cmp $0xFFFFFFFF, %eax
     je exit_fail
     test %eax, %eax
     jz close_and_exit
 
-    mov $buf, %ebx
-    mov %eax, %ecx
+    mov $1, %ebx
+    mov $buf, %ecx
+    mov %eax, %edx
     mov $0, %eax
     int $0x80
     jmp loop

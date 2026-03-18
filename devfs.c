@@ -63,3 +63,8 @@ fs_node_t *devfs_init(void)
 
     return &dev_root;
 }
+
+fs_node_t *devfs_get_console(void)
+{
+    return &dev_console;
+}

@@ -31,8 +31,8 @@
 - **MM 回收路径未与 VMA 语义对齐**：
   - 缺页/权限已经由 VMA 驱动，但退出回收仍主要依赖 `user_base/user_pages/user_stack_base` 的旧模型，无法覆盖 heap/brk 扩展映射的页，存在资源泄漏风险。
 - **syscall/VFS 语义出现多轨并行**：
-  - 同时存在无 fd 的 `SYS_READ/SYS_WRITE`、文件专用 `SYS_FREAD`、以及 `SYS_READFD/SYS_WRITEFD` 的 fd 风格接口。
-  - 若不收敛 ABI 与对象模型，后续 D1（VFS 核心对象）会在“多条接口轨道”上持续返工。
+  - 已修正：核心 I/O 已收敛到 `SYS_OPEN/SYS_READ/SYS_WRITE/SYS_CLOSE` 的 fd 风格语义。
+  - 后续仍需在 VFS 对象模型层面完成收敛（file/inode 等），避免 syscall 层长期特判。
 
 ## 1. 总体原则（v2 补充约束）
 
@@ -69,6 +69,9 @@
 目标：
 - 用户进程退出时，回收逻辑以 mm/vma 为唯一语义源，覆盖 text/rodata/data/bss/stack/heap/brk 扩展等所有用户映射页，并正确释放页表页。
 
+状态：
+- 已落地（回收改为遍历 VMA 释放用户页，并释放非内核共享页表页与页目录页）。
+
 验收标准：
 - 连续多次运行用户程序（包含 heap/brk 扩展与缺页）退出后，PMM 可用页数不持续下降（无明显泄漏）。
 - 不出现 double-free 与页表页遗漏释放。
@@ -80,6 +83,9 @@
 - 核心 I/O syscall 收敛为 `open/read/write/close`（fdtable + file offset + ops）。
 - fd=0/1/2 通过 task 创建时预置打开的 `/dev/console` 提供，而不是在 syscall 层永久特判。
 - 逐步淘汰过渡接口（例如 `SYS_FREAD`、无 fd 的 `SYS_READ/SYS_WRITE` 或 `SYS_READFD/SYS_WRITEFD` 的并行形态），避免 ABI 分叉。
+
+状态：
+- 已落地（用户态与内核态测试路径已切换到 fd 风格 `SYS_READ/SYS_WRITE`，移除并行 I/O syscall）。
 
 验收标准：
 - 用户态 `cat.elf` 通过统一 read/write(fd) 路径跑通（不依赖专用 `FREAD`）。
@@ -117,4 +123,3 @@
 
 保持 v1 方向不变，但明确前置条件：
 - 只有在 syscall/VFS/MM 三者语义收敛后（P0 完成 + D1 初步完成），才进入块设备与缓存层，避免把错误 ABI 带入存储栈导致大规模返工。
-

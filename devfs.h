@@ -4,5 +4,6 @@
 #include "fs.h"
 
 fs_node_t *devfs_init(void);
+fs_node_t *devfs_get_console(void);
 
 #endif

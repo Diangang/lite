@@ -181,7 +181,7 @@ static void shell_execute(void)
         __asm__ volatile(
             "int $0x80"
             :
-            : "a"(SYS_WRITE), "b"(msg), "c"(len)
+            : "a"(SYS_WRITE), "b"(1), "c"(msg), "d"(len)
             : "memory"
         );
         __asm__ volatile(
