@@ -17,7 +17,9 @@ enum {
     SYS_CHDIR = 10,
     SYS_GETCWD = 11,
     SYS_GETDENT = 12,
-    SYS_MKDIR = 13
+    SYS_MKDIR = 13,
+    SYS_EXECVE = 14,
+    SYS_WAITPID = 15
 };
 
 void syscall_init(void);

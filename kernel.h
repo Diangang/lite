@@ -31,5 +31,7 @@ void serial_write(const char* data);
 void write_serial(char a);
 void serial_handler(registers_t* regs);
 void user_mode_launch(void);
+int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_stack, uint32_t** out_dir,
+                             uint32_t* out_base, uint32_t* out_pages, uint32_t* out_stack_base);
 
 #endif

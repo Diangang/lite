@@ -58,6 +58,7 @@ uint32_t task_dump_fd_pid(uint32_t pid, uint32_t fd, char *buf, uint32_t len);
 uint32_t task_dump_cwd_pid(uint32_t pid, char *buf, uint32_t len);
 const char *task_get_cwd(void);
 int task_set_cwd(const char *cwd);
+int task_execve(const char *program, registers_t *regs);
 void task_user_heap_init(uint32_t heap_base, uint32_t stack_base);
 uint32_t task_brk(uint32_t new_end);
 int task_fd_alloc(file_t *file);

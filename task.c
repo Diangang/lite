@@ -10,6 +10,7 @@
 #include "tss.h"
 #include "devfs.h"
 #include "vfs.h"
+#include "kernel.h"
 
 typedef struct task {
     uint32_t id;
@@ -48,6 +49,8 @@ enum {
     TASK_BLOCKED = 2,
     TASK_ZOMBIE = 3
 };
+
+static int task_free_user_page_mapped(uint32_t *dir, uint32_t va_page);
 
 static uint32_t irq_save(void)
 {
@@ -137,6 +140,48 @@ static mm_t *mm_create(void)
     return mm;
 }
 
+static void mm_destroy(mm_t *mm)
+{
+    if (!mm) return;
+    if (!mm->page_directory || mm->page_directory == vmm_get_kernel_directory()) {
+        vma_list_free(mm);
+        kfree(mm);
+        return;
+    }
+
+    vma_t *v = mm->vma_list;
+    while (v) {
+        uint32_t start = v->start & ~0xFFF;
+        uint32_t end = (v->end + 0xFFF) & ~0xFFF;
+        if (end > start) {
+            for (uint32_t va = start; va < end; va += 4096) {
+                task_free_user_page_mapped(mm->page_directory, va);
+            }
+        }
+        v = v->next;
+    }
+
+    uint32_t *kernel_dir = vmm_get_kernel_directory();
+    for (uint32_t i = 0; i < 1024; i++) {
+        uint32_t pde = mm->page_directory[i];
+        if (!(pde & PTE_PRESENT)) continue;
+
+        uint32_t pde_phys = pde & ~0xFFF;
+        uint32_t kernel_pde_phys = 0;
+        if (kernel_dir && (kernel_dir[i] & PTE_PRESENT)) {
+            kernel_pde_phys = kernel_dir[i] & ~0xFFF;
+        }
+        if (kernel_pde_phys && kernel_pde_phys == pde_phys) {
+            continue;
+        }
+        pmm_free_page((void*)pde_phys);
+    }
+
+    pmm_free_page(mm->page_directory);
+    vma_list_free(mm);
+    kfree(mm);
+}
+
 const char *task_get_cwd(void)
 {
     if (!task_current) return NULL;
@@ -150,6 +195,51 @@ int task_set_cwd(const char *cwd)
     if (n >= sizeof(task_current->cwd)) n = sizeof(task_current->cwd) - 1;
     memcpy(task_current->cwd, cwd, n);
     task_current->cwd[n] = 0;
+    return 0;
+}
+
+int task_execve(const char *program, registers_t *regs)
+{
+    if (!program || !*program || !regs) return -1;
+    if (!task_current) return -1;
+    if (!task_current->mm) return -1;
+
+    mm_t *old_mm = task_current->mm;
+    mm_t *new_mm = mm_create();
+    if (!new_mm) return -1;
+    task_current->mm = new_mm;
+
+    uint32_t entry = 0;
+    uint32_t user_stack = 0;
+    uint32_t *user_dir = NULL;
+    uint32_t user_base = 0;
+    uint32_t user_pages = 0;
+    uint32_t user_stack_base = 0;
+    if (kernel_load_user_program(program, &entry, &user_stack, &user_dir,
+                                 &user_base, &user_pages, &user_stack_base) != 0) {
+        task_current->mm = old_mm;
+        mm_destroy(new_mm);
+        return -1;
+    }
+
+    uint32_t i = 0;
+    while (program[i] && i + 1 < sizeof(task_current->program)) {
+        task_current->program[i] = program[i];
+        i++;
+    }
+    task_current->program[i] = 0;
+
+    task_current->mm->page_directory = user_dir;
+    task_current->mm->user_base = user_base;
+    task_current->mm->user_pages = user_pages;
+    task_current->mm->user_stack_base = user_stack_base;
+
+    regs->eax = 0;
+    regs->eip = entry;
+    regs->useresp = user_stack;
+
+    vmm_switch_directory(user_dir);
+    mm_destroy(old_mm);
     return 0;
 }
 
@@ -366,43 +456,7 @@ static void task_free_user_memory(task_t *task)
 {
     if (!task) return;
     if (!task->mm) return;
-    if (!task->mm->page_directory || task->mm->page_directory == vmm_get_kernel_directory()) {
-        kfree(task->mm);
-        task->mm = NULL;
-        return;
-    }
-
-    vma_t *v = task->mm->vma_list;
-    while (v) {
-        uint32_t start = v->start & ~0xFFF;
-        uint32_t end = (v->end + 0xFFF) & ~0xFFF;
-        if (end > start) {
-            for (uint32_t va = start; va < end; va += 4096) {
-                task_free_user_page_mapped(task->mm->page_directory, va);
-            }
-        }
-        v = v->next;
-    }
-
-    uint32_t *kernel_dir = vmm_get_kernel_directory();
-    for (uint32_t i = 0; i < 1024; i++) {
-        uint32_t pde = task->mm->page_directory[i];
-        if (!(pde & PTE_PRESENT)) continue;
-
-        uint32_t pde_phys = pde & ~0xFFF;
-        uint32_t kernel_pde_phys = 0;
-        if (kernel_dir && (kernel_dir[i] & PTE_PRESENT)) {
-            kernel_pde_phys = kernel_dir[i] & ~0xFFF;
-        }
-        if (kernel_pde_phys && kernel_pde_phys == pde_phys) {
-            continue;
-        }
-        pmm_free_page((void*)pde_phys);
-    }
-
-    pmm_free_page(task->mm->page_directory);
-    vma_list_free(task->mm);
-    kfree(task->mm);
+    mm_destroy(task->mm);
     task->mm = NULL;
 }
 

@@ -88,6 +88,20 @@ void syscall_handler(registers_t *regs)
                 return;
             }
         }
+    } else if (regs->eax == SYS_EXECVE) {
+        if (from_user) {
+            if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ebx, 1, 0)) {
+                regs->eax = (uint32_t)-1;
+                return;
+            }
+        }
+    } else if (regs->eax == SYS_WAITPID) {
+        if (from_user) {
+            if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ecx, regs->edx, 1)) {
+                regs->eax = (uint32_t)-1;
+                return;
+            }
+        }
     }
 
     switch (regs->eax) {
@@ -301,6 +315,50 @@ void syscall_handler(registers_t *regs)
                 memcpy((void*)regs->ecx, de, sizeof(struct dirent));
             }
             regs->eax = sizeof(struct dirent);
+            break;
+        }
+        case SYS_EXECVE: {
+            char path[128];
+            if (from_user) {
+                if (copyin_cstr(path, sizeof(path), (const char*)regs->ebx) != 0) {
+                    regs->eax = (uint32_t)-1;
+                    break;
+                }
+            } else {
+                strcpy(path, (const char*)regs->ebx);
+            }
+            regs->eax = (uint32_t)(task_execve(path, regs) == 0 ? 0 : (uint32_t)-1);
+            break;
+        }
+        case SYS_WAITPID: {
+            uint32_t pid = regs->ebx;
+            int code = 0;
+            int reason = 0;
+            uint32_t info0 = 0;
+            uint32_t info1 = 0;
+            if (task_wait(pid, &code, &reason, &info0, &info1) != 0) {
+                regs->eax = (uint32_t)-1;
+                break;
+            }
+            uint32_t out_cap = regs->edx;
+            if (out_cap < 16) {
+                regs->eax = (uint32_t)-1;
+                break;
+            }
+            uint32_t tmp[4];
+            tmp[0] = (uint32_t)code;
+            tmp[1] = (uint32_t)reason;
+            tmp[2] = info0;
+            tmp[3] = info1;
+            if (from_user) {
+                if (vmm_copyout((void*)regs->ecx, tmp, 16) != 0) {
+                    regs->eax = (uint32_t)-1;
+                    break;
+                }
+            } else {
+                memcpy((void*)regs->ecx, tmp, 16);
+            }
+            regs->eax = 0;
             break;
         }
         default:
