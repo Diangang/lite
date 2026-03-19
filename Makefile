@@ -4,28 +4,34 @@ CC = gcc
 AS = as
 LD = ld
 
-CFLAGS = -m32 -ffreestanding -O2 -Wall -Wextra -fno-pie -fno-builtin
-LDFLAGS = -m elf_i386 -T linker.ld -nostdlib
+CFLAGS = -m32 -ffreestanding -O2 -Wall -Wextra -fno-pie -fno-builtin \
+	-Ikernel -Ikernel/lib -Ikernel/arch/x86 -Imm -Ifs -Idrivers -Idrivers/base -Idrivers/input -Idrivers/tty -Idrivers/clock
+LDFLAGS = -m elf_i386 -T kernel/arch/x86/linker.ld -nostdlib
 
-SOURCES_S = boot.s gdt_flush.s idt_flush.s interrupt.s tss_flush.s
-SOURCES_C = kernel.c gdt.c idt.c isr.c keyboard.c shell.c tty.c libc.c timer.c pmm.c vmm.c kheap.c fs.c file.c vfs.c ramfs.c initrd.c task.c syscall.c tss.c procfs.c devfs.c sysfs.c device_model.c
+SOURCES_S = kernel/arch/x86/boot.s kernel/arch/x86/gdt_flush.s kernel/arch/x86/idt_flush.s kernel/arch/x86/interrupt.s kernel/arch/x86/tss_flush.s
+SOURCES_C = kernel/kernel.c kernel/syscall.c kernel/task.c kernel/shell.c \
+	kernel/lib/libc.c \
+	kernel/arch/x86/gdt.c kernel/arch/x86/idt.c kernel/arch/x86/isr.c kernel/arch/x86/tss.c \
+	mm/pmm.c mm/vmm.c mm/kheap.c \
+	fs/fs.c fs/file.c fs/vfs.c fs/ramfs.c fs/initrd.c fs/procfs.c fs/devfs.c fs/sysfs.c \
+	drivers/base/device_model.c drivers/input/keyboard.c drivers/clock/timer.c drivers/tty/tty.c
 OBJECTS = $(SOURCES_S:.s=.o) $(SOURCES_C:.c=.o)
 
 KERNEL = myos.bin
 ISO = myos.iso
 INITRD = initrd.img
 USER_ELF = user.elf
-USER_OBJ = userprog.o
+USER_OBJ = usr/userprog.o
 CAT_ELF = cat.elf
-CAT_OBJ = catprog.o
+CAT_OBJ = usr/catprog.o
 USH_ELF = ush.elf
-USH_OBJ = ushprog.o
+USH_OBJ = usr/ushprog.o
 INIT_ELF = init.elf
-INIT_OBJ = initprog.o
+INIT_OBJ = usr/initprog.o
 MMAP_ELF = mmap.elf
-MMAP_OBJ = mmaptest.o
+MMAP_OBJ = usr/mmaptest.o
 FORK_ELF = fork.elf
-FORK_OBJ = forktest.o
+FORK_OBJ = usr/forktest.o
 USER_ELFS = $(USER_ELF) $(CAT_ELF) $(USH_ELF) $(INIT_ELF) $(MMAP_ELF) $(FORK_ELF)
 
 all: $(KERNEL) $(INITRD)
@@ -52,8 +58,8 @@ iso: $(KERNEL)
 	@echo "qemu-system-i386 -cdrom $(ISO) -curses"
 
 # Create a simple initrd creator tool
-mkinitrd: mkinitrd.c
-	gcc -o mkinitrd mkinitrd.c
+mkinitrd: tools/mkinitrd.c
+	gcc -o mkinitrd tools/mkinitrd.c
 
 initrd.img: mkinitrd $(USER_ELFS)
 	echo "Hello, Lite OS!" > test.txt
@@ -61,41 +67,41 @@ initrd.img: mkinitrd $(USER_ELFS)
 	./mkinitrd test.txt readme.txt $(USER_ELFS)
 	rm -f test.txt readme.txt
 
-$(USER_OBJ): userprog.s
+$(USER_OBJ): usr/userprog.s
 	$(AS) --32 $< -o $@
 
-$(USER_ELF): $(USER_OBJ) userprog.ld
-	$(LD) -m elf_i386 -T userprog.ld -o $@ $<
+$(USER_ELF): $(USER_OBJ) usr/userprog.ld
+	$(LD) -m elf_i386 -T usr/userprog.ld -o $@ $<
 
-$(CAT_OBJ): catprog.s
+$(CAT_OBJ): usr/catprog.s
 	$(AS) --32 $< -o $@
 
-$(CAT_ELF): $(CAT_OBJ) userprog.ld
-	$(LD) -m elf_i386 -T userprog.ld -o $@ $<
+$(CAT_ELF): $(CAT_OBJ) usr/userprog.ld
+	$(LD) -m elf_i386 -T usr/userprog.ld -o $@ $<
 
-$(USH_OBJ): ushprog.s
+$(USH_OBJ): usr/ushprog.s
 	$(AS) --32 $< -o $@
 
-$(USH_ELF): $(USH_OBJ) userprog.ld
-	$(LD) -m elf_i386 -T userprog.ld -o $@ $<
+$(USH_ELF): $(USH_OBJ) usr/userprog.ld
+	$(LD) -m elf_i386 -T usr/userprog.ld -o $@ $<
 
-$(INIT_OBJ): initprog.s
+$(INIT_OBJ): usr/initprog.s
 	$(AS) --32 $< -o $@
 
-$(INIT_ELF): $(INIT_OBJ) userprog.ld
-	$(LD) -m elf_i386 -T userprog.ld -o $@ $<
+$(INIT_ELF): $(INIT_OBJ) usr/userprog.ld
+	$(LD) -m elf_i386 -T usr/userprog.ld -o $@ $<
 
-$(MMAP_OBJ): mmaptest.s
+$(MMAP_OBJ): usr/mmaptest.s
 	$(AS) --32 $< -o $@
 
-$(MMAP_ELF): $(MMAP_OBJ) userprog.ld
-	$(LD) -m elf_i386 -T userprog.ld -o $@ $<
+$(MMAP_ELF): $(MMAP_OBJ) usr/userprog.ld
+	$(LD) -m elf_i386 -T usr/userprog.ld -o $@ $<
 
-$(FORK_OBJ): forktest.s
+$(FORK_OBJ): usr/forktest.s
 	$(AS) --32 $< -o $@
 
-$(FORK_ELF): $(FORK_OBJ) userprog.ld
-	$(LD) -m elf_i386 -T userprog.ld -o $@ $<
+$(FORK_ELF): $(FORK_OBJ) usr/userprog.ld
+	$(LD) -m elf_i386 -T usr/userprog.ld -o $@ $<
 
 run: $(KERNEL) initrd.img
 	qemu-system-i386 -kernel $(KERNEL) -initrd initrd.img -m 512M

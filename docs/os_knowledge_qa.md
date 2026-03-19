@@ -61,6 +61,104 @@ PIC 芯片内部有一个“服务中寄存器 (In-Service Register)”。当它
 此时 EIP 依然是 `0x101234`。如果页表中没有告诉 CPU “虚拟地址 `0x101234` 对应哪个物理地址”，CPU 就会触发缺页异常。由于刚开启分页，环境极其脆弱，这通常会导致死机。
 **解决方法**：在开启分页前，我们在页表中把前几 MB（如 0-4MB）的虚拟地址直接映射到**完全相同**的物理地址上（即 1 对 1 映射，恒等映射）。这样开启分页后，CPU 取下一条指令时，虚拟地址 `0x101234` 会被成功转换为物理地址 `0x101234`，代码得以平滑过渡。
 
+### Q3.3: 用户态进程是“每个都有 4GB 地址空间（用户可用 3GB）”吗？启动时堆/栈/代码段是谁分配的，还是靠缺页？
+**问题背景**：看到用户态地址上界是 `0xC0000000`，想确认每个用户任务的地址空间隔离方式，以及进程启动时各段是否“预先分配”。
+**回答**：
+1.  **地址空间是否独立**：
+    - 当前实现中，每个用户任务在加载/exec 时都会创建自己独立的页目录（CR3 指向不同的 page directory），因此从硬件视角是“每个任务一套 4GB 虚拟地址空间映射”。
+    - 但用户态访问被限制在 `< 0xC0000000`（前 3GB）。`>= 0xC0000000` 视为内核虚拟空间，用户指针校验也按这个边界拒绝访问（例如 [vmm.c](file:///data25/lidg/lite/vmm.c#L321-L349)）。
+2.  **代码段/数据段/BSS 是否预分配**：
+    - 当前加载器会遍历 ELF 的 PT_LOAD 段：先建立 VMA，再为段覆盖的每个 4KB 页直接 `pmm_alloc_page()` 分配物理页并 `vmm_map_page_ex(..., PTE_USER|PTE_PRESENT)` 建立映射，然后把段内容 `memcpy` 到用户虚拟地址中（[kernel.c](file:///data25/lidg/lite/kernel.c#L341-L401)）。
+    - 因此，**当前实现不是纯“按需装载（demand paging）”的 exec**；text/rodata/data/bss 的页在 exec 时就已分配并映射。
+3.  **用户栈是否预分配**：
+    - 当前只分配并映射 1 页用户栈：`user_stack_base = 0xBFFFF000`，初始 `useresp = 0xC0000000`（[kernel.c](file:///data25/lidg/lite/kernel.c#L333-L411)）。
+4.  **用户堆（brk）与 mmap 是否按需分配**：
+    - `brk`/`mmap` 主要是维护 VMA（记录“这段虚拟地址区间允许访问”），通常不立即建立 PTE。
+    - 当用户真正访问该区间时触发 Page Fault，缺页处理会基于 VMA 权限校验通过后才 `pmm_alloc_page()` 并映射（[vmm.c](file:///data25/lidg/lite/vmm.c#L416-L483)、[task.c](file:///data25/lidg/lite/task.c#L352-L377)）。
+    - 因此，**堆与 mmap 区域更接近 Linux 的“按需分配物理页”**，但可执行文件段目前仍是“预分配+拷贝”。
+
+### Q3.4: 对比 Linux 2.6，我们当前的内存管理实现差别在哪里？
+**问题背景**：希望明确 Lite OS 当前的 MM/地址空间/缺页路径与 Linux 2.6 的关键差距。
+**回答**：
+1.  **内核虚拟布局不同**：
+    - Linux 2.6（x86 32 位常见配置）更偏“高半区内核 + 线性映射（lowmem）+ 高端内存（highmem）临时映射”的体系化模型。
+    - 当前实现为了简化，先对 `0~128MB` 做了 supervisor-only 的恒等映射（VA==PA），再在 `0xC0000000` 起构建内核堆映射，属于混合布局（[vmm.c](file:///data25/lidg/lite/vmm.c#L28-L93)、[kheap.c](file:///data25/lidg/lite/kheap.c#L14-L38)）。
+2.  **exec/ELF 装载方式不同（最关键）**：
+    - Linux 2.6 主要通过 **file-backed VMA + page cache** 实现按需装载：访问到某个 text/data 页才触发缺页，从页缓存回填并映射；写时再 COW。
+    - 当前实现缺少 page cache/file-backed VMA，因此对 PT_LOAD 段采用“预分配物理页 + memcpy 拷贝段内容”的方式完成装载（[kernel.c](file:///data25/lidg/lite/kernel.c#L341-L401)）。
+3.  **缺页处理路径复杂度不同**：
+    - Linux 2.6 的缺页会区分匿名页/文件页、共享/私有、swap、回收、readahead、rmap 等，并与内存回收系统强耦合。
+    - 当前缺页主要做 VMA 权限校验 + 分配物理页映射（以及 present fault 修正、COW resolve），功能更聚焦也更易理解（[vmm.c](file:///data25/lidg/lite/vmm.c#L416-L515)）。
+4.  **物理内存管理能力不同**：
+    - Linux 2.6 有 buddy/zone、水位线、kswapd、页回收以及 slab/slub 等。
+    - 当前是 bitmap + refcount 的最小页分配器，尚无回收/换页体系（[pmm.c](file:///data25/lidg/lite/pmm.c#L42-L180)）。
+
+### Q3.5: `.text/.rodata/.data/.bss/堆/栈` 这些“段/区”到底是什么？在当前系统里对应哪些真实地址？
+**问题背景**：想把“段”的概念落到可观测的实际内存布局上，而不是停留在泛泛定义。
+**回答**：
+需要区分三层：**ELF 的 section（链接组织）**、**ELF 的 PT_LOAD 段（装载单位）**、以及 **运行时的虚拟内存区域（堆/栈）**。
+
+1.  **内核镜像的 `.text/.rodata/.data/.bss`（链接脚本决定的布局）**：
+    - 内核链接基址固定为 `0x00100000`（1MB），并按顺序布局 `.text → .rodata → .data → .bss`（见 [linker.ld](file:///data25/lidg/lite/linker.ld#L10-L54)）。
+    - `.text`：内核代码与 `.multiboot` 头；CPU 取指执行的就是这段内容（见 [linker.ld](file:///data25/lidg/lite/linker.ld#L18-L23)）。
+    - `.rodata`：只读常量数据（字符串、只读表等），语义上只读，但当前页表未对其强制只读（见 [vmm.c](file:///data25/lidg/lite/vmm.c#L28-L77) 的恒等映射属性）。
+    - `.data`：带初值的全局/静态变量，文件中携带初始内容，装载后即可直接使用。
+    - `.bss`：未初始化的全局/静态变量，装载时需要清零；同时 `boot.s` 的 `.bootstrap_stack` 也被链接进 `.bss`（见 [boot.s](file:///data25/lidg/lite/boot.s#L22-L28)、[linker.ld](file:///data25/lidg/lite/linker.ld#L44-L53)）。
+    - `end`：链接脚本导出的内核末尾符号，PMM 用它把 bitmap/refcount 放到内核与模块之后（见 [pmm.c](file:///data25/lidg/lite/pmm.c#L40-L84)）。
+
+2.  **用户进程的 `.text/.rodata/.data/.bss`（由 userprog.ld + loader 决定）**：
+    - 用户程序链接基址固定为 `0x00400000`（见 [userprog.ld](file:///data25/lidg/lite/userprog.ld#L1-L28)），因此 `.text` 通常从 0x400000 开始，随后是 `.rodata/.data/.bss` 按页对齐向上增长。
+    - 当前 loader 不靠 section 装载，而是遍历 ELF 的 `PT_LOAD`（`p_type==1`）段；对每个段逐页分配物理页并映射到 `p_vaddr`，然后 `memset(p_memsz)` 清零、`memcpy(p_filesz)` 回填文件内容（见 [kernel.c](file:///data25/lidg/lite/kernel.c#L292-L401)）。
+    - bss 之所以“文件里没数据但内存里有空间”，就是 `p_memsz > p_filesz`：清零覆盖了 bss 的语义。
+
+3.  **堆与栈（运行时区域，不是 ELF 固定 section）**：
+    - **用户栈**：当前固定分配 1 页，基址 `0xBFFFF000`，初始 `useresp=0xC0000000`（见 [kernel.c](file:///data25/lidg/lite/kernel.c#L333-L411)）。
+    - **用户堆（brk）**：基址 `heap_base=user_end`；`brk()` 主要更新 VMA 记录，物理页在触发缺页后按需分配并映射（见 [task.c](file:///data25/lidg/lite/task.c#L1090-L1136)、[vmm.c](file:///data25/lidg/lite/vmm.c#L416-L483)）。
+    - **内核堆**：虚拟起点 `0xC0000000`，按需扩展时从 PMM 取物理页并映射到高地址（见 [kheap.h](file:///data25/lidg/lite/kheap.h#L7-L11)、[kheap.c](file:///data25/lidg/lite/kheap.c#L14-L38)）。
+    - **内核栈**：boot 阶段使用 `.bootstrap_stack`；tasking 后每个 task 有独立 4KB kernel stack，并在调度切换时更新 `tss.esp0`（见 [task.c](file:///data25/lidg/lite/task.c#L631-L669)、[task.c](file:///data25/lidg/lite/task.c#L860-L892)）。
+
+### Q3.6: ELF 是什么？Section Header 和 Program Header 有什么区别？我们当前 loader 依赖哪些字段？
+**问题背景**：希望从“能装载并运行用户程序”的视角理解 ELF 的对象模型，而不是只记住它是“可执行文件格式”。
+**回答**：
+ELF 有两套视角：**Section（链接视角）** 与 **Program Header（装载视角）**。操作系统在装载可执行文件时通常只依赖 Program Header。
+
+1.  **ELF Header（文件头）解决什么问题**：
+    - 识别文件是否为 ELF（魔数 `0x7F 'E' 'L' 'F'`）、位宽/端序、目标架构、入口地址 `e_entry`、以及段表位置 `e_phoff/e_phnum`。
+    - 当前内核会检查：32-bit、小端、x86、`ET_EXEC`、段表范围合法、入口落在可装载段范围内（见 [kernel.c](file:///data25/lidg/lite/kernel.c#L260-L322)）。
+
+2.  **Program Header（段表，PT_LOAD）是 loader 的核心**：
+    - 每个 `PT_LOAD` 条目描述“文件的某个区间 `p_offset..p_offset+p_filesz` 要装载到虚拟地址 `p_vaddr..p_vaddr+p_memsz`”，并携带权限 `p_flags`（R/W/X）。
+    - bss 的语义来自 `p_memsz > p_filesz`：多出来的内存部分需要清零。
+    - 当前 loader 对每个 PT_LOAD 段会：建立 VMA、逐页分配物理页并映射到 `p_vaddr`，再 `memset(p_memsz)` 清零并 `memcpy(p_filesz)` 回填；随后对不可写段按页设置只读（见 [kernel.c](file:///data25/lidg/lite/kernel.c#L324-L401)）。
+
+3.  **Section Header（节表）在当前实现中不参与装载**：
+    - `.text/.rodata/.data/.bss/.symtab/.rel.*` 等是链接器/调试器使用的组织结构；一个或多个 section 最终会被链接器组合到若干个 `PT_LOAD` 段里。
+    - 当前实现不使用 `e_shoff/e_shnum`，也不支持重定位/动态链接/符号解析；用户程序通过 [userprog.ld](file:///data25/lidg/lite/userprog.ld#L1-L28) 固定链接到 `0x400000` 并丢弃 `.note*`，以降低 loader 复杂度。
+
+### Q3.7: brk 到底是什么？它是不是进程内存分配器？和 malloc 有什么关系？
+**问题背景**：想区分 `brk/sbrk`、堆（heap）与 `malloc/free` 的职责边界，并理解当前 Lite OS 的 brk 语义是“预分配”还是“缺页按需分配”。
+**回答**：
+1.  **brk 的本质：调整 program break（堆上界），不是“分配器”**：
+    - `brk()` 是内核提供的系统调用语义，用来把进程的 **program break**（传统上对应 data/bss 之后的“堆末端”）向上推进或（在 Linux 中）向下收缩。
+    - 它不负责把一大块内存拆成小块，也没有 `free(ptr)` 这种“按块回收”的语义。
+
+2.  **malloc 的本质：用户态分配器，负责块管理**：
+    - `malloc/free` 是用户态运行库（libc）实现的内存分配器：维护空闲块、分裂/合并、碎片管理等。
+    - `malloc` 需要“向内核要更大的地址空间”时，传统上会用 `sbrk/brk` 扩展连续堆；也常用 `mmap` 为大块分配直接拿一段新映射。
+
+3.  **当前 Lite OS 的 brk 初始化与实现路径**：
+    - 用户程序加载完成后，loader 计算 `heap_base=user_end`，并调用 `task_user_heap_init(heap_base, user_stack_base)` 初始化 `mm->heap_base/mm->heap_brk`，同时建立一个 heap VMA（初始 `start=end=heap_base`）（见 [kernel.c](file:///data25/lidg/lite/kernel.c#L333-L371)、[task.c](file:///data25/lidg/lite/task.c#L1090-L1104)）。
+    - syscall `SYS_BRK` 最终调用 `task_brk(new_end)`：主要做边界检查（不能越过 `0xC0000000`、不能撞到用户栈等）并更新 `mm->heap_brk` 与 heap VMA 的 `end`（见 [task.c](file:///data25/lidg/lite/task.c#L1106-L1136)）。
+
+4.  **物理页分配发生在什么时候（关键语义）**：
+    - `brk` 在当前实现中只扩展 VMA/元数据，**不会立即 `pmm_alloc_page()`**。
+    - 当用户真正访问新扩展区域时触发 Page Fault，缺页处理基于 VMA 权限校验通过后才分配物理页并映射（见 [vmm.c](file:///data25/lidg/lite/vmm.c#L416-L483)）。
+    - 因此：**brk 更像“声明/扩大可用的虚拟地址区间”，物理内存是按需消耗的**。
+
+5.  **与 mmap 的关系（为什么 malloc 通常同时用 brk+mmap）**：
+    - `brk` 适合把一个连续的 heap 区往上推；`mmap` 适合离散的匿名映射。
+    - 当前实现中 `mmap(addr=0)` 的选址会从 `align_up(heap_brk)`（或 `0x400000`）开始找空洞，从而与 heap 互相避让（见 [task.c](file:///data25/lidg/lite/task.c#L560-L576)、[task.c](file:///data25/lidg/lite/task.c#L352-L377)）。
+
 ---
 
 ## 4. QEMU 与串口调试 (Serial Port)
