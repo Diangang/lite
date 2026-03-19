@@ -135,13 +135,15 @@ v4 说明：在 v3 基线之上，结合最新实现（ramfs 根、用户态 she
   - 权限与身份（uid/gid/mode/umask）最小闭环
 - 验收：
   - procfs/sysfs/ramfs/initrd/devfs 全部走统一 VFS 打开实例语义。
+  - 用户态 `ush` 的 `ls` 使用 `getdents` 批量遍历目录项并能正常输出。
+  - 权限最小闭环：mkdir/open/read/write/chdir 会进行 uid/gid/mode/umask 权限判断；chmod 受 owner/root 限制。
   - 反复打开/遍历/关闭不会造成内核堆持续增长（可用 `/proc/meminfo` 观测）。
 
 ---
 
 ## 6. Phase E：设备模型（非网络）
 
-目标：形成 device/driver/bus 的最小框架，为 block/tty/clock 等设备统一管理与可观测铺路。
+目标：形成 kobject/device/driver/bus 的最小框架，为 block/tty/clock 等设备统一管理与可观测铺路。
 
 - 验收：
   - `/sys/devices` 可以反映设备树（console、ramdisk、后续 block 设备）。

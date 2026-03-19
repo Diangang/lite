@@ -148,6 +148,9 @@ fs_node_t *sysfs_init(void)
     sys_root.flags = FS_DIRECTORY;
     sys_root.readdir = &sys_readdir;
     sys_root.finddir = &sys_finddir;
+    sys_root.uid = 0;
+    sys_root.gid = 0;
+    sys_root.mask = 0555;
 
     memset(&sys_kernel, 0, sizeof(sys_kernel));
     strcpy(sys_kernel.name, "kernel");
@@ -155,6 +158,9 @@ fs_node_t *sysfs_init(void)
     sys_kernel.inode = 1;
     sys_kernel.readdir = &sys_kernel_readdir;
     sys_kernel.finddir = &sys_kernel_finddir;
+    sys_kernel.uid = 0;
+    sys_kernel.gid = 0;
+    sys_kernel.mask = 0555;
 
     memset(&sys_devices, 0, sizeof(sys_devices));
     strcpy(sys_devices.name, "devices");
@@ -162,6 +168,9 @@ fs_node_t *sysfs_init(void)
     sys_devices.inode = 2;
     sys_devices.readdir = &sys_devices_readdir;
     sys_devices.finddir = &sys_devices_finddir;
+    sys_devices.uid = 0;
+    sys_devices.gid = 0;
+    sys_devices.mask = 0555;
 
     memset(&sys_kernel_version, 0, sizeof(sys_kernel_version));
     strcpy(sys_kernel_version.name, "version");
@@ -169,6 +178,9 @@ fs_node_t *sysfs_init(void)
     sys_kernel_version.inode = 3;
     sys_kernel_version.length = 64;
     sys_kernel_version.read = &sys_read_kernel_version;
+    sys_kernel_version.uid = 0;
+    sys_kernel_version.gid = 0;
+    sys_kernel_version.mask = 0444;
 
     memset(&sys_kernel_uptime, 0, sizeof(sys_kernel_uptime));
     strcpy(sys_kernel_uptime.name, "uptime");
@@ -176,6 +188,9 @@ fs_node_t *sysfs_init(void)
     sys_kernel_uptime.inode = 4;
     sys_kernel_uptime.length = 64;
     sys_kernel_uptime.read = &sys_read_kernel_uptime;
+    sys_kernel_uptime.uid = 0;
+    sys_kernel_uptime.gid = 0;
+    sys_kernel_uptime.mask = 0444;
 
     memset(&sys_devices_console, 0, sizeof(sys_devices_console));
     strcpy(sys_devices_console.name, "console");
@@ -183,6 +198,9 @@ fs_node_t *sysfs_init(void)
     sys_devices_console.inode = 5;
     sys_devices_console.length = 32;
     sys_devices_console.read = &sys_read_devices_console;
+    sys_devices_console.uid = 0;
+    sys_devices_console.gid = 0;
+    sys_devices_console.mask = 0444;
 
     memset(&sys_devices_initrd, 0, sizeof(sys_devices_initrd));
     strcpy(sys_devices_initrd.name, "initrd");
@@ -190,6 +208,9 @@ fs_node_t *sysfs_init(void)
     sys_devices_initrd.inode = 6;
     sys_devices_initrd.length = 32;
     sys_devices_initrd.read = &sys_read_devices_initrd;
+    sys_devices_initrd.uid = 0;
+    sys_devices_initrd.gid = 0;
+    sys_devices_initrd.mask = 0444;
 
     return &sys_root;
 }

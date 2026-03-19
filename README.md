@@ -59,6 +59,8 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `/sys/kernel/version`、`/sys/kernel/uptime`、`/sys/devices/*`。
 - **VFS（对象化进行中）**：
   - 已引入最小 VFS 层（mount 表 + super_block/inode/dentry/file 结构雏形），并用 mount 表驱动 `/` 下的挂载点展示与路径解析。
+  - inode/dentry 引入简单缓存与引用计数，避免重复创建对象。
+  - 目录遍历接口支持 getdents 语义，权限模型引入 uid/gid/mode/umask 最小闭环。
 - **交互式 Shell**：
   - 内置极简内核态 Shell，支持 `help`, `clear`, `info`, `echo`, `uptime`, `meminfo`, `alloc`, `vmmtest`, `heaptest`, `ls`, `cat`, `demo`, `yield`, `sleep`, `ps`, `syscall`, `run`, `user` 等命令（demo 默认关闭）。
   - 支持 `cd`/`pwd` 与相对路径；cwd 为 per-task；`ls` 默认列出当前目录；支持 `mkdir`/`touch`/`writefile` 在 ramfs 上创建与写入。
@@ -70,7 +72,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - fork 测试中出现两次 `Page Fault handled` 属于父子写时复制的正常表现。
   - 用户态 `ush` 支持 `run <file>`，行为等价于 `exec`（替换当前 shell 进程）。
   - 启动后默认运行 `init.elf`（PID1），由 init 负责拉起用户态 shell。
-  - 用户态 `ush` 支持输入回显与退格显示。
+  - 用户态 `ush` 支持输入回显与退格显示；`ls` 使用 `getdents` 批量遍历目录项。
   - Shell 以独立内核任务运行，中断回调仅负责字符入队，避免在中断上下文执行命令。
   - `ps` 可显示 `BLOCKED` 状态，用于识别等待中的任务（例如 `task_wait`）。
 - **系统调用 (int 0x80)**：
@@ -78,7 +80,8 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `SYS_WRITE/SYS_READ` 在内核侧通过 `copyin/copyout` 分段拷贝访问用户缓冲区。
   - `SYS_READ/SYS_WRITE` 提供最小 `read(fd,...)` / `write(fd,...)` 风格接口（fd=0/1/2 绑定 `/dev/console`），fdtable 为 per-task，fd 持有 file 对象与 offset。
   - `SYS_OPEN/SYS_CLOSE` 提供最小路径打开与关闭能力（路径解析基于 VFS mount 表）。
-  - `SYS_CHDIR/SYS_GETCWD/SYS_GETDENT/SYS_MKDIR` 支持用户态 shell 做路径切换、目录遍历与创建目录。
+  - `SYS_CHDIR/SYS_GETCWD/SYS_GETDENT/SYS_GETDENTS/SYS_MKDIR` 支持用户态 shell 做路径切换、目录遍历与创建目录。
+  - `SYS_GETUID/SYS_GETGID/SYS_UMASK/SYS_CHMOD` 提供最小权限与掩码接口。
   - `SYS_EXECVE` 支持在用户态替换当前进程映像（最小 exec）。
   - `SYS_WAITPID` 支持用户态等待子进程退出并获取退出信息。
   - `SYS_IOCTL` 提供最小设备控制入口（`/dev/console` 支持获取/设置 tty flags）。

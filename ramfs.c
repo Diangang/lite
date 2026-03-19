@@ -1,6 +1,7 @@
 #include "ramfs.h"
 #include "kheap.h"
 #include "libc.h"
+#include "task.h"
 
 typedef struct ramfs_node {
     uint32_t magic;
@@ -16,6 +17,12 @@ enum { RAMFS_MAGIC = 0x52414D46 };
 
 static uint32_t ramfs_next_inode = 0x9000;
 static struct dirent ramfs_dirent;
+
+static uint32_t ramfs_apply_umask(uint32_t mode)
+{
+    uint32_t mask = task_get_umask();
+    return mode & (~mask) & 0777;
+}
 
 static ramfs_node_t *ramfs_get(fs_node_t *n)
 {
@@ -135,16 +142,20 @@ fs_node_t *ramfs_create_child(fs_node_t *dir, const char *name, uint32_t type)
     rn->node.name[name_len] = 0;
     rn->node.inode = ramfs_next_inode++;
     rn->node.impl = (uint32_t)(uintptr_t)rn;
+    rn->node.uid = task_get_uid();
+    rn->node.gid = task_get_gid();
 
     if (type == FS_DIRECTORY) {
         rn->node.flags = FS_DIRECTORY;
         rn->node.readdir = &ramfs_readdir;
         rn->node.finddir = &ramfs_finddir;
+        rn->node.mask = ramfs_apply_umask(0777);
     } else {
         rn->node.flags = FS_FILE;
         rn->node.read = &ramfs_read;
         rn->node.write = &ramfs_write;
         rn->node.length = 0;
+        rn->node.mask = ramfs_apply_umask(0666);
     }
     return &rn->node;
 }
@@ -168,5 +179,8 @@ fs_node_t *ramfs_init(void)
     rn->node.impl = (uint32_t)(uintptr_t)rn;
     rn->node.readdir = &ramfs_readdir;
     rn->node.finddir = &ramfs_finddir;
+    rn->node.uid = 0;
+    rn->node.gid = 0;
+    rn->node.mask = 0755;
     return &rn->node;
 }

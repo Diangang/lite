@@ -24,7 +24,12 @@ enum {
     SYS_KILL = 17,
     SYS_MMAP = 18,
     SYS_MUNMAP = 19,
-    SYS_FORK = 20
+    SYS_FORK = 20,
+    SYS_GETDENTS = 21,
+    SYS_UMASK = 22,
+    SYS_CHMOD = 23,
+    SYS_GETUID = 24,
+    SYS_GETGID = 25
 };
 
 void syscall_init(void);

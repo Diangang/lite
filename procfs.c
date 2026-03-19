@@ -377,6 +377,9 @@ static fs_node_t *proc_get_pid_dir(uint32_t pid)
             e->dir.readdir = &proc_pid_readdir;
             e->dir.finddir = &proc_pid_finddir;
             e->dir.impl = i;
+            e->dir.uid = 0;
+            e->dir.gid = 0;
+            e->dir.mask = 0555;
 
             memset(&e->maps, 0, sizeof(e->maps));
             strcpy(e->maps.name, "maps");
@@ -385,6 +388,9 @@ static fs_node_t *proc_get_pid_dir(uint32_t pid)
             e->maps.length = 2048;
             e->maps.read = &proc_read_pid_maps;
             e->maps.impl = pid;
+            e->maps.uid = 0;
+            e->maps.gid = 0;
+            e->maps.mask = 0444;
 
             memset(&e->stat, 0, sizeof(e->stat));
             strcpy(e->stat.name, "stat");
@@ -393,6 +399,9 @@ static fs_node_t *proc_get_pid_dir(uint32_t pid)
             e->stat.length = 256;
             e->stat.read = &proc_read_pid_stat;
             e->stat.impl = pid;
+            e->stat.uid = 0;
+            e->stat.gid = 0;
+            e->stat.mask = 0444;
 
             memset(&e->cmdline, 0, sizeof(e->cmdline));
             strcpy(e->cmdline.name, "cmdline");
@@ -401,6 +410,9 @@ static fs_node_t *proc_get_pid_dir(uint32_t pid)
             e->cmdline.length = 256;
             e->cmdline.read = &proc_read_pid_cmdline;
             e->cmdline.impl = pid;
+            e->cmdline.uid = 0;
+            e->cmdline.gid = 0;
+            e->cmdline.mask = 0444;
 
             memset(&e->status, 0, sizeof(e->status));
             strcpy(e->status.name, "status");
@@ -409,6 +421,9 @@ static fs_node_t *proc_get_pid_dir(uint32_t pid)
             e->status.length = 256;
             e->status.read = &proc_read_pid_status;
             e->status.impl = pid;
+            e->status.uid = 0;
+            e->status.gid = 0;
+            e->status.mask = 0444;
 
             memset(&e->cwd, 0, sizeof(e->cwd));
             strcpy(e->cwd.name, "cwd");
@@ -417,6 +432,9 @@ static fs_node_t *proc_get_pid_dir(uint32_t pid)
             e->cwd.length = 256;
             e->cwd.read = &proc_read_pid_cwd;
             e->cwd.impl = pid;
+            e->cwd.uid = 0;
+            e->cwd.gid = 0;
+            e->cwd.mask = 0444;
 
             memset(&e->fd_dir, 0, sizeof(e->fd_dir));
             strcpy(e->fd_dir.name, "fd");
@@ -511,6 +529,9 @@ fs_node_t *procfs_init(void)
     proc_root.flags = FS_DIRECTORY;
     proc_root.readdir = &proc_readdir;
     proc_root.finddir = &proc_finddir;
+    proc_root.uid = 0;
+    proc_root.gid = 0;
+    proc_root.mask = 0555;
 
     memset(&proc_tasks, 0, sizeof(proc_tasks));
     strcpy(proc_tasks.name, "tasks");
@@ -518,6 +539,9 @@ fs_node_t *procfs_init(void)
     proc_tasks.inode = 1;
     proc_tasks.length = 4096;
     proc_tasks.read = &proc_read_tasks;
+    proc_tasks.uid = 0;
+    proc_tasks.gid = 0;
+    proc_tasks.mask = 0444;
 
     memset(&proc_sched, 0, sizeof(proc_sched));
     strcpy(proc_sched.name, "sched");
@@ -525,6 +549,9 @@ fs_node_t *procfs_init(void)
     proc_sched.inode = 2;
     proc_sched.length = 1024;
     proc_sched.read = &proc_read_sched;
+    proc_sched.uid = 0;
+    proc_sched.gid = 0;
+    proc_sched.mask = 0444;
 
     memset(&proc_irq, 0, sizeof(proc_irq));
     strcpy(proc_irq.name, "irq");
@@ -532,6 +559,9 @@ fs_node_t *procfs_init(void)
     proc_irq.inode = 3;
     proc_irq.length = 1024;
     proc_irq.read = &proc_read_irq;
+    proc_irq.uid = 0;
+    proc_irq.gid = 0;
+    proc_irq.mask = 0444;
 
     memset(&proc_maps, 0, sizeof(proc_maps));
     strcpy(proc_maps.name, "maps");
@@ -539,6 +569,9 @@ fs_node_t *procfs_init(void)
     proc_maps.inode = 4;
     proc_maps.length = 2048;
     proc_maps.read = &proc_read_maps;
+    proc_maps.uid = 0;
+    proc_maps.gid = 0;
+    proc_maps.mask = 0444;
 
     memset(&proc_meminfo, 0, sizeof(proc_meminfo));
     strcpy(proc_meminfo.name, "meminfo");
@@ -546,6 +579,9 @@ fs_node_t *procfs_init(void)
     proc_meminfo.inode = 5;
     proc_meminfo.length = 256;
     proc_meminfo.read = &proc_read_meminfo;
+    proc_meminfo.uid = 0;
+    proc_meminfo.gid = 0;
+    proc_meminfo.mask = 0444;
 
     memset(&proc_cow, 0, sizeof(proc_cow));
     strcpy(proc_cow.name, "cow");
@@ -553,6 +589,9 @@ fs_node_t *procfs_init(void)
     proc_cow.inode = 6;
     proc_cow.length = 128;
     proc_cow.read = &proc_read_cow;
+    proc_cow.uid = 0;
+    proc_cow.gid = 0;
+    proc_cow.mask = 0444;
 
     return &proc_root;
 }

@@ -84,7 +84,11 @@ fs_node_t *init_initrd(uint32_t location)
     }
 
     strcpy(initrd_root->name, "initrd");
-    initrd_root->mask = initrd_root->uid = initrd_root->gid = initrd_root->inode = initrd_root->length = 0;
+    initrd_root->mask = 0555;
+    initrd_root->uid = 0;
+    initrd_root->gid = 0;
+    initrd_root->inode = 0;
+    initrd_root->length = 0;
     initrd_root->flags = FS_DIRECTORY;
     initrd_root->read = 0;
     initrd_root->write = 0;
@@ -105,7 +109,9 @@ fs_node_t *init_initrd(uint32_t location)
     for (int i = 0; i < nroot_nodes; i++) {
         file_headers[i].offset += location; /* Adjust offset to be absolute */
         strcpy(root_nodes[i].name, file_headers[i].name);
-        root_nodes[i].mask = root_nodes[i].uid = root_nodes[i].gid = 0;
+        root_nodes[i].mask = 0444;
+        root_nodes[i].uid = 0;
+        root_nodes[i].gid = 0;
         root_nodes[i].length = file_headers[i].length;
         root_nodes[i].inode = i;
         root_nodes[i].flags = FS_FILE;

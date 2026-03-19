@@ -65,6 +65,9 @@ fs_node_t *devfs_init(void)
     dev_root.flags = FS_DIRECTORY;
     dev_root.readdir = &dev_readdir;
     dev_root.finddir = &dev_finddir;
+    dev_root.uid = 0;
+    dev_root.gid = 0;
+    dev_root.mask = 0555;
 
     memset(&dev_console, 0, sizeof(dev_console));
     strcpy(dev_console.name, "console");
@@ -74,6 +77,9 @@ fs_node_t *devfs_init(void)
     dev_console.read = &dev_console_read;
     dev_console.write = &dev_console_write;
     dev_console.ioctl = &dev_console_ioctl;
+    dev_console.uid = 0;
+    dev_console.gid = 0;
+    dev_console.mask = 0666;
 
     return &dev_root;
 }

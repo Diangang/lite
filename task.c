@@ -27,6 +27,9 @@ typedef struct task {
     uint32_t exit_info1;
     char program[32];
     char cwd[128];
+    uint32_t uid;
+    uint32_t gid;
+    uint32_t umask;
     task_fd_t fds[TASK_FD_MAX];
     void *waitq;
     struct task *wait_next;
@@ -484,8 +487,20 @@ int task_fork(registers_t *regs)
         memcpy(task->cwd, task_current->cwd, n);
         task->cwd[n] = 0;
     }
+    if (task_current) {
+        task->uid = task_current->uid;
+        task->gid = task_current->gid;
+        task->umask = task_current->umask;
+    } else {
+        task->uid = 0;
+        task->gid = 0;
+        task->umask = 022;
+    }
     task_fdtable_init(task);
     task_fdtable_clone(task, task_current);
+    task->uid = task_current->uid;
+    task->gid = task_current->gid;
+    task->umask = task_current->umask;
     task->waitq = NULL;
     task->wait_next = NULL;
 
@@ -637,6 +652,9 @@ void tasking_init(void)
     task->exit_info1 = 0;
     task->program[0] = 0;
     task->cwd[0] = 0;
+    task->uid = 0;
+    task->gid = 0;
+    task->umask = 022;
     task_fdtable_init(task);
     task->waitq = NULL;
     task->wait_next = NULL;
@@ -1121,6 +1139,32 @@ uint32_t task_get_current_id(void)
 {
     if (!task_current) return 0;
     return task_current->id;
+}
+
+uint32_t task_get_uid(void)
+{
+    if (!task_current) return 0;
+    return task_current->uid;
+}
+
+uint32_t task_get_gid(void)
+{
+    if (!task_current) return 0;
+    return task_current->gid;
+}
+
+uint32_t task_get_umask(void)
+{
+    if (!task_current) return 022;
+    return task_current->umask;
+}
+
+uint32_t task_set_umask(uint32_t mask)
+{
+    if (!task_current) return 022;
+    uint32_t old = task_current->umask;
+    task_current->umask = mask & 0777;
+    return old;
 }
 
 uint32_t task_get_switch_count(void)

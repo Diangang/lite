@@ -6,6 +6,7 @@
 #include "fs.h"
 #include "file.h"
 #include "vfs.h"
+#include "kheap.h"
 
 static int copyin_cstr(char *dst, uint32_t dst_len, const char *src_user)
 {
@@ -20,6 +21,13 @@ static int copyin_cstr(char *dst, uint32_t dst_len, const char *src_user)
     dst[dst_len - 1] = 0;
     return 0;
 }
+
+struct linux_dirent {
+    uint32_t d_ino;
+    uint32_t d_off;
+    uint16_t d_reclen;
+    char d_name[0];
+};
 
 void syscall_init(void)
 {
@@ -74,6 +82,13 @@ void syscall_handler(registers_t *regs)
                 return;
             }
         }
+    } else if (regs->eax == SYS_GETDENTS) {
+        if (from_user) {
+            if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ecx, regs->edx, 1)) {
+                regs->eax = (uint32_t)-1;
+                return;
+            }
+        }
     } else if (regs->eax == SYS_CHDIR) {
         if (from_user) {
             if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ebx, 1, 0)) {
@@ -89,6 +104,13 @@ void syscall_handler(registers_t *regs)
             }
         }
     } else if (regs->eax == SYS_EXECVE) {
+        if (from_user) {
+            if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ebx, 1, 0)) {
+                regs->eax = (uint32_t)-1;
+                return;
+            }
+        }
+    } else if (regs->eax == SYS_CHMOD) {
         if (from_user) {
             if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ebx, 1, 0)) {
                 regs->eax = (uint32_t)-1;
@@ -304,6 +326,10 @@ void syscall_handler(registers_t *regs)
                 regs->eax = (uint32_t)-1;
                 break;
             }
+            if (!vfs_check_access(d->file->node, 1, 0, 1)) {
+                regs->eax = (uint32_t)-1;
+                break;
+            }
 
             struct dirent *de = readdir_fs(d->file->node, d->file->vf->pos);
             if (!de) {
@@ -326,6 +352,66 @@ void syscall_handler(registers_t *regs)
                 memcpy((void*)regs->ecx, de, sizeof(struct dirent));
             }
             regs->eax = sizeof(struct dirent);
+            break;
+        }
+        case SYS_GETDENTS: {
+            int fd = (int)regs->ebx;
+            task_fd_t *d = task_fd_get(fd);
+            if (!d || !d->file || !d->file->node || !d->file->vf) {
+                regs->eax = (uint32_t)-1;
+                break;
+            }
+            if ((d->file->node->flags & 0x7) != FS_DIRECTORY) {
+                regs->eax = (uint32_t)-1;
+                break;
+            }
+            if (!vfs_check_access(d->file->node, 1, 0, 1)) {
+                regs->eax = (uint32_t)-1;
+                break;
+            }
+            uint32_t out_cap = regs->edx;
+            if (out_cap < 16) {
+                regs->eax = (uint32_t)-1;
+                break;
+            }
+            char *out = (char*)kmalloc(out_cap);
+            if (!out) {
+                regs->eax = (uint32_t)-1;
+                break;
+            }
+            uint32_t off = 0;
+            while (off + 12 <= out_cap) {
+                struct dirent *de = readdir_fs(d->file->node, d->file->vf->pos);
+                if (!de) break;
+                uint32_t name_len = (uint32_t)strlen(de->name);
+                uint32_t reclen = 10 + name_len + 1;
+                reclen = (reclen + 3) & ~3;
+                if (off + reclen > out_cap) break;
+                struct linux_dirent *lde = (struct linux_dirent*)(out + off);
+                lde->d_ino = de->ino;
+                lde->d_off = d->file->vf->pos + 1;
+                lde->d_reclen = (uint16_t)reclen;
+                memcpy(lde->d_name, de->name, name_len);
+                lde->d_name[name_len] = 0;
+                off += reclen;
+                d->file->vf->pos++;
+            }
+            if (off == 0) {
+                kfree(out);
+                regs->eax = 0;
+                break;
+            }
+            if (from_user) {
+                if (vmm_copyout((void*)regs->ecx, out, off) != 0) {
+                    kfree(out);
+                    regs->eax = (uint32_t)-1;
+                    break;
+                }
+            } else {
+                memcpy((void*)regs->ecx, out, off);
+            }
+            kfree(out);
+            regs->eax = off;
             break;
         }
         case SYS_EXECVE: {
@@ -408,6 +494,29 @@ void syscall_handler(registers_t *regs)
             regs->eax = (uint32_t)task_fork(regs);
             break;
         }
+        case SYS_UMASK: {
+            regs->eax = task_set_umask(regs->ebx);
+            break;
+        }
+        case SYS_CHMOD: {
+            char path[128];
+            if (from_user) {
+                if (copyin_cstr(path, sizeof(path), (const char*)regs->ebx) != 0) {
+                    regs->eax = (uint32_t)-1;
+                    break;
+                }
+            } else {
+                strcpy(path, (const char*)regs->ebx);
+            }
+            regs->eax = (uint32_t)(vfs_chmod(path, regs->ecx) == 0 ? 0 : (uint32_t)-1);
+            break;
+        }
+        case SYS_GETUID:
+            regs->eax = task_get_uid();
+            break;
+        case SYS_GETGID:
+            regs->eax = task_get_gid();
+            break;
         default:
             regs->eax = (uint32_t)-1;
             break;

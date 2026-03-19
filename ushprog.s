@@ -9,6 +9,7 @@
 .equ SYS_CHDIR, 10
 .equ SYS_GETCWD, 11
 .equ SYS_GETDENT, 12
+.equ SYS_GETDENTS, 21
 .equ SYS_MKDIR, 13
 .equ SYS_EXECVE, 14
 
@@ -195,19 +196,27 @@ ls_have:
 
 ls_loop:
     mov %esi, %ebx
-    mov $dent, %ecx
-    mov $132, %edx
-    mov $SYS_GETDENT, %eax
+    mov $dirbuf, %ecx
+    mov $256, %edx
+    mov $SYS_GETDENTS, %eax
     int $0x80
     cmp $0, %eax
     je ls_close
     cmp $0xFFFFFFFF, %eax
     je ls_close
-    mov $1, %ebx
-    lea dent, %ecx
-    mov $128, %edx
+    mov %eax, %edi
+    xor %ebp, %ebp
+ls_entry:
+    cmp %edi, %ebp
+    jae ls_loop
+    mov $dirbuf, %ecx
+    add %ebp, %ecx
+    movzwl 8(%ecx), %eax
+    lea 10(%ecx), %ecx
+    push %eax
     call cstr_len
     mov %eax, %edx
+    mov $1, %ebx
     mov $SYS_WRITE, %eax
     int $0x80
     mov $1, %ebx
@@ -215,7 +224,9 @@ ls_loop:
     mov $1, %edx
     mov $SYS_WRITE, %eax
     int $0x80
-    jmp ls_loop
+    pop %eax
+    add %eax, %ebp
+    jmp ls_entry
 
 ls_close:
     mov %esi, %ebx
@@ -421,7 +432,7 @@ chbuf:
     .space 1
 cwd_buf:
     .space 128
-dent:
-    .space 132
+dirbuf:
+    .space 256
 iobuf:
     .space 256

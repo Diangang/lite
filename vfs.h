@@ -8,23 +8,28 @@ typedef struct vfs_super_block {
     const char *name;
     fs_node_t *root;
     void *fs_private;
+    uint32_t refcount;
 } vfs_super_block_t;
 
 typedef struct vfs_inode {
     fs_node_t *node;
     uint32_t mode;
+    uint32_t refcount;
 } vfs_inode_t;
 
 typedef struct vfs_dentry {
     const char *name;
     struct vfs_dentry *parent;
     vfs_inode_t *inode;
+    uint32_t refcount;
+    void *cache;
 } vfs_dentry_t;
 
 typedef struct vfs_file {
     vfs_dentry_t *dentry;
     uint32_t pos;
     uint32_t flags;
+    uint32_t refcount;
 } vfs_file_t;
 
 typedef struct vfs_mount {
@@ -43,6 +48,8 @@ int vfs_chdir(const char *path);
 const char *vfs_getcwd(void);
 int vfs_mkdir(const char *path);
 fs_node_t *vfs_resolve(const char *path);
+int vfs_chmod(const char *path, uint32_t mode);
+int vfs_check_access(fs_node_t *node, int want_read, int want_write, int want_exec);
 vfs_file_t *vfs_open(const char *path, uint32_t flags);
 vfs_file_t *vfs_open_node(fs_node_t *node, uint32_t flags);
 uint32_t vfs_read(vfs_file_t *f, uint8_t *buf, uint32_t len);
