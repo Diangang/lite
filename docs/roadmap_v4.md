@@ -37,6 +37,7 @@ v4 说明：在 v3 基线之上，结合最新实现（ramfs 根、用户态 she
 - **对象模型优先**：process/mm、file/vfs、device/driver、tty、block 是长期主干；任何功能必须挂在对象模型上。
 - **ABI 收敛优先**：syscall、ioctl、/proc、/sys 的接口一旦暴露，尽量避免频繁破坏式改动。
 - **可观测性必须前置**：每个阶段都要能用 `/proc` `/sys` 看见关键状态，避免“黑箱调试”。
+- 参考：当前实现对齐 Linux 2.6 子系统的梳理与后续规划见 [linux26_minimal_plan.md](./linux26_minimal_plan.md)。
 
 ---
 
