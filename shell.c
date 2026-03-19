@@ -9,35 +9,14 @@
 #include "fs.h"
 #include "file.h"
 #include "vfs.h"
+#include "tty.h"
 
 #define CMD_BUF_SIZE 256
-#define INPUT_BUF_SIZE 256
 
 static char cmd_buffer[CMD_BUF_SIZE];
 static int cmd_index = 0;
-static char input_buffer[INPUT_BUF_SIZE];
-static uint32_t input_head = 0;
-static uint32_t input_tail = 0;
-static uint32_t input_count = 0;
 static int foreground_is_user = 0;
-static wait_queue_t input_waitq;
-static uint32_t tty_flags = 0x3;
-static char tty_linebuf[256];
-static uint32_t tty_line_len = 0;
-static uint32_t tty_line_pos = 0;
 static uint32_t foreground_pid = 0;
-
-static uint32_t irq_save(void)
-{
-    uint32_t flags;
-    __asm__ volatile("pushf; pop %0; cli" : "=r"(flags) :: "memory");
-    return flags;
-}
-
-static void irq_restore(uint32_t flags)
-{
-    __asm__ volatile("push %0; popf" :: "r"(flags) : "memory", "cc");
-}
 
 static void shell_prompt(void)
 {
@@ -46,19 +25,10 @@ static void shell_prompt(void)
 
 static char shell_getchar_blocking(void)
 {
-    for (;;) {
-        uint32_t flags = irq_save();
-        if (input_count > 0) {
-            char c = input_buffer[input_tail];
-            input_tail = (input_tail + 1) % INPUT_BUF_SIZE;
-            input_count--;
-            irq_restore(flags);
-            return c;
-        }
-        wait_queue_block_locked(&input_waitq);
-        irq_restore(flags);
-        task_yield();
+    char c = 0;
+    while (tty_read_blocking(&c, 1) == 0) {
     }
+    return c;
 }
 
 static void shell_execute(void)
@@ -378,72 +348,58 @@ static void shell_execute(void)
 void shell_init(void)
 {
     cmd_index = 0;
-    input_head = input_tail = input_count = 0;
     foreground_is_user = 0;
-    wait_queue_init(&input_waitq);
+    foreground_pid = 0;
+    tty_init();
+    tty_set_user_exit_hook(shell_on_user_exit);
+    tty_set_flags(0);
 }
 
 void shell_set_foreground(int is_user)
 {
     foreground_is_user = is_user ? 1 : 0;
     cmd_index = 0;
-    input_head = input_tail = input_count = 0;
-    tty_line_len = 0;
-    tty_line_pos = 0;
     if (!foreground_is_user) {
         foreground_pid = 0;
+        tty_set_foreground_pid(0);
+        tty_set_flags(0);
+    } else {
+        tty_set_foreground_pid(foreground_pid);
+        tty_set_flags(TTY_FLAG_ECHO | TTY_FLAG_CANON);
     }
 }
 
 void shell_process_char(char c)
 {
-    if (c == '\r') {
-        c = '\n';
-    }
-    uint32_t flags = irq_save();
-    if (input_count < INPUT_BUF_SIZE) {
-        input_buffer[input_head] = c;
-        input_head = (input_head + 1) % INPUT_BUF_SIZE;
-        input_count++;
-        wait_queue_wake_all(&input_waitq);
-    }
-    irq_restore(flags);
+    tty_receive_char(c);
 }
 
 uint32_t shell_read(char *buf, uint32_t len)
 {
-    if (!buf || len == 0) return 0;
-    uint32_t read = 0;
-    uint32_t flags = irq_save();
-    while (read < len && input_count > 0) {
-        buf[read++] = input_buffer[input_tail];
-        input_tail = (input_tail + 1) % INPUT_BUF_SIZE;
-        input_count--;
-    }
-    irq_restore(flags);
-    return read;
+    (void)buf;
+    (void)len;
+    return 0;
 }
 
 uint32_t shell_read_blocking(char *buf, uint32_t len)
 {
-    return shell_tty_read_blocking(buf, len);
+    return tty_read_blocking(buf, len);
 }
 
 uint32_t shell_tty_get_flags(void)
 {
-    return tty_flags;
+    return tty_get_flags();
 }
 
 void shell_tty_set_flags(uint32_t flags)
 {
-    tty_flags = flags;
-    tty_line_len = 0;
-    tty_line_pos = 0;
+    tty_set_flags(flags);
 }
 
 void shell_set_foreground_pid(uint32_t pid)
 {
     foreground_pid = pid;
+    tty_set_foreground_pid(pid);
     shell_set_foreground(pid ? 1 : 0);
 }
 
@@ -454,74 +410,7 @@ uint32_t shell_get_foreground_pid(void)
 
 uint32_t shell_tty_read_blocking(char *buf, uint32_t len)
 {
-    if (!buf || len == 0) return 0;
-    uint32_t read = 0;
-    for (;;) {
-        if (tty_flags & 0x2) {
-            if (tty_line_pos < tty_line_len) {
-                while (read < len && tty_line_pos < tty_line_len) {
-                    buf[read++] = tty_linebuf[tty_line_pos++];
-                }
-                if (tty_line_pos >= tty_line_len) {
-                    tty_line_len = 0;
-                    tty_line_pos = 0;
-                }
-                return read;
-            }
-            tty_line_len = 0;
-            tty_line_pos = 0;
-            for (;;) {
-                char c = shell_getchar_blocking();
-                if (c == 0x03) {
-                    if (foreground_pid != 0) {
-                        task_kill(foreground_pid, SIGINT);
-                        foreground_pid = 0;
-                        shell_on_user_exit();
-                    }
-                    terminal_writestring("^C\n");
-                    return 0;
-                }
-                if (c == '\r') c = '\n';
-                if (c == '\n') {
-                    if (tty_line_len + 1 < sizeof(tty_linebuf)) {
-                        tty_linebuf[tty_line_len++] = c;
-                    }
-                    if (tty_flags & 0x1) terminal_putchar('\n');
-                    break;
-                }
-                if (c == '\b' || c == 0x7F) {
-                    if (tty_line_len > 0) {
-                        tty_line_len--;
-                        if (tty_flags & 0x1) {
-                            terminal_putchar('\b');
-                            terminal_putchar(' ');
-                            terminal_putchar('\b');
-                        }
-                    }
-                    continue;
-                }
-                if (tty_line_len + 1 < sizeof(tty_linebuf)) {
-                    tty_linebuf[tty_line_len++] = c;
-                    if (tty_flags & 0x1) terminal_putchar(c);
-                }
-            }
-        } else {
-            char c = shell_getchar_blocking();
-            if (c == 0x03) {
-                if (foreground_pid != 0) {
-                    task_kill(foreground_pid, SIGINT);
-                    foreground_pid = 0;
-                    shell_on_user_exit();
-                }
-                terminal_writestring("^C\n");
-                return 0;
-            }
-            if (c == '\r') c = '\n';
-            buf[read++] = c;
-            if (tty_flags & 0x1) terminal_putchar(c);
-            if (read > 0) return read;
-        }
-    }
+    return tty_read_blocking(buf, len);
 }
 
 void shell_on_user_exit(void)

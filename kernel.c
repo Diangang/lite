@@ -20,6 +20,28 @@
 #include "vfs.h"
 #include "ramfs.h"
 #include "device_model.h"
+#include "tty.h"
+
+static void init_driver(device_driver_t *drv, const char *name, bus_type_t *bus, int (*probe)(device_t *))
+{
+    if (!drv) return;
+    memset(drv, 0, sizeof(*drv));
+    if (name) {
+        uint32_t n = (uint32_t)strlen(name);
+        if (n >= sizeof(drv->kobj.name)) n = sizeof(drv->kobj.name) - 1;
+        memcpy(drv->kobj.name, name, n);
+        drv->kobj.name[n] = 0;
+    }
+    drv->kobj.refcount = 1;
+    drv->bus = bus;
+    drv->probe = probe;
+}
+
+static int probe_nop(device_t *dev)
+{
+    (void)dev;
+    return 0;
+}
 
 /* Check if the compiler thinks we are targeting the wrong operating system. */
 
@@ -70,7 +92,7 @@ void serial_handler(registers_t *regs) {
         char c = inb(0x3f8);
         /* Echo back is handled by shell */
         /* Pass to shell */
-        shell_process_char(c);
+        tty_receive_char(c);
     }
 }
 
@@ -613,6 +635,15 @@ void kernel_main(multiboot_info_t* mbi, uint32_t magic)
                     fs_node_t *ram_root = ramfs_init();
                     if (platform) {
                         device_register_simple("ramfs", "memfs", platform, ram_root);
+                        static device_driver_t drv_console;
+                        static device_driver_t drv_initrd;
+                        static device_driver_t drv_memfs;
+                        init_driver(&drv_console, "console", platform, probe_nop);
+                        init_driver(&drv_initrd, "initrd", platform, probe_nop);
+                        init_driver(&drv_memfs, "memfs", platform, probe_nop);
+                        driver_register(&drv_console);
+                        driver_register(&drv_initrd);
+                        driver_register(&drv_memfs);
                     }
                     vfs_init();
                     vfs_mount_root("/", ram_root);

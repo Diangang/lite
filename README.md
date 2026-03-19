@@ -55,9 +55,10 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `/proc/<pid>/fd/<n>`：fd 指向的节点名（`cat proc/1/fd/0`）。
 - **devfs（最小设备节点）**：
   - `/dev/console`：控制台设备（字符设备），用于 stdin/stdout 类 I/O（可通过 `open dev/console` + `read` 读取），支持最小 tty 行规程（回显/规范模式）。
+  - `/dev/tty`：当前前台终端的最小别名（当前等价于 `/dev/console`）。
 - **sysfs（最小自描述接口）**：
   - `/sys/kernel/version`、`/sys/kernel/uptime`。
-  - `/sys/devices/<dev>/{type,bus,driver}`：设备模型最小视图（目前默认注册 console/initrd/ramfs）。
+  - `/sys/devices/<dev>/{type,bus,driver}`：设备模型最小视图（目前默认注册 console/initrd/ramfs 并自动绑定同名 driver）。
 - **VFS（对象化进行中）**：
   - 已引入最小 VFS 层（mount 表 + super_block/inode/dentry/file 结构雏形），并用 mount 表驱动 `/` 下的挂载点展示与路径解析。
   - inode/dentry 引入简单缓存与引用计数，避免重复创建对象。

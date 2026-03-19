@@ -77,6 +77,7 @@ v4 说明：在 v3 基线之上，结合最新实现（ramfs 根、用户态 she
 - 验收：
   - QEMU 启动后默认进入用户态 init 输出，然后进入 shell。
   - PID1 存活时，用户态程序崩溃不会带崩内核。
+  - init 采用 fork+wait 作为最小 reaper，shell 退出后可重启。
 
 ---
 
