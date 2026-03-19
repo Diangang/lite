@@ -19,6 +19,7 @@
 #include "fs.h"
 #include "vfs.h"
 #include "ramfs.h"
+#include "device_model.h"
 
 /* Check if the compiler thinks we are targeting the wrong operating system. */
 
@@ -602,8 +603,17 @@ void kernel_main(multiboot_info_t* mbi, uint32_t magic)
                 if (fs_root) {
                     fs_node_t *proc_root = procfs_init();
                     fs_node_t *dev_root = devfs_init();
+                    device_model_init();
+                    bus_type_t *platform = device_model_platform_bus();
+                    if (platform) {
+                        device_register_simple("console", "console", platform, devfs_get_console());
+                        device_register_simple("initrd", "initrd", platform, fs_root);
+                    }
                     fs_node_t *sys_root = sysfs_init();
                     fs_node_t *ram_root = ramfs_init();
+                    if (platform) {
+                        device_register_simple("ramfs", "memfs", platform, ram_root);
+                    }
                     vfs_init();
                     vfs_mount_root("/", ram_root);
                     vfs_mount_root("/initrd", fs_root);

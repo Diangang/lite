@@ -148,6 +148,7 @@ v4 说明：在 v3 基线之上，结合最新实现（ramfs 根、用户态 she
 - 验收：
   - `/sys/devices` 可以反映设备树（console、ramdisk、后续 block 设备）。
   - 设备 probe/bind/unbind 有最小框架（可以先静态注册）。
+  - 每个设备目录至少包含 `type/bus/driver` 三个属性文件用于调试观测。
 
 ---
 
