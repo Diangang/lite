@@ -1,6 +1,6 @@
 #include "timer.h"
 #include "isr.h"
-#include "kernel.h" /* For outb */
+#include "kernel.h"
 
 /*
  * The PIT (Programmable Interval Timer) has an internal clock running at 1193180 Hz.
@@ -12,10 +12,11 @@ static uint32_t tick = 0;
 static uint32_t current_frequency = 0;
 
 /* Timer Interrupt Handler (IRQ0) */
-static void timer_callback(registers_t *regs)
+static struct registers *timer_callback(struct registers *regs)
 {
     (void)regs;
     tick++;
+    return regs;
 }
 
 void init_timer(uint32_t frequency)

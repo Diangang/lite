@@ -7,15 +7,16 @@
 #include "pmm.h"
 #include "shell.h"
 #include "syscall.h"
-#include "tss.h"
+#include "gdt.h"
 #include "devfs.h"
 #include "vfs.h"
 #include "kernel.h"
+#include "console.h"
 
 typedef struct task {
     uint32_t id;
     uint32_t parent_id;
-    registers_t *regs;
+    struct registers *regs;
     uint32_t *stack;
     uint32_t wake_tick;
     int state;
@@ -234,11 +235,11 @@ static mm_t *mm_clone_cow(mm_t *src)
     return mm;
 }
 
-static registers_t *task_clone_regs(uint32_t *stack, registers_t *regs)
+static struct registers *task_clone_regs(uint32_t *stack, struct registers *regs)
 {
     if (!stack || !regs) return NULL;
     uint32_t stack_top = (uint32_t)stack + 4096;
-    registers_t *dst = (registers_t*)(stack_top - sizeof(registers_t));
+    struct registers *dst = (struct registers*)(stack_top - sizeof(struct registers));
     memcpy(dst, regs, sizeof(*regs));
     dst->esp = stack_top;
     dst->ebp = 0;
@@ -304,7 +305,7 @@ int task_set_cwd(const char *cwd)
     return 0;
 }
 
-int task_execve(const char *program, registers_t *regs)
+int task_execve(const char *program, struct registers *regs)
 {
     if (!program || !*program || !regs) return -1;
     if (!task_current) return -1;
@@ -341,6 +342,16 @@ int task_execve(const char *program, registers_t *regs)
     task_current->mm->user_stack_base = user_stack_base;
 
     regs->eax = 0;
+    regs->ebx = 0;
+    regs->ecx = 0;
+    regs->edx = 0;
+    regs->esi = 0;
+    regs->edi = 0;
+    regs->ebp = 0;
+    regs->ds = 0x23;
+    regs->cs = 0x1B;
+    regs->ss = 0x23;
+    regs->eflags = 0x202;
     regs->eip = entry;
     regs->useresp = user_stack;
 
@@ -443,7 +454,7 @@ int task_munmap(uint32_t addr, uint32_t length)
     return 0;
 }
 
-int task_fork(registers_t *regs)
+int task_fork(struct registers *regs)
 {
     if (!task_current || !task_current->mm || !regs) return -1;
     task_t *task = (task_t*)kmalloc(sizeof(task_t));
@@ -608,10 +619,10 @@ void task_user_vma_add(uint32_t start, uint32_t end, uint32_t flags)
     vma_add(task_current->mm, start, end, flags);
 }
 
-static registers_t *task_build_regs(uint32_t *stack, void (*entry)(void))
+static struct registers *task_build_regs(uint32_t *stack, void (*entry)(void))
 {
     uint32_t stack_top = (uint32_t)stack + 4096;
-    registers_t *regs = (registers_t*)(stack_top - sizeof(registers_t));
+    struct registers *regs = (struct registers*)(stack_top - sizeof(struct registers));
 
     memset(regs, 0, sizeof(*regs));
     regs->ds = 0x10;
@@ -634,8 +645,7 @@ void tasking_init(void)
     uint32_t *stack = (uint32_t*)kmalloc(4096);
 
     if (!task || !stack) {
-        printf("TASK: Failed to initialize tasking.\n");
-        for(;;);
+        panic("TASK: Failed to initialize tasking.");
     }
 
     task->id = 0;
@@ -686,10 +696,8 @@ static int task_create_internal(void (*entry)(void), const char *program)
     task_t *task = (task_t*)kmalloc(sizeof(task_t));
     uint32_t *stack = (uint32_t*)kmalloc(4096);
 
-    if (!task || !stack) {
-        printf("TASK: Failed to create task.\n");
-        return -1;
-    }
+    if (!task || !stack)
+        return printf("TASK: Failed to create task.\n"), -1;
 
     task->id = next_task_id++;
     task->parent_id = task_current ? task_current->id : 0;
@@ -814,7 +822,9 @@ void wait_queue_block_locked(wait_queue_t *q)
 
 void wait_queue_wake_all(wait_queue_t *q)
 {
-    if (!q) return;
+    if (!q)
+        return;
+
     uint32_t flags = irq_save();
     task_t *t = (task_t*)q->head;
     q->head = NULL;
@@ -822,9 +832,8 @@ void wait_queue_wake_all(wait_queue_t *q)
         task_t *next = t->wait_next;
         t->wait_next = NULL;
         t->waitq = NULL;
-        if (t->state == TASK_BLOCKED) {
+        if (t->state == TASK_BLOCKED)
             t->state = TASK_RUNNABLE;
-        }
         t = next;
     }
     irq_restore(flags);
@@ -857,7 +866,7 @@ void task_tick(void)
     }
 }
 
-registers_t *task_schedule(registers_t *regs)
+struct registers *task_schedule(struct registers *regs)
 {
     if (!task_current) return regs;
 
@@ -1009,6 +1018,7 @@ void task_exit_with_reason(int code, int reason, uint32_t info0, uint32_t info1)
     task_current->state = TASK_ZOMBIE;
     wait_queue_wake_all(&exit_waitq);
     task_yield();
+    panic(NULL);
 }
 
 int task_wait(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0, uint32_t *out_info1)
@@ -1139,6 +1149,19 @@ uint32_t task_get_current_id(void)
 {
     if (!task_current) return 0;
     return task_current->id;
+}
+
+int task_current_is_user(void)
+{
+    if (!task_current) return 0;
+    return task_current->mm != NULL;
+}
+
+int task_should_resched(void)
+{
+    if (!task_current) return 0;
+    if (task_current->state != TASK_RUNNABLE) return 1;
+    return need_resched != 0;
 }
 
 uint32_t task_get_uid(void)
@@ -1431,7 +1454,7 @@ uint32_t task_dump_fd_pid(uint32_t pid, uint32_t fd, char *buf, uint32_t len)
     return off;
 }
 
-int task_fd_alloc(file_t *file)
+int task_fd_alloc(struct file *file)
 {
     if (!task_current || !file) return -1;
     for (int i = 3; i < TASK_FD_MAX; i++) {
@@ -1464,7 +1487,7 @@ int task_fd_close(int fd)
     return 0;
 }
 
-void task_install_stdio(fs_node_t *console)
+void task_install_stdio(struct fs_node *console)
 {
     if (!task_current) return;
     if (!console) return;
@@ -1481,12 +1504,10 @@ void task_install_stdio(fs_node_t *console)
 
 void task_list(void)
 {
-    if (!task_head) {
-        terminal_writestring("No tasks.\n");
-        return;
-    }
+    if (!task_head)
+        return (void)printf("No tasks.\n");
 
-    terminal_writestring("ID   STATE     WAKE    CURRENT\n");
+    printf("ID   STATE     WAKE    CURRENT\n");
     task_t *task = task_head;
     do {
         const char *state = "RUNNABLE";

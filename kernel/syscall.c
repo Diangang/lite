@@ -8,6 +8,20 @@
 #include "vfs.h"
 #include "kheap.h"
 
+static inline uint32_t irq_save(void)
+{
+    uint32_t flags;
+    __asm__ volatile("pushf; pop %0; cli" : "=r"(flags) :: "memory");
+    return flags;
+}
+
+static inline void irq_restore(uint32_t flags)
+{
+    __asm__ volatile("push %0; popf" :: "r"(flags) : "memory", "cc");
+}
+
+#define SYSCALL_RETURN() do { irq_restore(irq_flags); return regs; } while (0)
+
 static int copyin_cstr(char *dst, uint32_t dst_len, const char *src_user)
 {
     if (!dst || dst_len == 0) return -1;
@@ -34,36 +48,37 @@ void syscall_init(void)
     register_interrupt_handler(128, syscall_handler);
 }
 
-void syscall_handler(registers_t *regs)
+struct registers *syscall_handler(struct registers *regs)
 {
+    uint32_t irq_flags = irq_save();
     int from_user = (regs->cs & 0x3) == 0x3;
     if (regs->eax == SYS_WRITE) {
         if (regs->edx > 4096) {
             regs->eax = (uint32_t)-1;
-            return;
+            SYSCALL_RETURN();
         }
         if (from_user) {
             if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ecx, regs->edx, 0)) {
                 regs->eax = (uint32_t)-1;
-                return;
+                SYSCALL_RETURN();
             }
         }
     } else if (regs->eax == SYS_READ) {
         if (regs->edx > 4096) {
             regs->eax = (uint32_t)-1;
-            return;
+            SYSCALL_RETURN();
         }
         if (from_user) {
             if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ecx, regs->edx, 1)) {
                 regs->eax = (uint32_t)-1;
-                return;
+                SYSCALL_RETURN();
             }
         }
     } else if (regs->eax == SYS_OPEN) {
         if (from_user) {
             if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ebx, 1, 0)) {
                 regs->eax = (uint32_t)-1;
-                return;
+                SYSCALL_RETURN();
             }
         }
     } else if (regs->eax == SYS_CLOSE) {
@@ -72,63 +87,63 @@ void syscall_handler(registers_t *regs)
         if (from_user) {
             if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ebx, regs->ecx, 1)) {
                 regs->eax = (uint32_t)-1;
-                return;
+                SYSCALL_RETURN();
             }
         }
     } else if (regs->eax == SYS_GETDENT) {
         if (from_user) {
             if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ecx, regs->edx, 1)) {
                 regs->eax = (uint32_t)-1;
-                return;
+                SYSCALL_RETURN();
             }
         }
     } else if (regs->eax == SYS_GETDENTS) {
         if (from_user) {
             if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ecx, regs->edx, 1)) {
                 regs->eax = (uint32_t)-1;
-                return;
+                SYSCALL_RETURN();
             }
         }
     } else if (regs->eax == SYS_CHDIR) {
         if (from_user) {
             if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ebx, 1, 0)) {
                 regs->eax = (uint32_t)-1;
-                return;
+                SYSCALL_RETURN();
             }
         }
     } else if (regs->eax == SYS_MKDIR) {
         if (from_user) {
             if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ebx, 1, 0)) {
                 regs->eax = (uint32_t)-1;
-                return;
+                SYSCALL_RETURN();
             }
         }
     } else if (regs->eax == SYS_EXECVE) {
         if (from_user) {
             if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ebx, 1, 0)) {
                 regs->eax = (uint32_t)-1;
-                return;
+                SYSCALL_RETURN();
             }
         }
     } else if (regs->eax == SYS_CHMOD) {
         if (from_user) {
             if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ebx, 1, 0)) {
                 regs->eax = (uint32_t)-1;
-                return;
+                SYSCALL_RETURN();
             }
         }
     } else if (regs->eax == SYS_WAITPID) {
         if (from_user) {
             if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ecx, regs->edx, 1)) {
                 regs->eax = (uint32_t)-1;
-                return;
+                SYSCALL_RETURN();
             }
         }
     } else if (regs->eax == SYS_IOCTL) {
         if (from_user && regs->edx != 0) {
             if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->edx, 4, 1)) {
                 regs->eax = (uint32_t)-1;
-                return;
+                SYSCALL_RETURN();
             }
         }
     } else if (regs->eax == SYS_KILL) {
@@ -157,7 +172,7 @@ void syscall_handler(registers_t *regs)
                 if (from_user) {
                     if (vmm_copyin(tmp, (void*)(regs->ecx + off), chunk) != 0) {
                         regs->eax = (uint32_t)-1;
-                        return;
+                        SYSCALL_RETURN();
                     }
                 } else {
                     memcpy(tmp, (void*)(regs->ecx + off), chunk);
@@ -183,6 +198,8 @@ void syscall_handler(registers_t *regs)
         case SYS_EXIT:
             if (from_user) {
                 task_exit_with_status((int)regs->ebx);
+                struct registers *task_schedule(struct registers *r);
+                regs = task_schedule(regs);
             } else {
                 task_exit();
             }
@@ -210,7 +227,7 @@ void syscall_handler(registers_t *regs)
                 if (from_user) {
                     if (vmm_copyout((void*)(regs->ecx + off), tmp, n) != 0) {
                         regs->eax = (uint32_t)-1;
-                        return;
+                        SYSCALL_RETURN();
                     }
                 } else {
                     memcpy((void*)(regs->ecx + off), tmp, n);
@@ -240,7 +257,7 @@ void syscall_handler(registers_t *regs)
                 break;
             }
             uint32_t flags = regs->ecx;
-            file_t *f = file_open_path(name, flags);
+            struct file *f = file_open_path(name, flags);
             if (!f) {
                 regs->eax = (uint32_t)-1;
                 break;
@@ -521,4 +538,6 @@ void syscall_handler(registers_t *regs)
             regs->eax = (uint32_t)-1;
             break;
     }
+    irq_restore(irq_flags);
+    return regs;
 }

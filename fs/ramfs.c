@@ -10,7 +10,7 @@ typedef struct ramfs_node {
     struct ramfs_node *next;
     uint8_t *data;
     uint32_t cap;
-    fs_node_t node;
+    struct fs_node node;
 } ramfs_node_t;
 
 enum { RAMFS_MAGIC = 0x52414D46 };
@@ -24,7 +24,7 @@ static uint32_t ramfs_apply_umask(uint32_t mode)
     return mode & (~mask) & 0777;
 }
 
-static ramfs_node_t *ramfs_get(fs_node_t *n)
+static ramfs_node_t *ramfs_get(struct fs_node *n)
 {
     if (!n) return NULL;
     ramfs_node_t *rn = (ramfs_node_t*)(uintptr_t)n->impl;
@@ -32,7 +32,7 @@ static ramfs_node_t *ramfs_get(fs_node_t *n)
     return rn;
 }
 
-static uint32_t ramfs_read(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t ramfs_read(struct fs_node *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     ramfs_node_t *rn = ramfs_get(node);
     if (!rn || !buffer || size == 0) return 0;
@@ -44,7 +44,7 @@ static uint32_t ramfs_read(fs_node_t *node, uint32_t offset, uint32_t size, uint
     return size;
 }
 
-static uint32_t ramfs_write(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t ramfs_write(struct fs_node *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     ramfs_node_t *rn = ramfs_get(node);
     if (!rn || !buffer || size == 0) return 0;
@@ -80,7 +80,7 @@ static uint32_t ramfs_write(fs_node_t *node, uint32_t offset, uint32_t size, uin
     return size;
 }
 
-static struct dirent *ramfs_readdir(fs_node_t *node, uint32_t index)
+static struct dirent *ramfs_readdir(struct fs_node *node, uint32_t index)
 {
     ramfs_node_t *rn = ramfs_get(node);
     if (!rn) return NULL;
@@ -96,7 +96,7 @@ static struct dirent *ramfs_readdir(fs_node_t *node, uint32_t index)
     return &ramfs_dirent;
 }
 
-static fs_node_t *ramfs_finddir(fs_node_t *node, char *name)
+static struct fs_node *ramfs_finddir(struct fs_node *node, char *name)
 {
     ramfs_node_t *rn = ramfs_get(node);
     if (!rn || !name) return NULL;
@@ -116,7 +116,7 @@ static int ramfs_valid_name(const char *name)
     return 1;
 }
 
-fs_node_t *ramfs_create_child(fs_node_t *dir, const char *name, uint32_t type)
+struct fs_node *ramfs_create_child(struct fs_node *dir, const char *name, uint32_t type)
 {
     if (!dir || !name) return NULL;
     if (!ramfs_valid_name(name)) return NULL;
@@ -160,7 +160,7 @@ fs_node_t *ramfs_create_child(fs_node_t *dir, const char *name, uint32_t type)
     return &rn->node;
 }
 
-fs_node_t *ramfs_init(void)
+struct fs_node *ramfs_init(void)
 {
     ramfs_node_t *rn = (ramfs_node_t*)kmalloc(sizeof(ramfs_node_t));
     if (!rn) return NULL;

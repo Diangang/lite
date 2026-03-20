@@ -8,25 +8,25 @@
 #include "vmm.h"
 
 static struct dirent proc_dirent;
-static fs_node_t proc_root;
-static fs_node_t proc_tasks;
-static fs_node_t proc_sched;
-static fs_node_t proc_irq;
-static fs_node_t proc_maps;
-static fs_node_t proc_meminfo;
-static fs_node_t proc_cow;
+static struct fs_node proc_root;
+static struct fs_node proc_tasks;
+static struct fs_node proc_sched;
+static struct fs_node proc_irq;
+static struct fs_node proc_maps;
+static struct fs_node proc_meminfo;
+static struct fs_node proc_cow;
 
 typedef struct {
     int used;
     uint32_t pid;
-    fs_node_t dir;
-    fs_node_t maps;
-    fs_node_t stat;
-    fs_node_t cmdline;
-    fs_node_t status;
-    fs_node_t cwd;
-    fs_node_t fd_dir;
-    fs_node_t fd_files[TASK_FD_MAX];
+    struct fs_node dir;
+    struct fs_node maps;
+    struct fs_node stat;
+    struct fs_node cmdline;
+    struct fs_node status;
+    struct fs_node cwd;
+    struct fs_node fd_dir;
+    struct fs_node fd_files[TASK_FD_MAX];
     struct dirent dirent;
 } proc_pid_entry_t;
 
@@ -52,7 +52,7 @@ static void buf_append_u32(char *buf, uint32_t *off, uint32_t cap, uint32_t v)
     buf_append(buf, off, cap, tmp);
 }
 
-static uint32_t proc_read_tasks(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t proc_read_tasks(struct fs_node *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
     static char tmp[4096];
@@ -64,7 +64,7 @@ static uint32_t proc_read_tasks(fs_node_t *node, uint32_t offset, uint32_t size,
     return size;
 }
 
-static uint32_t proc_read_sched(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t proc_read_sched(struct fs_node *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
     static char tmp[1024];
@@ -86,7 +86,7 @@ static uint32_t proc_read_sched(fs_node_t *node, uint32_t offset, uint32_t size,
     return size;
 }
 
-static uint32_t proc_read_irq(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t proc_read_irq(struct fs_node *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
     static char tmp[1024];
@@ -107,7 +107,7 @@ static uint32_t proc_read_irq(fs_node_t *node, uint32_t offset, uint32_t size, u
     return size;
 }
 
-static uint32_t proc_read_maps(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t proc_read_maps(struct fs_node *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
     static char tmp[2048];
@@ -119,7 +119,7 @@ static uint32_t proc_read_maps(fs_node_t *node, uint32_t offset, uint32_t size, 
     return size;
 }
 
-static uint32_t proc_read_meminfo(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t proc_read_meminfo(struct fs_node *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
     static char tmp[256];
@@ -139,7 +139,7 @@ static uint32_t proc_read_meminfo(fs_node_t *node, uint32_t offset, uint32_t siz
     return size;
 }
 
-static uint32_t proc_read_cow(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t proc_read_cow(struct fs_node *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
     static char tmp[128];
@@ -160,7 +160,7 @@ static uint32_t proc_read_cow(fs_node_t *node, uint32_t offset, uint32_t size, u
     return size;
 }
 
-static uint32_t proc_read_pid_stat(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t proc_read_pid_stat(struct fs_node *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!node) return 0;
     static char tmp[256];
@@ -174,7 +174,7 @@ static uint32_t proc_read_pid_stat(fs_node_t *node, uint32_t offset, uint32_t si
     return size;
 }
 
-static uint32_t proc_read_pid_cmdline(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t proc_read_pid_cmdline(struct fs_node *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!node) return 0;
     static char tmp[256];
@@ -187,7 +187,7 @@ static uint32_t proc_read_pid_cmdline(fs_node_t *node, uint32_t offset, uint32_t
     return size;
 }
 
-static uint32_t proc_read_pid_status(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t proc_read_pid_status(struct fs_node *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!node) return 0;
     static char tmp[256];
@@ -200,7 +200,7 @@ static uint32_t proc_read_pid_status(fs_node_t *node, uint32_t offset, uint32_t 
     return size;
 }
 
-static uint32_t proc_read_pid_cwd(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t proc_read_pid_cwd(struct fs_node *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!node) return 0;
     static char tmp[256];
@@ -213,7 +213,7 @@ static uint32_t proc_read_pid_cwd(fs_node_t *node, uint32_t offset, uint32_t siz
     return size;
 }
 
-static uint32_t proc_read_pid_fd(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t proc_read_pid_fd(struct fs_node *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!node) return 0;
     static char tmp[256];
@@ -229,7 +229,7 @@ static uint32_t proc_read_pid_fd(fs_node_t *node, uint32_t offset, uint32_t size
     return size;
 }
 
-static uint32_t proc_read_pid_maps(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t proc_read_pid_maps(struct fs_node *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!node) return 0;
     static char tmp[2048];
@@ -243,7 +243,7 @@ static uint32_t proc_read_pid_maps(fs_node_t *node, uint32_t offset, uint32_t si
     return size;
 }
 
-static struct dirent *proc_pid_fd_readdir(fs_node_t *node, uint32_t index)
+static struct dirent *proc_pid_fd_readdir(struct fs_node *node, uint32_t index)
 {
     if (!node) return NULL;
     uint32_t slot = node->impl;
@@ -266,7 +266,7 @@ static struct dirent *proc_pid_fd_readdir(fs_node_t *node, uint32_t index)
     return NULL;
 }
 
-static fs_node_t *proc_pid_fd_finddir(fs_node_t *node, char *name)
+static struct fs_node *proc_pid_fd_finddir(struct fs_node *node, char *name)
 {
     if (!node || !name) return NULL;
     uint32_t slot = node->impl;
@@ -282,7 +282,7 @@ static fs_node_t *proc_pid_fd_finddir(fs_node_t *node, char *name)
     return &e->fd_files[fd];
 }
 
-static struct dirent *proc_pid_readdir(fs_node_t *node, uint32_t index)
+static struct dirent *proc_pid_readdir(struct fs_node *node, uint32_t index)
 {
     if (!node) return NULL;
     uint32_t slot = node->impl;
@@ -322,7 +322,7 @@ static struct dirent *proc_pid_readdir(fs_node_t *node, uint32_t index)
     return NULL;
 }
 
-static fs_node_t *proc_pid_finddir(fs_node_t *node, char *name)
+static struct fs_node *proc_pid_finddir(struct fs_node *node, char *name)
 {
     if (!node || !name) return NULL;
     uint32_t slot = node->impl;
@@ -354,7 +354,7 @@ static int parse_u32(const char *s, uint32_t *out)
     return 0;
 }
 
-static fs_node_t *proc_get_pid_dir(uint32_t pid)
+static struct fs_node *proc_get_pid_dir(uint32_t pid)
 {
     for (uint32_t i = 0; i < PROC_PID_MAX; i++) {
         if (proc_pids[i].used && proc_pids[i].pid == pid) return &proc_pids[i].dir;
@@ -460,7 +460,7 @@ static fs_node_t *proc_get_pid_dir(uint32_t pid)
     return NULL;
 }
 
-static struct dirent *proc_readdir(fs_node_t *node, uint32_t index)
+static struct dirent *proc_readdir(struct fs_node *node, uint32_t index)
 {
     (void)node;
     if (index == 0) {
@@ -501,7 +501,7 @@ static struct dirent *proc_readdir(fs_node_t *node, uint32_t index)
     return NULL;
 }
 
-static fs_node_t *proc_finddir(fs_node_t *node, char *name)
+static struct fs_node *proc_finddir(struct fs_node *node, char *name)
 {
     (void)node;
     if (!name) return NULL;
@@ -519,7 +519,7 @@ static fs_node_t *proc_finddir(fs_node_t *node, char *name)
     return NULL;
 }
 
-fs_node_t *procfs_init(void)
+struct fs_node *procfs_init(void)
 {
     memset(proc_pids, 0, sizeof(proc_pids));
     proc_get_pid_dir(0xFFFFFFFF);

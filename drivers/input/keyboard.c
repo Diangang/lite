@@ -1,6 +1,6 @@
 #include "keyboard.h"
 #include "isr.h"
-#include "kernel.h" /* For terminal_putchar and inb */
+#include "kernel.h"
 #include "tty.h"
 
 /* US Keyboard Layout Scancode Table (Set 1) */
@@ -42,7 +42,7 @@ unsigned char kbdus[256] =
 };
 
 /* Keyboard Interrupt Handler */
-void keyboard_callback(registers_t *regs)
+struct registers *keyboard_callback(struct registers *regs)
 {
     (void)regs;
 
@@ -61,6 +61,7 @@ void keyboard_callback(registers_t *regs)
             tty_receive_char(kbdus[scancode]);
         }
     }
+    return regs;
 }
 
 void init_keyboard(void)

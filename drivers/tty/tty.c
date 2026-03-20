@@ -2,6 +2,7 @@
 #include "kernel.h"
 #include "libc.h"
 #include "task.h"
+#include "console.h"
 
 #define INPUT_BUF_SIZE 256
 
@@ -75,7 +76,9 @@ void tty_set_flags(uint32_t flags)
 
 void tty_receive_char(char c)
 {
-    if (c == '\r') c = '\n';
+    if (c == '\r')
+        c = '\n';
+
     uint32_t flags = irq_save();
     if (input_count < INPUT_BUF_SIZE) {
         input_buffer[input_head] = c;
@@ -111,7 +114,7 @@ static int tty_handle_ctrl_c(void)
         tty_set_foreground_pid(0);
         if (user_exit_hook) user_exit_hook();
     }
-    terminal_writestring("^C\n");
+    printf("^C\n");
     return 1;
 }
 
@@ -144,23 +147,23 @@ uint32_t tty_read_blocking(char *buf, uint32_t len)
                     if (tty_line_len + 1 < sizeof(tty_linebuf)) {
                         tty_linebuf[tty_line_len++] = c;
                     }
-                    if (tty_flags & TTY_FLAG_ECHO) terminal_putchar('\n');
+                    if (tty_flags & TTY_FLAG_ECHO) console_put_char('\n');
                     break;
                 }
                 if (c == '\b' || c == 0x7F) {
                     if (tty_line_len > 0) {
                         tty_line_len--;
                         if (tty_flags & TTY_FLAG_ECHO) {
-                            terminal_putchar('\b');
-                            terminal_putchar(' ');
-                            terminal_putchar('\b');
+                            console_put_char('\b');
+                            console_put_char(' ');
+                            console_put_char('\b');
                         }
                     }
                     continue;
                 }
                 if (tty_line_len + 1 < sizeof(tty_linebuf)) {
                     tty_linebuf[tty_line_len++] = c;
-                    if (tty_flags & TTY_FLAG_ECHO) terminal_putchar(c);
+                    if (tty_flags & TTY_FLAG_ECHO) console_put_char(c);
                 }
             }
         } else {
@@ -171,9 +174,8 @@ uint32_t tty_read_blocking(char *buf, uint32_t len)
             }
             if (c == '\r') c = '\n';
             buf[read++] = c;
-            if (tty_flags & TTY_FLAG_ECHO) terminal_putchar(c);
+            if (tty_flags & TTY_FLAG_ECHO) console_put_char(c);
             if (read > 0) return read;
         }
     }
 }
-

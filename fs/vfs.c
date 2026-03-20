@@ -4,22 +4,22 @@
 #include "ramfs.h"
 #include "task.h"
 
-static vfs_mount_t vfs_mounts[8];
+static struct vfs_mount vfs_mounts[8];
 static uint32_t vfs_mount_count = 0;
-static fs_node_t vfs_root_node;
-static fs_node_t *vfs_base_root = NULL;
+static struct fs_node vfs_root_node;
+static struct fs_node *vfs_base_root = NULL;
 static struct dirent vfs_root_dirent;
 static char vfs_boot_cwd[128];
-typedef struct vfs_icache_entry {
-    fs_node_t *node;
-    vfs_inode_t inode;
-    vfs_dentry_t dentry;
+struct vfs_icache_entry {
+    struct fs_node *node;
+    struct vfs_inode inode;
+    struct vfs_dentry dentry;
     uint32_t refs;
     struct vfs_icache_entry *next;
-} vfs_icache_entry_t;
-static vfs_icache_entry_t *vfs_icache_head = NULL;
+};
+static struct vfs_icache_entry *vfs_icache_head = NULL;
 
-int vfs_check_access(fs_node_t *node, int want_read, int want_write, int want_exec)
+int vfs_check_access(struct fs_node *node, int want_read, int want_write, int want_exec)
 {
     if (!node) return 0;
     uint32_t uid = task_get_uid();
@@ -40,10 +40,10 @@ int vfs_check_access(fs_node_t *node, int want_read, int want_write, int want_ex
     return 1;
 }
 
-static vfs_dentry_t *vfs_dentry_get(fs_node_t *node)
+static struct vfs_dentry *vfs_dentry_get(struct fs_node *node)
 {
     if (!node) return NULL;
-    vfs_icache_entry_t *e = vfs_icache_head;
+    struct vfs_icache_entry *e = vfs_icache_head;
     while (e) {
         if (e->node == node) {
             e->refs++;
@@ -53,7 +53,7 @@ static vfs_dentry_t *vfs_dentry_get(fs_node_t *node)
         }
         e = e->next;
     }
-    e = (vfs_icache_entry_t*)kmalloc(sizeof(vfs_icache_entry_t));
+    e = (struct vfs_icache_entry*)kmalloc(sizeof(struct vfs_icache_entry));
     if (!e) return NULL;
     memset(e, 0, sizeof(*e));
     e->node = node;
@@ -71,16 +71,16 @@ static vfs_dentry_t *vfs_dentry_get(fs_node_t *node)
     return &e->dentry;
 }
 
-static void vfs_dentry_put(vfs_dentry_t *d)
+static void vfs_dentry_put(struct vfs_dentry *d)
 {
     if (!d) return;
-    vfs_icache_entry_t *e = (vfs_icache_entry_t*)d->cache;
+    struct vfs_icache_entry *e = (struct vfs_icache_entry*)d->cache;
     if (!e) return;
     if (e->refs > 0) e->refs--;
     if (e->inode.refcount > 0) e->inode.refcount--;
     if (e->dentry.refcount > 0) e->dentry.refcount--;
     if (e->refs > 0) return;
-    vfs_icache_entry_t **pp = &vfs_icache_head;
+    struct vfs_icache_entry **pp = &vfs_icache_head;
     while (*pp) {
         if (*pp == e) {
             *pp = e->next;
@@ -267,7 +267,7 @@ int vfs_chdir(const char *path)
     if (!path || !*path) return -1;
     char abs[256];
     if (!vfs_build_abs(path, abs, sizeof(abs))) return -1;
-    fs_node_t *node = vfs_resolve(abs);
+    struct fs_node *node = vfs_resolve(abs);
     if (!node) return -1;
     if ((node->flags & 0x7) != FS_DIRECTORY) return -1;
     if (!vfs_check_access(node, 0, 0, 1)) return -1;
@@ -279,7 +279,7 @@ int vfs_chdir(const char *path)
     return 0;
 }
 
-static struct dirent *vfs_root_readdir(fs_node_t *node, uint32_t index)
+static struct dirent *vfs_root_readdir(struct fs_node *node, uint32_t index)
 {
     (void)node;
     uint32_t n_mounts = 0;
@@ -304,7 +304,7 @@ static struct dirent *vfs_root_readdir(fs_node_t *node, uint32_t index)
     return readdir_fs(vfs_base_root, index - n_mounts);
 }
 
-static fs_node_t *vfs_root_finddir(fs_node_t *node, char *name)
+static struct fs_node *vfs_root_finddir(struct fs_node *node, char *name)
 {
     (void)node;
     if (!name) return NULL;
@@ -319,14 +319,14 @@ static fs_node_t *vfs_root_finddir(fs_node_t *node, char *name)
     return finddir_fs(vfs_base_root, name);
 }
 
-int vfs_mount_root(const char *path, fs_node_t *root_node)
+int vfs_mount_root(const char *path, struct fs_node *root_node)
 {
     if (!path || !root_node) return -1;
     if (vfs_mount_count >= (sizeof(vfs_mounts) / sizeof(vfs_mounts[0]))) return -1;
 
-    vfs_mount_t *m = &vfs_mounts[vfs_mount_count++];
+    struct vfs_mount *m = &vfs_mounts[vfs_mount_count++];
     m->path = path;
-    m->sb = (vfs_super_block_t*)kmalloc(sizeof(vfs_super_block_t));
+    m->sb = (struct vfs_super_block*)kmalloc(sizeof(struct vfs_super_block));
     if (!m->sb) return -1;
     m->sb->name = path;
     m->sb->refcount = 1;
@@ -342,14 +342,14 @@ int vfs_mount_root(const char *path, fs_node_t *root_node)
     return 0;
 }
 
-static vfs_mount_t *vfs_find_mount(const char *path, uint32_t *out_tail_off)
+static struct vfs_mount *vfs_find_mount(const char *path, uint32_t *out_tail_off)
 {
-    vfs_mount_t *best = NULL;
+    struct vfs_mount *best = NULL;
     uint32_t best_len = 0;
     uint32_t tail = 0;
 
     for (uint32_t i = 0; i < vfs_mount_count; i++) {
-        vfs_mount_t *m = &vfs_mounts[i];
+        struct vfs_mount *m = &vfs_mounts[i];
         if (!m->path) continue;
         uint32_t off = 0;
         if (!vfs_path_is_prefix(path, m->path, &off)) continue;
@@ -384,7 +384,7 @@ int vfs_mkdir(const char *path)
     const char *name = abs + slash;
     if (!*name) return -1;
 
-    fs_node_t *pnode = vfs_resolve(parent);
+    struct fs_node *pnode = vfs_resolve(parent);
     if (pnode == &vfs_root_node) pnode = vfs_base_root;
     if (!pnode || (pnode->flags & 0x7) != FS_DIRECTORY) return -1;
     if (!vfs_check_access(pnode, 0, 1, 1)) return -1;
@@ -395,7 +395,7 @@ int vfs_mkdir(const char *path)
 
 int vfs_chmod(const char *path, uint32_t mode)
 {
-    fs_node_t *node = vfs_resolve(path);
+    struct fs_node *node = vfs_resolve(path);
     if (!node) return -1;
     uint32_t uid = task_get_uid();
     if (uid != 0 && uid != node->uid) return -1;
@@ -403,22 +403,22 @@ int vfs_chmod(const char *path, uint32_t mode)
     return 0;
 }
 
-fs_node_t *vfs_resolve(const char *path)
+struct fs_node *vfs_resolve(const char *path)
 {
     if (!path || !*path) return NULL;
     char abs[256];
     if (!vfs_build_abs(path, abs, sizeof(abs))) return NULL;
     uint32_t tail = 0;
-    vfs_mount_t *m = vfs_find_mount(abs, &tail);
+    struct vfs_mount *m = vfs_find_mount(abs, &tail);
     if (!m || !m->sb || !m->sb->root) return NULL;
     const char *sub = abs + tail;
     if (*sub == 0) return m->sb->root;
     return finddir_fs(m->sb->root, (char*)sub);
 }
 
-vfs_file_t *vfs_open(const char *path, uint32_t flags)
+struct vfs_file *vfs_open(const char *path, uint32_t flags)
 {
-    fs_node_t *node = vfs_resolve(path);
+    struct fs_node *node = vfs_resolve(path);
     if (!node && (flags & VFS_O_CREAT)) {
         char abs[256];
         if (!vfs_build_abs(path, abs, sizeof(abs))) return NULL;
@@ -437,11 +437,11 @@ vfs_file_t *vfs_open(const char *path, uint32_t flags)
         const char *name = abs + slash;
         if (!*name) return NULL;
 
-        fs_node_t *pnode = vfs_resolve(parent);
+        struct fs_node *pnode = vfs_resolve(parent);
         if (pnode == &vfs_root_node) pnode = vfs_base_root;
         if (!pnode || (pnode->flags & 0x7) != FS_DIRECTORY) return NULL;
         if (!vfs_check_access(pnode, 0, 1, 1)) return NULL;
-        fs_node_t *created = ramfs_create_child(pnode, name, FS_FILE);
+        struct fs_node *created = ramfs_create_child(pnode, name, FS_FILE);
         if (!created) return NULL;
         node = created;
     }
@@ -453,7 +453,7 @@ vfs_file_t *vfs_open(const char *path, uint32_t flags)
         if (!vfs_check_access(node, 1, need_write, 0)) return NULL;
     }
 
-    vfs_file_t *f = vfs_open_node(node, flags);
+    struct vfs_file *f = vfs_open_node(node, flags);
     if (!f) return NULL;
     if ((flags & VFS_O_TRUNC) && (node->flags & 0x7) == FS_FILE) {
         node->length = 0;
@@ -461,15 +461,15 @@ vfs_file_t *vfs_open(const char *path, uint32_t flags)
     return f;
 }
 
-vfs_file_t *vfs_open_node(fs_node_t *node, uint32_t flags)
+struct vfs_file *vfs_open_node(struct fs_node *node, uint32_t flags)
 {
     if (!node) return NULL;
-    vfs_file_t *f = (vfs_file_t*)kmalloc(sizeof(vfs_file_t));
+    struct vfs_file *f = (struct vfs_file*)kmalloc(sizeof(struct vfs_file));
     if (!f) {
         if (f) kfree(f);
         return NULL;
     }
-    vfs_dentry_t *d = vfs_dentry_get(node);
+    struct vfs_dentry *d = vfs_dentry_get(node);
     if (!d) {
         kfree(f);
         return NULL;
@@ -482,7 +482,7 @@ vfs_file_t *vfs_open_node(fs_node_t *node, uint32_t flags)
     return f;
 }
 
-uint32_t vfs_read(vfs_file_t *f, uint8_t *buf, uint32_t len)
+uint32_t vfs_read(struct vfs_file *f, uint8_t *buf, uint32_t len)
 {
     if (!f || !f->dentry || !f->dentry->inode || !f->dentry->inode->node) return 0;
     if (!vfs_check_access(f->dentry->inode->node, 1, 0, 0)) return 0;
@@ -491,7 +491,7 @@ uint32_t vfs_read(vfs_file_t *f, uint8_t *buf, uint32_t len)
     return n;
 }
 
-uint32_t vfs_write(vfs_file_t *f, const uint8_t *buf, uint32_t len)
+uint32_t vfs_write(struct vfs_file *f, const uint8_t *buf, uint32_t len)
 {
     if (!f || !f->dentry || !f->dentry->inode || !f->dentry->inode->node) return 0;
     if (!vfs_check_access(f->dentry->inode->node, 0, 1, 0)) return 0;
@@ -500,13 +500,13 @@ uint32_t vfs_write(vfs_file_t *f, const uint8_t *buf, uint32_t len)
     return n;
 }
 
-int vfs_ioctl(vfs_file_t *f, uint32_t request, uint32_t arg)
+int vfs_ioctl(struct vfs_file *f, uint32_t request, uint32_t arg)
 {
     if (!f || !f->dentry || !f->dentry->inode || !f->dentry->inode->node) return -1;
     return ioctl_fs(f->dentry->inode->node, request, arg);
 }
 
-void vfs_close(vfs_file_t *f)
+void vfs_close(struct vfs_file *f)
 {
     if (!f) return;
     if (f->refcount > 1) {

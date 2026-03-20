@@ -3,10 +3,10 @@
 #include "libc.h"
 #include "vfs.h"
 
-file_t *file_open_node(fs_node_t *node, uint32_t flags)
+struct file *file_open_node(struct fs_node *node, uint32_t flags)
 {
     if (!node) return NULL;
-    file_t *f = (file_t*)kmalloc(sizeof(file_t));
+    struct file *f = (struct file*)kmalloc(sizeof(struct file));
     if (!f) return NULL;
     f->node = node;
     f->flags = flags;
@@ -19,13 +19,13 @@ file_t *file_open_node(fs_node_t *node, uint32_t flags)
     return f;
 }
 
-file_t *file_open_path(const char *path, uint32_t flags)
+struct file *file_open_path(const char *path, uint32_t flags)
 {
     if (!path) return NULL;
-    vfs_file_t *vf = vfs_open(path, flags);
+    struct vfs_file *vf = vfs_open(path, flags);
     if (!vf) return NULL;
 
-    file_t *f = (file_t*)kmalloc(sizeof(file_t));
+    struct file *f = (struct file*)kmalloc(sizeof(struct file));
     if (!f) {
         vfs_close(vf);
         return NULL;
@@ -41,32 +41,32 @@ file_t *file_open_path(const char *path, uint32_t flags)
     return f;
 }
 
-uint32_t file_read(file_t *f, uint8_t *buf, uint32_t len)
+uint32_t file_read(struct file *f, uint8_t *buf, uint32_t len)
 {
     if (!f || !f->vf || !buf || len == 0) return 0;
     return vfs_read(f->vf, buf, len);
 }
 
-uint32_t file_write(file_t *f, const uint8_t *buf, uint32_t len)
+uint32_t file_write(struct file *f, const uint8_t *buf, uint32_t len)
 {
     if (!f || !f->vf || !buf || len == 0) return 0;
     return vfs_write(f->vf, buf, len);
 }
 
-int file_ioctl(file_t *f, uint32_t request, uint32_t arg)
+int file_ioctl(struct file *f, uint32_t request, uint32_t arg)
 {
     if (!f || !f->node) return -1;
     return ioctl_fs(f->node, request, arg);
 }
 
-file_t *file_dup(file_t *f)
+struct file *file_dup(struct file *f)
 {
     if (!f) return NULL;
     f->refcount++;
     return f;
 }
 
-void file_close(file_t *f)
+void file_close(struct file *f)
 {
     if (!f) return;
     if (f->refcount > 1) {

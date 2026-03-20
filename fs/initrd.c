@@ -4,20 +4,20 @@
 #include "vmm.h"
 #include "pmm.h"
 
-void serial_write(const char* data);
-void write_serial(char a);
+void serial_put_str(const char* data);
+void serial_put_char(char a);
 
 /* The InitRD image in memory */
 initrd_file_header_t *file_headers;
-fs_node_t *initrd_root;
-fs_node_t *initrd_dev;
-fs_node_t *root_nodes;
+struct fs_node *initrd_root;
+struct fs_node *initrd_dev;
+struct fs_node *root_nodes;
 int nroot_nodes;
 
 struct dirent dirent;
 
 /* Read from a file in the InitRD */
-static uint32_t initrd_read(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t initrd_read(struct fs_node *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     initrd_file_header_t header = file_headers[node->inode];
     if (offset > header.length)
@@ -30,7 +30,7 @@ static uint32_t initrd_read(fs_node_t *node, uint32_t offset, uint32_t size, uin
 }
 
 /* Read directory entry */
-static struct dirent *initrd_readdir(fs_node_t *node, uint32_t index)
+static struct dirent *initrd_readdir(struct fs_node *node, uint32_t index)
 {
     (void)node;
     if (index >= (uint32_t)nroot_nodes)
@@ -42,7 +42,7 @@ static struct dirent *initrd_readdir(fs_node_t *node, uint32_t index)
     return &dirent;
 }
 
-static fs_node_t *initrd_finddir(fs_node_t *node, char *name)
+static struct fs_node *initrd_finddir(struct fs_node *node, char *name)
 {
     (void)node;
     for (int i = 0; i < nroot_nodes; i++)
@@ -51,15 +51,15 @@ static fs_node_t *initrd_finddir(fs_node_t *node, char *name)
     return NULL;
 }
 
-fs_node_t *init_initrd(uint32_t location)
+struct fs_node *init_initrd(uint32_t location)
 {
     if (location < 0x1000) {
-        serial_write("DEBUG: ERROR: InitRD location is too low (NULL or IVT)!\n");
+        serial_put_str("DEBUG: ERROR: InitRD location is too low (NULL or IVT)!\n");
         return 0;
     }
 
     if (!vmm_is_mapped((void*)location)) {
-        serial_write("DEBUG: ERROR: InitRD location is not mapped!\n");
+        serial_put_str("DEBUG: ERROR: InitRD location is not mapped!\n");
         return 0;
     }
 
@@ -69,7 +69,7 @@ fs_node_t *init_initrd(uint32_t location)
     nroot_nodes = *ptr;
 
     if (nroot_nodes > 100) {
-        serial_write("DEBUG: nroot_nodes looks suspicious! Possible garbage data.\n");
+        serial_put_str("DEBUG: nroot_nodes looks suspicious! Possible garbage data.\n");
         return 0;
     }
 
@@ -77,9 +77,9 @@ fs_node_t *init_initrd(uint32_t location)
     file_headers = (initrd_file_header_t*)(location + sizeof(uint32_t));
 
     /* Initialize the root directory node */
-    initrd_root = (fs_node_t*)kmalloc(sizeof(fs_node_t));
+    initrd_root = (struct fs_node*)kmalloc(sizeof(struct fs_node));
     if (!initrd_root) {
-        serial_write("DEBUG: kmalloc failed for initrd_root\n");
+        serial_put_str("DEBUG: kmalloc failed for initrd_root\n");
         return 0;
     }
 
@@ -100,9 +100,9 @@ fs_node_t *init_initrd(uint32_t location)
     initrd_root->impl = 0;
 
     /* Initialize file nodes */
-    root_nodes = (fs_node_t*)kmalloc(sizeof(fs_node_t) * nroot_nodes);
+    root_nodes = (struct fs_node*)kmalloc(sizeof(struct fs_node) * nroot_nodes);
     if (!root_nodes) {
-        serial_write("DEBUG: kmalloc failed for root_nodes\n");
+        serial_put_str("DEBUG: kmalloc failed for root_nodes\n");
         return 0;
     }
 

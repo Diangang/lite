@@ -5,7 +5,7 @@
 #include "kernel.h"
 
 /* The start of the free list */
-static header_t *free_list = NULL;
+static struct header *free_list = NULL;
 
 /* The end of the heap */
 static uint32_t heap_end = KHEAP_START;
@@ -18,10 +18,8 @@ static int kheap_extend(size_t size) {
 
     for (size_t i = 0; i < pages_needed; i++) {
         void *phys = pmm_alloc_page();
-        if (!phys) {
-            printf("KHEAP: Out of physical memory!\n");
-            return 0;
-        }
+        if (!phys)
+            return printf("KHEAP: Out of physical memory!\n"), 0;
 
         /* Map the physical page to the current end of heap */
         vmm_map_page(phys, (void*)heap_end);
@@ -37,7 +35,7 @@ static int kheap_extend(size_t size) {
         bytes_added += 4096;
     }
 
-    header_t *new_block = (header_t*)old_heap_end;
+    struct header *new_block = (struct header*)old_heap_end;
     new_block->size = bytes_added;
     new_block->is_free = 1;
     new_block->next = NULL;
@@ -48,10 +46,9 @@ static int kheap_extend(size_t size) {
         return 1;
     }
 
-    header_t *tail = free_list;
-    while (tail->next) {
+    struct header *tail = free_list;
+    while (tail->next)
         tail = tail->next;
-    }
 
     if (tail->is_free && ((uint32_t)tail + tail->size == (uint32_t)new_block)) {
         tail->size += new_block->size;
@@ -62,32 +59,14 @@ static int kheap_extend(size_t size) {
     return 1;
 }
 
-void kheap_init(void) {
-    /* Map initial 1MB for the heap */
-    if (!kheap_extend(KHEAP_INITIAL_SIZE)) {
-        printf("KHEAP PANIC: Failed to initialize heap.\n");
-        for(;;);
-    }
-
-    /* Create the first free block covering the entire initial heap */
-    free_list = (header_t*)KHEAP_START;
-    free_list->size = KHEAP_INITIAL_SIZE;
-    free_list->is_free = 1;
-    free_list->next = NULL;
-    free_list->magic = HEAP_MAGIC;
-
-    printf("KHEAP: Initialized at 0x%x with %d bytes\n", KHEAP_START, KHEAP_INITIAL_SIZE);
-}
-
 void *kmalloc(size_t size) {
     /* Add header size and align to 8 bytes */
-    size_t total_size = size + sizeof(header_t);
-    if (total_size % 8 != 0) {
+    size_t total_size = size + sizeof(struct header);
+    if (total_size % 8 != 0)
         total_size += 8 - (total_size % 8);
-    }
 
     for (;;) {
-        header_t *curr = free_list;
+        struct header *curr = free_list;
 
         /* First Fit: Find the first free block that fits */
         while (curr) {
@@ -95,9 +74,9 @@ void *kmalloc(size_t size) {
                 /* Found a suitable block */
 
                 /* Should we split it? */
-                if (curr->size >= total_size + sizeof(header_t) + 8) {
+                if (curr->size >= total_size + sizeof(struct header) + 8) {
                     /* Yes, split into [Used] + [New Free] */
-                    header_t *new_free = (header_t*)((uint32_t)curr + total_size);
+                    struct header *new_free = (struct header*)((uint32_t)curr + total_size);
 
                     new_free->size = curr->size - total_size;
                     new_free->is_free = 1;
@@ -109,15 +88,13 @@ void *kmalloc(size_t size) {
                 }
 
                 curr->is_free = 0;
-                return (void*)((uint32_t)curr + sizeof(header_t));
+                return (void*)((uint32_t)curr + sizeof(struct header));
             }
             curr = curr->next;
         }
 
-        if (!kheap_extend(total_size)) {
-            printf("KHEAP: Out of memory!\n");
-            return NULL;
-        }
+        if (!kheap_extend(total_size))
+            return printf("KHEAP: Out of memory!\n"), NULL;
     }
 }
 
@@ -125,13 +102,11 @@ void kfree(void *ptr) {
     if (!ptr) return;
 
     /* Get the header */
-    header_t *header = (header_t*)((uint32_t)ptr - sizeof(header_t));
+    struct header *header = (struct header*)((uint32_t)ptr - sizeof(struct header));
 
     /* Sanity check */
-    if (header->magic != HEAP_MAGIC) {
-        printf("KHEAP: Double free or corruption detected at 0x%x!\n", ptr);
-        return;
-    }
+    if (header->magic != HEAP_MAGIC)
+        return (void)printf("KHEAP: Double free or corruption detected at 0x%x!\n", ptr);
 
     header->is_free = 1;
 
@@ -146,7 +121,7 @@ void kfree(void *ptr) {
 }
 
 void kheap_print_stats(void) {
-    header_t *curr = free_list;
+    struct header *curr = free_list;
     int blocks = 0;
     int free_blocks = 0;
     size_t total_free = 0;
@@ -162,4 +137,19 @@ void kheap_print_stats(void) {
         curr = curr->next;
     }
     printf("Total Blocks: %d, Free Blocks: %d, Total Free Bytes: %d\n", blocks, free_blocks, total_free);
+}
+
+void kheap_init(void) {
+    /* Map initial 1MB for the heap */
+    if (!kheap_extend(KHEAP_INITIAL_SIZE))
+        panic("KHEAP PANIC: Failed to initialize heap.");
+
+    /* Create the first free block covering the entire initial heap */
+    free_list = (struct header*)KHEAP_START;
+    free_list->size = KHEAP_INITIAL_SIZE;
+    free_list->is_free = 1;
+    free_list->next = NULL;
+    free_list->magic = HEAP_MAGIC;
+
+    printf("KHEAP: Initialized at 0x%x with %d bytes\n", KHEAP_START, KHEAP_INITIAL_SIZE);
 }

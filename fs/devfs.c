@@ -2,13 +2,14 @@
 #include "libc.h"
 #include "kernel.h"
 #include "tty.h"
+#include "console.h"
 
 static struct dirent dev_dirent;
-static fs_node_t dev_root;
-static fs_node_t dev_console;
-static fs_node_t dev_tty;
+static struct fs_node dev_root;
+static struct fs_node dev_console;
+static struct fs_node dev_tty;
 
-static uint32_t dev_console_read(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t dev_console_read(struct fs_node *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
     (void)offset;
@@ -16,18 +17,14 @@ static uint32_t dev_console_read(fs_node_t *node, uint32_t offset, uint32_t size
     return tty_read_blocking((char*)buffer, size);
 }
 
-static uint32_t dev_console_write(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t dev_console_write(struct fs_node *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
     (void)offset;
-    if (!buffer || size == 0) return 0;
-    for (uint32_t i = 0; i < size; i++) {
-        terminal_putchar((char)buffer[i]);
-    }
-    return size;
+    return console_write(buffer, size);
 }
 
-static int dev_console_ioctl(fs_node_t *node, uint32_t request, uint32_t arg)
+static int dev_console_ioctl(struct fs_node *node, uint32_t request, uint32_t arg)
 {
     (void)node;
     if (request == CONSOLE_IOCTL_GETFLAGS) {
@@ -40,7 +37,7 @@ static int dev_console_ioctl(fs_node_t *node, uint32_t request, uint32_t arg)
     return -1;
 }
 
-static uint32_t dev_tty_read(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t dev_tty_read(struct fs_node *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
     (void)offset;
@@ -48,23 +45,19 @@ static uint32_t dev_tty_read(fs_node_t *node, uint32_t offset, uint32_t size, ui
     return tty_read_blocking((char*)buffer, size);
 }
 
-static uint32_t dev_tty_write(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t dev_tty_write(struct fs_node *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
     (void)offset;
-    if (!buffer || size == 0) return 0;
-    for (uint32_t i = 0; i < size; i++) {
-        terminal_putchar((char)buffer[i]);
-    }
-    return size;
+    return console_write(buffer, size);
 }
 
-static int dev_tty_ioctl(fs_node_t *node, uint32_t request, uint32_t arg)
+static int dev_tty_ioctl(struct fs_node *node, uint32_t request, uint32_t arg)
 {
     return dev_console_ioctl(node, request, arg);
 }
 
-static struct dirent *dev_readdir(fs_node_t *node, uint32_t index)
+static struct dirent *dev_readdir(struct fs_node *node, uint32_t index)
 {
     (void)node;
     if (index == 0) {
@@ -80,7 +73,7 @@ static struct dirent *dev_readdir(fs_node_t *node, uint32_t index)
     return NULL;
 }
 
-static fs_node_t *dev_finddir(fs_node_t *node, char *name)
+static struct fs_node *dev_finddir(struct fs_node *node, char *name)
 {
     (void)node;
     if (!name) return NULL;
@@ -89,7 +82,7 @@ static fs_node_t *dev_finddir(fs_node_t *node, char *name)
     return NULL;
 }
 
-fs_node_t *devfs_init(void)
+struct fs_node *devfs_init(void)
 {
     memset(&dev_root, 0, sizeof(dev_root));
     strcpy(dev_root.name, "dev");
@@ -127,7 +120,7 @@ fs_node_t *devfs_init(void)
     return &dev_root;
 }
 
-fs_node_t *devfs_get_console(void)
+struct fs_node *devfs_get_console(void)
 {
     return &dev_console;
 }

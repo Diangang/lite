@@ -20,77 +20,9 @@ static uint32_t cow_copies = 0;
  * We will need at least one page table to map the first 4MB
  * (where kernel and BIOS/VGA reside).
  */
-static uint32_t* first_page_table = NULL;
 
 extern void load_page_directory(uint32_t*);
 extern void enable_paging(void);
-
-void vmm_init(void)
-{
-    /* 1. Allocate a page for the Page Directory */
-    page_directory = (uint32_t*)pmm_alloc_page();
-    if (!page_directory) {
-        printf("VMM: Failed to allocate Page Directory!\n");
-        return;
-    }
-
-    /* Clear it - Mark all PDEs as not present */
-    memset(page_directory, 0, 4096);
-
-    /* 2. Allocate a page for the first Page Table (0-4MB) */
-    first_page_table = (uint32_t*)pmm_alloc_page();
-    if (!first_page_table) {
-        printf("VMM: Failed to allocate Page Table!\n");
-        return;
-    }
-
-    /* 3. Identity Map the first 128MB (Physical 0-128MB -> Virtual 0-128MB) */
-    /* This ensures kernel, initrd, and low memory are all accessible */
-    /* We need 32 page tables to cover 128MB (128 / 4 = 32) */
-
-    uint32_t addr = 0;
-
-    /* Loop through 32 Page Tables (covering 128MB) */
-    for (int pde_idx = 0; pde_idx < 32; pde_idx++) {
-        uint32_t* pt;
-
-        if (pde_idx == 0) {
-            pt = first_page_table; /* We already allocated this one */
-        } else {
-            pt = (uint32_t*)pmm_alloc_page();
-            if (!pt) {
-                printf("VMM PANIC: Failed to allocate Page Table %d! Halting.\n", pde_idx);
-                for(;;); /* Halt */
-            }
-            memset(pt, 0, 4096);
-        }
-
-        /* Fill the page table */
-        for (int i = 0; i < 1024; i++) {
-            /* Attribute: Supervisor, Read/Write, Present */
-            pt[i] = addr | PTE_READ_WRITE | PTE_PRESENT;
-            addr += 4096;
-        }
-
-        /* Put the Page Table into the Page Directory */
-        page_directory[pde_idx] = ((uint32_t)pt) | PTE_READ_WRITE | PTE_PRESENT;
-    }
-
-    /* 5. Register Page Fault Handler */
-    register_interrupt_handler(14, page_fault_handler);
-
-    /* 6. Load CR3 and Enable Paging (CR0) */
-    /* We use inline assembly here for CR3 loading and CR0 setting */
-    __asm__ volatile("mov %0, %%cr3" :: "r"(page_directory));
-    kernel_directory = page_directory;
-
-    uint32_t cr0;
-    __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
-    cr0 |= 0x80000000; /* Set PG bit (31) */
-    __asm__ volatile("mov %0, %%cr0" :: "r"(cr0));
-
-    printf("VMM: Paging Enabled! Identity mapped 0-4MB.\n");
-}
 
 void vmm_map_page_ex(uint32_t* dir, void* phys_addr, void* virt_addr, uint32_t flags)
 {
@@ -101,16 +33,13 @@ void vmm_map_page_ex(uint32_t* dir, void* phys_addr, void* virt_addr, uint32_t f
 
     if (!(dir[pde_idx] & PTE_PRESENT)) {
         uint32_t* new_table = (uint32_t*)pmm_alloc_page();
-        if (!new_table) {
-            printf("VMM: Failed to allocate Page Table for 0x%x\n", virt_addr);
-            return;
-        }
+        if (!new_table)
+            return (void)printf("VMM: Failed to allocate Page Table for 0x%x\n", virt_addr);
 
         memset(new_table, 0, 4096);
         dir[pde_idx] = ((uint32_t)new_table) | PTE_READ_WRITE | PTE_PRESENT;
-        if (flags & PTE_USER) {
+        if (flags & PTE_USER)
             dir[pde_idx] |= PTE_USER;
-        }
 
         uint32_t cr3;
         __asm__ volatile("mov %%cr3, %0" : "=r"(cr3));
@@ -391,6 +320,7 @@ int vmm_copyout(void* dst_user, const void* src, uint32_t len)
     if (!dst_user && len) return -1;
     if (!src && len) return -1;
     if (!vmm_user_accessible(vmm_get_current_directory(), (void*)dst_user, len, 1)) return -1;
+
     if (len) {
         uint32_t start = (uint32_t)dst_user;
         uint32_t end = start + len - 1;
@@ -413,7 +343,7 @@ void vmm_get_cow_stats(uint32_t *faults, uint32_t *copies)
     if (copies) *copies = cow_copies;
 }
 
-void page_fault_handler(registers_t *regs)
+struct registers *page_fault_handler(struct registers *regs)
 {
     /* The faulting address is stored in the CR2 register */
     uint32_t faulting_address;
@@ -434,87 +364,131 @@ void page_fault_handler(registers_t *regs)
     if (is_reserved) printf("reserved ");
     if (is_instr_fetch) printf("instruction-fetch ");
     printf(") at 0x%x - EIP: 0x%x\n", faulting_address, regs->eip);
+    uint32_t page_base = faulting_address & 0xFFFFF000;
 
-    if (!is_present && !is_reserved) {
-        if (faulting_address < 0x1000) {
-            if (is_user) {
-                printf("User Page Fault: null access.\n");
-                task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
-                return;
-            }
-            printf("KERNEL PANIC: Null pointer access.\n");
-            for(;;);
-        }
-        if (is_user && faulting_address >= 0xC0000000) {
-            printf("User Page Fault: kernel address.\n");
-            task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
-            return;
-        }
+    /* Guard clause: Reserved bit violation is a fatal kernel bug */
+    if (is_reserved)
+        panic("KERNEL PANIC: Page Fault caused by reserved bit violation!");
 
-        uint32_t page_base = faulting_address & 0xFFFFF000;
-        if (is_user) {
-            if (!task_user_vma_allows(page_base, is_write, is_instr_fetch)) {
-                printf("User Page Fault: out of range.\n");
-                task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
-                return;
-            }
+    if (is_present) {
+        /* Guard clause: Unhandled kernel page fault */
+        if (!is_user)
+            panic("KERNEL PANIC: Unhandled Kernel Page Fault.");
+
+        /* Handle User Protection Faults (Present, but permission denied) */
+        /* Try to resolve Copy-On-Write first */
+        if (is_write) {
+            int res = vmm_resolve_cow(page_base);
+            if (res > 0)
+                return regs;
         }
 
-        void *phys = pmm_alloc_page();
-        if (!phys) {
-            printf("KERNEL PANIC: Out of physical memory in Page Fault handler.\n");
-            for(;;);
-        }
-
-        uint32_t flags = PTE_PRESENT;
-        if (is_user) {
-            flags |= PTE_USER;
-            if (task_user_vma_allows(page_base, 1, 0)) {
-                flags |= PTE_READ_WRITE;
-            }
-        } else {
-            flags |= PTE_READ_WRITE;
-        }
-        vmm_map_page_ex(page_directory, phys, (void*)page_base, flags);
-
-        memset((void*)page_base, 0, 4096);
-        printf("Page Fault handled: mapped 0x%x -> 0x%x\n", page_base, (uint32_t)phys);
-        return;
-    }
-
-    if (is_user && is_present && !is_reserved) {
-        uint32_t page_base = faulting_address & 0xFFFFF000;
+        /* Check if we can remap it (e.g., missed user/write flags during lazy alloc) */
         if (task_user_vma_allows(page_base, is_write, is_instr_fetch)) {
             uint32_t pte = vmm_get_pte_flags_ex(page_directory, (void*)page_base);
             if (pte && (!(pte & PTE_USER) || (is_write && !(pte & PTE_READ_WRITE)))) {
                 void *phys = pmm_alloc_page();
-                if (!phys) {
-                    printf("KERNEL PANIC: Out of physical memory in Page Fault handler.\n");
-                    for(;;);
-                }
+                if (!phys)
+                    panic("KERNEL PANIC: Out of physical memory in Page Fault handler.");
                 uint32_t flags = PTE_PRESENT | PTE_USER;
-                if (task_user_vma_allows(page_base, 1, 0)) {
+                if (task_user_vma_allows(page_base, 1, 0))
                     flags |= PTE_READ_WRITE;
-                }
                 vmm_map_page_ex(page_directory, phys, (void*)page_base, flags);
                 memset((void*)page_base, 0, 4096);
                 printf("Page Fault handled: remapped 0x%x -> 0x%x\n", page_base, (uint32_t)phys);
-                return;
+                return regs;
             }
         }
-    }
 
-    if (is_user) {
-        if (is_present && is_write && !is_reserved) {
-            uint32_t page_base = faulting_address & 0xFFFFF000;
-            int res = vmm_resolve_cow(page_base);
-            if (res > 0) return;
-        }
-        printf("User Page Fault: unhandled.\n");
+        /* If we reach here, it's a genuine protection fault we can't handle */
+        printf("User Page Fault: unhandled protection fault.\n");
         task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
-        return;
+        return regs;
     }
 
-    printf("KERNEL PANIC: Unhandled Page Fault.\n");
-    for(;;);
+    /* Handle Demand Paging (Not Present) */
+    if (faulting_address < 0x1000) {
+        if (is_user) {
+            printf("User Page Fault: null access.\n");
+            task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
+            return regs;
+        }
+        panic("KERNEL PANIC: Null pointer access.");
+    }
+    if (is_user && faulting_address >= 0xC0000000) {
+        printf("User Page Fault: kernel address.\n");
+        task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
+        return regs;
+    }
+    if (is_user && !task_user_vma_allows(page_base, is_write, is_instr_fetch)) {
+        printf("User Page Fault: out of range.\n");
+        task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
+        return regs;
+    }
+
+    void *phys = pmm_alloc_page();
+    if (!phys)
+        panic("KERNEL PANIC: Out of physical memory in Page Fault handler.");
+
+    uint32_t flags = PTE_PRESENT;
+    if (is_user) {
+        flags |= PTE_USER;
+        if (task_user_vma_allows(page_base, 1, 0))
+            flags |= PTE_READ_WRITE;
+    } else {
+        flags |= PTE_READ_WRITE;
+    }
+    vmm_map_page_ex(page_directory, phys, (void*)page_base, flags);
+
+    memset((void*)page_base, 0, 4096);
+    printf("Page Fault handled: mapped 0x%x -> 0x%x\n", page_base, (uint32_t)phys);
+    return regs;
+}
+
+void vmm_init(void)
+{
+    /* 1. Allocate a page for the Page Directory */
+    page_directory = (uint32_t*)pmm_alloc_page();
+    if (!page_directory)
+        return (void)printf("VMM: Failed to allocate Page Directory!\n");
+
+    /* Clear it - Mark all PDEs as not present */
+    memset(page_directory, 0, 4096);
+
+    /* 2. Identity Map the first 128MB (Physical 0-128MB -> Virtual 0-128MB) */
+    /* This ensures kernel, initrd, and low memory are all accessible */
+    /* We need 32 page tables to cover 128MB (128 / 4 = 32) */
+
+    /* Loop through 32 Page Tables (covering 128MB) */
+    for (int pde_idx = 0; pde_idx < 32; pde_idx++) {
+        uint32_t* pt = (uint32_t*)pmm_alloc_page();
+        if (!pt)
+            panic("VMM PANIC: Failed to allocate Page Table!");
+        memset(pt, 0, 4096);
+
+        /* Fill the page table */
+        for (int i = 0; i < 1024; i++) {
+            /* Attribute: Supervisor, Read/Write, Present */
+            uint32_t addr = (pde_idx * 1024 + i) * 4096;
+            pt[i] = addr | PTE_READ_WRITE | PTE_PRESENT;
+        }
+
+        /* Put the Page Table into the Page Directory */
+        page_directory[pde_idx] = ((uint32_t)pt) | PTE_READ_WRITE | PTE_PRESENT;
+    }
+
+    /* 3. Register Page Fault Handler */
+    register_interrupt_handler(14, page_fault_handler);
+
+    /* 6. Load CR3 and Enable Paging (CR0) */
+    /* We use inline assembly here for CR3 loading and CR0 setting */
+    __asm__ volatile("mov %0, %%cr3" :: "r"(page_directory));
+    kernel_directory = page_directory;
+
+    uint32_t cr0;
+    __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
+    cr0 |= 0x80000000; /* Set PG bit (31) */
+    __asm__ volatile("mov %0, %%cr0" :: "r"(cr0));
+
+    printf("VMM: Paging Enabled! Identity mapped 0-4MB.\n");
 }

@@ -53,9 +53,9 @@ exit:
     mov $3, %eax
     int $0x80
 
-halt:
+panic:
     hlt
-    jmp halt
+    jmp panic
 
 .section .rodata
 msg:

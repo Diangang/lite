@@ -5,16 +5,15 @@ AS = as
 LD = ld
 
 CFLAGS = -m32 -ffreestanding -O2 -Wall -Wextra -fno-pie -fno-builtin \
-	-Ikernel -Ikernel/lib -Ikernel/arch/x86 -Imm -Ifs -Idrivers -Idrivers/base -Idrivers/input -Idrivers/tty -Idrivers/clock
-LDFLAGS = -m elf_i386 -T kernel/arch/x86/linker.ld -nostdlib
+	-Iinclude -Ikernel -Ilib -Iarch/x86 -Imm -Ifs -Idrivers -Idrivers/base -Idrivers/input -Idrivers/tty -Idrivers/clock -Idrivers/vga -Idrivers/console
+LDFLAGS = -m elf_i386 -T arch/x86/linker.ld -nostdlib
 
-SOURCES_S = kernel/arch/x86/boot.s kernel/arch/x86/gdt_flush.s kernel/arch/x86/idt_flush.s kernel/arch/x86/interrupt.s kernel/arch/x86/tss_flush.s
+SOURCES_S = arch/x86/boot.s arch/x86/interrupt.s
 SOURCES_C = kernel/kernel.c kernel/syscall.c kernel/task.c kernel/shell.c \
-	kernel/lib/libc.c \
-	kernel/arch/x86/gdt.c kernel/arch/x86/idt.c kernel/arch/x86/isr.c kernel/arch/x86/tss.c \
-	mm/pmm.c mm/vmm.c mm/kheap.c \
+	arch/x86/gdt.c arch/x86/idt.c arch/x86/isr.c \
+	mm/pmm.c mm/vmm.c mm/kheap.c lib/libc.c \
 	fs/fs.c fs/file.c fs/vfs.c fs/ramfs.c fs/initrd.c fs/procfs.c fs/devfs.c fs/sysfs.c \
-	drivers/base/device_model.c drivers/input/keyboard.c drivers/clock/timer.c drivers/tty/tty.c
+	drivers/base/device_model.c drivers/input/keyboard.c drivers/clock/timer.c drivers/tty/tty.c drivers/tty/serial.c drivers/vga/vga.c drivers/console/console.c
 OBJECTS = $(SOURCES_S:.s=.o) $(SOURCES_C:.c=.o)
 
 KERNEL = myos.bin

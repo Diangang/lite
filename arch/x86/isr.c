@@ -3,6 +3,7 @@
 #include "kernel.h"
 #include "task.h"
 #include "serial.h"
+#include "console.h"
 
 isr_t interrupt_handlers[256];
 static uint32_t interrupt_count[256];
@@ -121,37 +122,34 @@ char *exception_messages[] = {
 };
 
 /* Common handler for all ISRs */
-void isr_handler(struct registers *regs)
+struct registers *isr_handler(struct registers *regs)
 {
     if (regs->int_no < 256) {
         interrupt_count[regs->int_no]++;
     }
     if (interrupt_handlers[regs->int_no] != 0) {
         isr_t handler = interrupt_handlers[regs->int_no];
-        handler(regs);
+        regs = handler(regs);
     } else {
         if (regs->int_no < 32 && ((regs->cs & 0x3) == 0x3)) {
-            vga_put_str("\nUser Exception: ");
-            vga_put_str(exception_messages[regs->int_no]);
-            vga_put_str("\n");
-            serial_put_str("User Exception: ");
-            serial_put_str(exception_messages[regs->int_no]);
-            serial_put_str("\n");
+            printf("\nUser Exception: ");
+            printf(exception_messages[regs->int_no]);
+            printf("\n");
             task_exit_with_reason(1, TASK_EXIT_EXCEPTION, regs->int_no, regs->eip);
-            return;
+            struct registers *task_schedule(struct registers *r);
+            regs = task_schedule(regs);
+            return regs;
         }
         /* Unhandled interrupt - Panic! */
-        vga_put_str("\nKERNEL PANIC! Exception: ");
-        if (regs->int_no < 32) {
-            vga_put_str(exception_messages[regs->int_no]);
-        } else {
-            vga_put_str("Unknown Exception");
-        }
-        vga_put_str("\nSystem Halted.\n");
-        while(1) {
-            __asm__ volatile("cli; hlt");
-        }
+        printf("\nKERNEL PANIC! Exception: ");
+        if (regs->int_no < 32)
+            printf(exception_messages[regs->int_no]);
+        else
+            printf("Unknown Exception");
+        printf("\n");
+        panic("System Halted.");
     }
+    return regs;
 }
 
 /* Common handler for all IRQs */
@@ -183,7 +181,9 @@ struct registers *irq_handler(struct registers *regs)
         struct registers *task_schedule(struct registers *r);
         void task_tick(void);
         task_tick();
-        regs = task_schedule(regs);
+        if (!task_current_is_user() || (regs->cs & 0x3) == 0x3 || task_should_resched()) {
+            regs = task_schedule(regs);
+        }
     }
 
     return regs;

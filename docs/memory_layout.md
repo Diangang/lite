@@ -86,9 +86,10 @@ VMM 初始化时为 `0x00000000 ~ 0x08000000`（128MB）建立恒等映射：
 
 用户态程序链接地址固定为：
 
-- `0x00400000`（见 [userprog.ld](file:///data25/lidg/lite/userprog.ld#L1-L28)）
+- `0x40000000`（1GB 处，见 [userprog.ld](file:///data25/lidg/lite/usr/userprog.ld)）
+（注：原设计为 `0x400000`，但为避免与内核 `0~128MB` 的恒等映射共享页表导致 execve 销毁空间时引发缺页冲突，现已提升至 `1GB` 处。）
 
-内核加载器据 PT_LOAD 段计算 `user_base=min_vaddr` 与 `user_end=max_vaddr`，并按段权限建立 VMA（见 [kernel.c](file:///data25/lidg/lite/kernel.c#L292-L412)）。
+内核加载器据 PT_LOAD 段计算 `user_base=min_vaddr` 与 `user_end=max_vaddr`，并按段权限建立 VMA（见 [kernel.c](file:///data25/lidg/lite/kernel.c)）。
 
 ### 3.3 用户栈
 
@@ -129,14 +130,11 @@ VMM 初始化时为 `0x00000000 ~ 0x08000000`（128MB）建立恒等映射：
 
 ## 4. 关键映射与缺页语义（为什么能工作）
 
-### 4.1 “恒等映射页”与“用户 VMA”冲突的处理
+### 4.1 “恒等映射页”与“用户 VMA”冲突的处理（历史问题）
 
-由于内核对低端 0~128MB 做了 supervisor-only 恒等映射，用户程序常用的 `0x400000` 区间可能落在该范围内。
+早期设计中，用户程序常用的 `0x400000` 区间落在内核 0~128MB 的恒等映射范围内。这会导致 fork/execve 时产生严重的页表共享销毁冲突（见 Issues.md 6.9）。
 
-当前实现通过两条路径保证用户仍可用：
-
-- 用户 ELF 加载时会在 user_dir 中重新映射用户段虚拟页到新分配的物理页（覆盖原恒等映射），并标记 `PTE_USER`（见 [kernel.c](file:///data25/lidg/lite/kernel.c#L354-L367)）。
-- 对于“present fault（页存在但无 user 权限）”：缺页处理会在 VMA 允许的情况下重新分配物理页并以 `PTE_USER` 重映射（见 [vmm.c](file:///data25/lidg/lite/vmm.c#L485-L505)）。
+当前实现已将用户态程序的链接基址提升至 `0x40000000`（1GB 处），从根本上避开了与低端 128MB 内核恒等映射的重叠。因此，用户进程各自拥有完全独立的页目录和页表，不再发生互相干扰的越权或被销毁等情况。
 
 ### 4.2 COW
 
