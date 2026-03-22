@@ -1,7 +1,7 @@
 #ifndef DEVFS_H
 #define DEVFS_H
 
-#include "fs.h"
+#include "vfs.h"
 
 enum {
     CONSOLE_IOCTL_GETFLAGS = 0x100,
@@ -13,7 +13,7 @@ enum {
     CONSOLE_TTY_CANON = 1 << 1
 };
 
-struct fs_node *devfs_init(void);
-struct fs_node *devfs_get_console(void);
+struct vfs_inode *devfs_init(void);
+struct vfs_inode *devfs_get_console(void);
 
 #endif

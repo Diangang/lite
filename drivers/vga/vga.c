@@ -1,5 +1,6 @@
-#include "kernel.h"
 #include "serial.h"
+#include "console.h"
+#include "libc.h"
 
 static const size_t VGA_WIDTH = 80;
 static const size_t VGA_HEIGHT = 25;
@@ -63,8 +64,6 @@ static void vga_scroll(void)
 
 void vga_put_char(char c)
 {
-    serial_put_char(c);
-
     if (c == '\b') {
         if (vga_column > 0) {
             vga_column--;
@@ -88,14 +87,7 @@ void vga_put_char(char c)
     }
 }
 
-void vga_put_str(const char* data)
-{
-    size_t size = strlen(data);
-    for (size_t i = 0; i < size; i++)
-        vga_put_char(data[i]);
-}
-
-void vga_initialize(void)
+void init_vga(void)
 {
     vga_row = 0;
     vga_column = 0;
@@ -107,4 +99,7 @@ void vga_initialize(void)
             vga_buffer[index] = vga_entry(' ', vga_color);
         }
     }
+
+    console_set_targets(CONSOLE_TARGET_VGA);
+    printf("VGA initialized.\n");
 }

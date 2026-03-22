@@ -21,7 +21,7 @@
 /*
  * Virtual Memory Manager Functions
  */
-void vmm_init(void);
+void init_vmm(void);
 void vmm_map_page(void* phys_addr, void* virt_addr);
 void vmm_map_page_ex(uint32_t* dir, void* phys_addr, void* virt_addr, uint32_t flags);
 int vmm_is_mapped(void* virt_addr);

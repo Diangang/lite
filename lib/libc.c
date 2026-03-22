@@ -1,6 +1,7 @@
 #include <stdarg.h>
-#include "kernel.h"
+#include "libc.h"
 #include "console.h"
+#include "kheap.h"
 
 void *memset(void *s, int c, size_t n)
 {
@@ -146,4 +147,15 @@ void printf(const char *format, ...)
     }
 
     va_end(args);
+}
+
+char *strdup(const char *s)
+{
+    if (!s) return NULL;
+    int len = strlen(s);
+    char *dup = (char*)kmalloc(len + 1);
+    if (dup) {
+        memcpy(dup, s, len + 1);
+    }
+    return dup;
 }

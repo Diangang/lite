@@ -3,7 +3,7 @@
 #include "libc.h"
 #include "vfs.h"
 
-struct file *file_open_node(struct fs_node *node, uint32_t flags)
+struct file *file_open_node(struct vfs_inode *node, uint32_t flags)
 {
     if (!node) return NULL;
     struct file *f = (struct file*)kmalloc(sizeof(struct file));
@@ -30,7 +30,7 @@ struct file *file_open_path(const char *path, uint32_t flags)
         vfs_close(vf);
         return NULL;
     }
-    f->node = vf->dentry && vf->dentry->inode ? vf->dentry->inode->node : NULL;
+    f->node = vf->dentry && vf->dentry->inode ? vf->dentry->inode : NULL;
     f->flags = flags;
     f->vf = vf;
     f->refcount = 1;

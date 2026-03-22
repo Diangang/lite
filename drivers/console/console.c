@@ -2,11 +2,11 @@
 #include "serial.h"
 #include "vga.h"
 
-static uint32_t console_targets = CONSOLE_TARGET_ALL;
+static uint32_t console_targets = 0;
 
 void console_set_targets(uint32_t targets)
 {
-    console_targets = targets ? targets : CONSOLE_TARGET_ALL;
+    console_targets |= targets;
 }
 
 uint32_t console_get_targets(void)
@@ -18,12 +18,6 @@ void console_put_char(char c)
 {
     if (console_targets & CONSOLE_TARGET_VGA) vga_put_char(c);
     if (console_targets & CONSOLE_TARGET_SERIAL) serial_put_char(c);
-}
-
-void console_put_str(const char *s)
-{
-    if (!s) return;
-    while (*s) console_put_char(*s++);
 }
 
 uint32_t console_write(const uint8_t *buf, uint32_t len)

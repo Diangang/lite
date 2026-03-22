@@ -1,7 +1,6 @@
 #include "vmm.h"
 #include "pmm.h"
 #include "libc.h"
-#include "kernel.h"
 #include "isr.h"
 #include "task.h"
 #include "kheap.h"
@@ -445,7 +444,7 @@ struct registers *page_fault_handler(struct registers *regs)
     return regs;
 }
 
-void vmm_init(void)
+void init_vmm(void)
 {
     /* 1. Allocate a page for the Page Directory */
     page_directory = (uint32_t*)pmm_alloc_page();

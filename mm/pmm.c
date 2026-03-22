@@ -1,6 +1,5 @@
 #include "pmm.h"
 #include "libc.h"
-#include "kernel.h"
 
 static struct multiboot_info* cached_mbi = NULL;
 static uint32_t total_memory_kb = 0;
@@ -176,7 +175,7 @@ uint32_t pmm_get_free_kb(void)
 }
 
 extern uint32_t end; /* Defined in linker.ld, end of kernel */
-void pmm_init(struct multiboot_info* mbi)
+void init_pmm(struct multiboot_info* mbi)
 {
     cached_mbi = mbi;
 

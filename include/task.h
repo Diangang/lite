@@ -71,9 +71,9 @@ uint32_t task_brk(uint32_t new_end);
 int task_fd_alloc(struct file *file);
 task_fd_t *task_fd_get(int fd);
 int task_fd_close(int fd);
-void task_install_stdio(struct fs_node *console);
+void task_install_stdio(struct vfs_inode *console);
 
-void tasking_init(void);
+void init_task(void);
 int task_create(void (*entry)(void));
 int task_create_user(const char *program);
 struct registers *task_schedule(struct registers *regs);

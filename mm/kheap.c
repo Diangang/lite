@@ -2,7 +2,6 @@
 #include "vmm.h"
 #include "pmm.h"
 #include "libc.h"
-#include "kernel.h"
 
 /* The start of the free list */
 static struct header *free_list = NULL;
@@ -139,7 +138,7 @@ void kheap_print_stats(void) {
     printf("Total Blocks: %d, Free Blocks: %d, Total Free Bytes: %d\n", blocks, free_blocks, total_free);
 }
 
-void kheap_init(void) {
+void init_kheap(void) {
     /* Map initial 1MB for the heap */
     if (!kheap_extend(KHEAP_INITIAL_SIZE))
         panic("KHEAP PANIC: Failed to initialize heap.");

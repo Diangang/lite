@@ -20,7 +20,7 @@
   - 用户态 `#PF`：基于 VMA 校验权限（r/w/x）并按需分配；段权限支持只读页。
   - `brk` 雏形：维护 heap VMA 并依赖缺页按需分配物理页。
 - **文件与命名空间雏形**：
-  - initrd 只读文件系统（`struct fs_node` 模型）。
+  - initrd 只读文件系统（`struct vfs_inode` 模型）。
   - root 下挂载 `proc/`（tasks/sched/irq/maps）与 `dev/console`（最小设备节点）。
   - fdtable 已为 per-task（但 VFS 语义仍未收敛为统一 open/read/write/close）。
 - **可观测性**：
@@ -108,7 +108,7 @@
 在 P0.2 完成（I/O ABI 收敛）后再继续：
 
 - **D1.1 最小 file 对象**
-  - fdtable 存 `file*`（含 offset），而不是 `struct fs_node* + offset` 的“半 file”。
+  - fdtable 存 `file*`（含 offset），而不是 `struct vfs_inode* + offset` 的“半 file”。
   - initrd/procfs/devfs 都通过统一 `file_ops` 暴露 read/write/open/close。
 - **D1.2 最小路径解析与命名空间**
   - 逐步从“union root”过渡到 mount 模型（先能表达 `/proc`、`/dev`、`/` 三者关系即可）。

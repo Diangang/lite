@@ -88,7 +88,7 @@ void tss_set_kernel_stack(uint32_t stack)
     tss.esp0 = stack;
 }
 
-static void tss_init(void)
+static void init_tss(void)
 {
     uint32_t base = (uint32_t)&tss;
     uint32_t limit = base + sizeof(tss);
@@ -133,7 +133,8 @@ void init_gdt(void)
     /* Access: 0xF2 = 1111 0010b (Present, Ring 3, Code/Data, Data, Writable) */
     gdt_set_gate(4, 0, 0xFFFFFFFF, 0xF2, 0xCF);
 
-    tss_init();
+    init_tss();
 
     gdt_flush((uint32_t)&gdt_ptr, 0x28);
+    printf("GDT initialized.\n");
 }

@@ -1,11 +1,11 @@
 #include "syscall.h"
-#include "kernel.h"
 #include "task.h"
+#include "libc.h"
+#include "string.h"
 #include "shell.h"
 #include "vmm.h"
-#include "fs.h"
-#include "file.h"
 #include "vfs.h"
+#include "file.h"
 #include "kheap.h"
 
 static inline uint32_t irq_save(void)
@@ -40,10 +40,10 @@ struct linux_dirent {
     uint32_t d_ino;
     uint32_t d_off;
     uint16_t d_reclen;
-    char d_name[0];
-};
+    char d_name[]; // Flexible array member
+} __attribute__((packed));
 
-void syscall_init(void)
+void init_syscall(void)
 {
     register_interrupt_handler(128, syscall_handler);
 }
@@ -252,10 +252,6 @@ struct registers *syscall_handler(struct registers *regs)
             } else {
                 strcpy(name, (const char*)regs->ebx);
             }
-            if (!fs_root) {
-                regs->eax = (uint32_t)-1;
-                break;
-            }
             uint32_t flags = regs->ecx;
             struct file *f = file_open_path(name, flags);
             if (!f) {
@@ -344,6 +340,7 @@ struct registers *syscall_handler(struct registers *regs)
                 break;
             }
             if (!vfs_check_access(d->file->node, 1, 0, 1)) {
+                printf("DEBUG: sys_getdents fd %d access denied\n", fd);
                 regs->eax = (uint32_t)-1;
                 break;
             }
@@ -399,17 +396,29 @@ struct registers *syscall_handler(struct registers *regs)
             uint32_t off = 0;
             while (off + 12 <= out_cap) {
                 struct dirent *de = readdir_fs(d->file->node, d->file->vf->pos);
-                if (!de) break;
+                if (!de) {
+                    break;
+                }
                 uint32_t name_len = (uint32_t)strlen(de->name);
                 uint32_t reclen = 10 + name_len + 1;
                 reclen = (reclen + 3) & ~3;
-                if (off + reclen > out_cap) break;
+                if (off + reclen > out_cap) {
+                    if (off == 0) {
+                        kfree(out);
+                        regs->eax = (uint32_t)-1;
+                        goto getdents_end;
+                    }
+                    break;
+                }
+                
                 struct linux_dirent *lde = (struct linux_dirent*)(out + off);
+                memset(lde, 0, reclen);
                 lde->d_ino = de->ino;
                 lde->d_off = d->file->vf->pos + 1;
                 lde->d_reclen = (uint16_t)reclen;
                 memcpy(lde->d_name, de->name, name_len);
                 lde->d_name[name_len] = 0;
+                
                 off += reclen;
                 d->file->vf->pos++;
             }
@@ -429,6 +438,7 @@ struct registers *syscall_handler(struct registers *regs)
             }
             kfree(out);
             regs->eax = off;
+getdents_end:
             break;
         }
         case SYS_EXECVE: {

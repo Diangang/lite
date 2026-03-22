@@ -12,7 +12,6 @@ enum console_target {
 void console_set_targets(uint32_t targets);
 uint32_t console_get_targets(void);
 void console_put_char(char c);
-void console_put_str(const char *s);
 uint32_t console_write(const uint8_t *buf, uint32_t len);
 
 #endif

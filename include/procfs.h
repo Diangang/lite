@@ -1,8 +1,8 @@
 #ifndef PROCFS_H
 #define PROCFS_H
 
-#include "fs.h"
+#include "vfs.h"
 
-struct fs_node *procfs_init(void);
+struct vfs_inode *procfs_init(void);
 
 #endif

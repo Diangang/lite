@@ -1,7 +1,7 @@
 #include "isr.h"
 #include "idt.h"
-#include "kernel.h"
 #include "task.h"
+#include "libc.h"
 #include "serial.h"
 #include "console.h"
 
@@ -124,66 +124,62 @@ char *exception_messages[] = {
 /* Common handler for all ISRs */
 struct registers *isr_handler(struct registers *regs)
 {
-    if (regs->int_no < 256) {
+    if (regs->int_no < 256)
         interrupt_count[regs->int_no]++;
-    }
+
     if (interrupt_handlers[regs->int_no] != 0) {
         isr_t handler = interrupt_handlers[regs->int_no];
         regs = handler(regs);
-    } else {
-        if (regs->int_no < 32 && ((regs->cs & 0x3) == 0x3)) {
-            printf("\nUser Exception: ");
-            printf(exception_messages[regs->int_no]);
-            printf("\n");
-            task_exit_with_reason(1, TASK_EXIT_EXCEPTION, regs->int_no, regs->eip);
-            struct registers *task_schedule(struct registers *r);
-            regs = task_schedule(regs);
-            return regs;
-        }
-        /* Unhandled interrupt - Panic! */
-        printf("\nKERNEL PANIC! Exception: ");
-        if (regs->int_no < 32)
-            printf(exception_messages[regs->int_no]);
-        else
-            printf("Unknown Exception");
-        printf("\n");
-        panic("System Halted.");
+        return regs;
     }
+
+    if (regs->int_no < 32 && ((regs->cs & 0x3) == 0x3)) {
+        printf("\nUser Exception: ");
+        printf(exception_messages[regs->int_no]);
+        printf("\n");
+        task_exit_with_reason(1, TASK_EXIT_EXCEPTION, regs->int_no, regs->eip);
+        struct registers *task_schedule(struct registers *r);
+        regs = task_schedule(regs);
+        return regs;
+    }
+
+    /* Unhandled interrupt - Panic! */
+    printf("\nKERNEL PANIC! Exception: ");
+    if (regs->int_no < 32)
+        printf(exception_messages[regs->int_no]);
+    else
+        printf("Unknown Exception");
+    printf("\n");
+    panic("System Halted.");
     return regs;
 }
 
 /* Common handler for all IRQs */
 struct registers *irq_handler(struct registers *regs)
 {
-    if (regs->int_no < 256) {
+    if (regs->int_no < 256)
         interrupt_count[regs->int_no]++;
-    }
+
     /* Send EOI (End of Interrupt) signal to PICs */
     /* If IRQ >= 8 (slave), send to slave PIC */
     if (regs->int_no >= 40)
-    {
         outb(0xA0, 0x20);
-    }
+
     /* Always send to master PIC */
     outb(0x20, 0x20);
 
     /* Handle Serial Interrupt specifically if needed, or through handler array */
-    if (regs->int_no == 36) { // IRQ 4
+    if (regs->int_no == 36) // IRQ 4
         serial_handler(regs);
-    }
     else if (interrupt_handlers[regs->int_no] != 0)
-    {
-        isr_t handler = interrupt_handlers[regs->int_no];
-        handler(regs);
-    }
+        interrupt_handlers[regs->int_no](regs);
 
     if (regs->int_no == IRQ0) {
-        struct registers *task_schedule(struct registers *r);
-        void task_tick(void);
         task_tick();
-        if (!task_current_is_user() || (regs->cs & 0x3) == 0x3 || task_should_resched()) {
+        if (!task_current_is_user() ||
+            (regs->cs & 0x3) == 0x3 ||
+            task_should_resched())
             regs = task_schedule(regs);
-        }
     }
 
     return regs;

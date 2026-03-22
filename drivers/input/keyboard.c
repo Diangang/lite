@@ -1,7 +1,7 @@
 #include "keyboard.h"
 #include "isr.h"
-#include "kernel.h"
 #include "tty.h"
+#include "libc.h"
 
 /* US Keyboard Layout Scancode Table (Set 1) */
 unsigned char kbdus[256] =

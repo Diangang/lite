@@ -19,7 +19,7 @@ struct header {
 
 #define HEAP_MAGIC 0x12345678
 
-void kheap_init(void);
+void init_kheap(void);
 void *kmalloc(size_t size);
 void kfree(void *ptr);
 void kheap_print_stats(void);

@@ -2,8 +2,7 @@
 #define VGA_H
 
 /* Terminal Helper Functions */
-void vga_initialize(void);
-void vga_put_str(const char* data);
+void init_vga(void);
 void vga_put_char(char c);
 
 #endif

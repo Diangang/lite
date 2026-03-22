@@ -32,7 +32,7 @@ enum {
     SYS_GETGID = 25
 };
 
-void syscall_init(void);
+void init_syscall(void);
 struct registers *syscall_handler(struct registers *regs);
 
 #endif

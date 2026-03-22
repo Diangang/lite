@@ -1,7 +1,7 @@
 #ifndef INITRD_H
 #define INITRD_H
 
-#include "fs.h"
+#include "vfs.h"
 #include "multiboot.h"
 
 /*
@@ -16,13 +16,13 @@
  * ...
  */
 
-typedef struct {
+struct initrd_file_header {
     uint32_t magic; /* Magic number to verify initrd integrity */
     char name[64];
     uint32_t offset;
     uint32_t length;
-} initrd_file_header_t;
+};
 
-struct fs_node *init_initrd(uint32_t location);
+struct vfs_inode *init_initrd(struct multiboot_info* mbi);
 
 #endif

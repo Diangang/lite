@@ -1,14 +1,12 @@
 #include "shell.h"
-#include "kernel.h"
 #include "libc.h"
 #include "timer.h"
 #include "task.h"
 #include "syscall.h"
 #include "pmm.h"
 #include "kheap.h"
-#include "fs.h"
-#include "file.h"
 #include "vfs.h"
+#include "file.h"
 #include "tty.h"
 #include "vga.h"
 #include "console.h"
@@ -65,7 +63,7 @@ static void shell_execute(void)
         printf("  cat     - Print file content\n");
     }
     else if (strcmp(cmd_buffer, "clear") == 0) {
-        vga_initialize();
+        init_vga();
     }
     else if (strcmp(cmd_buffer, "hello") == 0) {
         printf("Hello from the Lite OS Shell!\n");
@@ -267,68 +265,60 @@ static void shell_execute(void)
         }
     }
     else if (strcmp(cmd_buffer, "ls") == 0 || strncmp(cmd_buffer, "ls ", 3) == 0) {
-        if (!fs_root) {
-            printf("No file system mounted!\n");
-        } else {
-            struct fs_node *dir = vfs_resolve(".");
-            if (strncmp(cmd_buffer, "ls ", 3) == 0) {
-                char *path = cmd_buffer + 3;
-                if (path[0]) {
-                    struct fs_node *found = vfs_resolve(path);
-                    if (!found || ((found->flags & 0x7) != FS_DIRECTORY)) {
-                        printf("Directory not found: %s\n", path);
-                        cmd_index = 0;
-                        return;
-                    }
-                    dir = found;
+        struct vfs_inode *dir = vfs_resolve(".");
+        if (strncmp(cmd_buffer, "ls ", 3) == 0) {
+            char *path = cmd_buffer + 3;
+            if (path[0]) {
+                struct vfs_inode *found = vfs_resolve(path);
+                if (!found || ((found->flags & 0x7) != FS_DIRECTORY)) {
+                    printf("Directory not found: %s\n", path);
+                    cmd_index = 0;
+                    return;
                 }
+                dir = found;
             }
-            if (!dir) {
-                printf("No file system mounted!\n");
-                cmd_index = 0;
-                return;
-            }
-            int i = 0;
-            struct dirent *node = 0;
-            while ((node = readdir_fs(dir, i)) != 0) {
-                printf("Found file: %s\n", node->name);
-                struct fs_node *fsnode = finddir_fs(dir, node->name);
-                if ((fsnode->flags & 0x7) == FS_DIRECTORY)
-                    printf("\t(directory)\n");
-                else
-                    printf("\t(file)\n");
-                i++;
-            }
+        }
+        if (!dir) {
+            printf("No file system mounted or directory not found!\n");
+            cmd_index = 0;
+            return;
+        }
+        int i = 0;
+        struct dirent *node = 0;
+        while ((node = readdir_fs(dir, i)) != 0) {
+            printf("Found file: %s\n", node->name);
+            struct vfs_inode *fsnode = finddir_fs(dir, node->name);
+            if ((fsnode->flags & 0x7) == FS_DIRECTORY)
+                printf("\t(directory)\n");
+            else
+                printf("\t(file)\n");
+            i++;
         }
     }
     else if (strncmp(cmd_buffer, "cat ", 4) == 0) {
-        if (!fs_root) {
-            printf("No file system mounted!\n");
-        } else {
-            char* filename = cmd_buffer + 4;
-            struct file *f = file_open_path(filename, 0);
-            if (!f) {
-                printf("File not found: %s\n", filename);
-                cmd_index = 0;
-                return;
-            }
-            if ((f->node->flags & 0x7) == FS_DIRECTORY) {
-                printf("Not a file: %s\n", filename);
-                file_close(f);
-                cmd_index = 0;
-                return;
-            }
-            uint8_t buf[256];
-            while (1) {
-                uint32_t n = file_read(f, buf, sizeof(buf));
-                if (n == 0) break;
-                for (uint32_t i = 0; i < n; i++) {
-                    console_put_char((char)buf[i]);
-                }
-            }
-            printf("\n");
-            file_close(f);
+        char* filename = cmd_buffer + 4;
+        struct file *f = file_open_path(filename, 0);
+        if (!f) {
+            printf("File not found: %s\n", filename);
+            cmd_index = 0;
+            return;
         }
+        if ((f->node->flags & 0x7) == FS_DIRECTORY) {
+            printf("Not a file: %s\n", filename);
+            file_close(f);
+            cmd_index = 0;
+            return;
+        }
+        uint8_t buf[256];
+        while (1) {
+            uint32_t n = file_read(f, buf, sizeof(buf));
+            if (n == 0) break;
+            for (uint32_t i = 0; i < n; i++) {
+                printf("%c", (char)buf[i]);
+            }
+        }
+        printf("\n");
+        file_close(f);
     }
     else if (strncmp(cmd_buffer, "echo ", 5) == 0) {
         /* Print everything after 'echo ' */
@@ -345,7 +335,7 @@ static void shell_execute(void)
     cmd_index = 0;
 }
 
-void shell_init(void)
+void init_shell(void)
 {
     cmd_index = 0;
     foreground_is_user = 0;
@@ -437,7 +427,7 @@ void shell_task(void)
         }
         if (c == '\r') c = '\n';
         if (c == '\n') {
-            console_put_char('\n');
+            printf("\n");
             shell_execute();
             if (!foreground_is_user) {
                 shell_prompt();
@@ -445,12 +435,12 @@ void shell_task(void)
         } else if (c == '\b' || c == 0x7F) {
             if (cmd_index > 0) {
                 cmd_index--;
-                console_put_char('\b');
+                printf("\b");
             }
         } else {
             if (cmd_index < CMD_BUF_SIZE - 1) {
                 cmd_buffer[cmd_index++] = c;
-                console_put_char(c);
+                printf("%c", c);
             }
         }
     }

@@ -4,8 +4,7 @@
 #include "isr.h"
 
 /* Serial Helper Functions */
-void serial_init(void);
-void serial_put_str(const char* data);
+void init_serial(void);
 void serial_put_char(char a);
 void serial_handler(struct registers* regs);
 

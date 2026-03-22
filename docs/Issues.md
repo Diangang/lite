@@ -26,7 +26,7 @@
 - **解决**：在 `linker.ld` 中暴露 `end` 符号，并在 `pmm.c` 中将 Bitmap 强制放置在 `&end` 之后。在初始化位图时，将 `0x0` 到 `bitmap_end` 之间的所有物理页均标记为“已占用”。
 
 ### 2.2 开启分页 (Paging) 后瞬间 Triple Fault
-- **现象**：在 `vmm_init` 中设置 `CR0` 寄存器的 `PG` 位（开启分页）后，QEMU 立即无限重启。
+- **现象**：在 `init_vmm` 中设置 `CR0` 寄存器的 `PG` 位（开启分页）后，QEMU 立即无限重启。
 - **定位**：开启分页的瞬间，CPU 期望 EIP（指令指针）所在的地址必须在页表中有效。如果没有建立恒等映射（Identity Mapping），CPU 取下一条指令时会触发缺页异常（Page Fault），由于 IDT 尚未完全接管，直接导致 Triple Fault。
 - **解决**：在开启分页前，强制将物理地址 `0x000000` - `0x400000`（前 4MB）映射到相同的虚拟地址。
 
@@ -71,7 +71,7 @@
 - **定位**：在 `-display none` 模式下，QEMU 将终端输入重定向到虚拟串口 (COM1)，而不是 PS/2 键盘。但内核只有 IRQ 1（键盘）中断，没有处理 IRQ 4（串口）。
 - **解决**：
   1. **驱动实现**：在 `interrupt.s` 和 `isr.c` 中添加对 `irq4` 的支持，映射到 IDT 36。
-  2. **中断开启**：在 `serial_init` 中设置 UART 寄存器开启“接收数据可用”中断，并在 PIC 掩码中解蔽 IRQ 4。
+  2. **中断开启**：在 `init_serial` 中设置 UART 寄存器开启“接收数据可用”中断，并在 PIC 掩码中解蔽 IRQ 4。
   3. **数据读取**：实现 `serial_handler`，读取 `0x3F8` 端口并传入 Shell。
 
 ### 5.2 回车键和退格键无效
@@ -120,7 +120,7 @@
 
 ### 6.6 用户态 mmap 写入触发 present fault（低端恒等映射权限冲突）
 - **现象**：执行 `mmap.elf` 后输出 `Page Fault! ( write user ) at 0x403000`，并显示 `User Page Fault: unhandled.`。
-- **定位**：用户 VMA 位于 `0x400000` 低端区域，但内核在 `vmm_init` 里对 `0~128MB` 做了 supervisor-only 恒等映射。用户写入时触发“present but no user permission”类型缺页，现有缺页处理只处理 not-present 分支，导致直接杀死用户进程。
+- **定位**：用户 VMA 位于 `0x400000` 低端区域，但内核在 `init_vmm` 里对 `0~128MB` 做了 supervisor-only 恒等映射。用户写入时触发“present but no user permission”类型缺页，现有缺页处理只处理 not-present 分支，导致直接杀死用户进程。
 - **解决**：在缺页处理里增加 “present fault 且 VMA 允许访问” 的修正路径：为该页重新分配物理页，设置 `PTE_USER` 并按 VMA 设定读写权限，确保用户映射可写。
 
 ### 6.7 fork/COW 写入触发两次 Page Fault（写时复制预期现象）
@@ -128,15 +128,20 @@
 - **定位**：父子进程在 fork 后共享同一用户页；首次写入触发 COW，内核为当前进程分配新页并重新映射，因此各自都会触发一次缺页。
 - **解决**：属预期行为，无需修复；可通过 `/proc/cow` 观察 faults/copies 计数随写入增加。
 
-### 6.8 用户态 ush 的 ls 无输出（getdents 结果遍历条件写反）
-- **现象**：`ush$ ls` 无任何输出也不报错（目录实际有内容，例如 `/initrd` 下有多个 ELF）。
-- **定位**：`SYS_GETDENTS` 已返回有效字节数，但用户态 `ush` 在解析目录项时比较条件写反，导致直接跳回下一轮 `getdents`，从而从未打印任何条目。
-- **解决**：修正遍历循环条件（比较 `offset` 与 `returned_bytes` 的方向），确保逐条解析并打印目录项。
+### 6.8 用户态 ush 的 ls 无输出（SYS_GETDENTS 结构体与 VFS 缓存初始化问题）
+- **现象**：`ush$ ls` 无任何输出也不报错，且在内核层重构 VFS 后，即使调用 `SYS_GETDENTS` 也无法读出目录项。
+- **定位**：
+  1. **结构体布局不匹配**：内核态实现的 `SYS_GETDENTS` 没有采用标准的 `linux_dirent` 结构体（缺少 `d_off` 和 `d_reclen` 等字段的正确填充），导致用户态汇编解析时按偏移量读取出现错乱。
+  2. **VFS 缓存初始化时序错误**：在 `vfs_init()` 中，根节点 `vfs_root_node` 被添加到 dentry 缓存时，其文件操作表 `f_ops` 尚未赋值（为 `NULL`）。这导致后续打开 `/` 目录时拿到的缓存 inode 缺少 `readdir` 方法，从而无法读取任何条目。
+- **解决**：
+  1. 引入标准 `struct linux_dirent`（含 `d_ino`, `d_off`, `d_reclen`, `d_name[]`），在 `SYS_GETDENTS` 中计算 `reclen` 并按 4 字节对齐打包目录项。
+  2. 调整 `vfs_init()` 的初始化顺序，提前声明 `vfs_root_ops`，并在将 `vfs_root_node` 存入缓存前正确挂载 `f_ops`。
+  3. 为虚拟根目录、`initrd` 和 `ramfs` 的 `readdir` 补充硬编码的 `.` 和 `..` 目录项返回逻辑，以符合 POSIX 预期。
 
 ### 6.9 用户态 execve 退出后父进程触发 Page Fault (EIP 0x400037)
 - **现象**：在用户态 shell (`ush.elf`) 中执行 `run cat.elf` 后，`cat.elf` 正常输出内容并退出。但当控制权交还给父进程继续执行 `SYS_WAITPID` 之后的指令（EIP: 0x400037）时，触发了 `Page Fault`（试图读取地址 `0x0`，导致 unhandled 崩溃）。
 - **定位**：
-  1. **内核页表共享冲突**：在 `vmm_init` 中，内核将物理内存的前 `128MB` 进行了恒等映射（Identity Mapping）。
+  1. **内核页表共享冲突**：在 `init_vmm` 中，内核将物理内存的前 `128MB` 进行了恒等映射（Identity Mapping）。
   2. **加载基址冲突**：用户程序的链接脚本 `userprog.ld` 之前的加载基址为 `0x400000`（4MB），恰好落在内核恒等映射的范围内。
   3. **相互破坏**：由于落在同一范围内，`init.elf`、`ush.elf` 和 `cat.elf` 实际上共享了同一块内核页表结构。当 `ush.elf` 调用 `SYS_EXECVE` 加载新程序时，会调用 `mm_destroy` 销毁旧空间，这直接清空了共享页表中的映射条目。`cat.elf` 退出后切回父进程，由于 4MB 处的映射已被破坏，CPU 读到全零数据，引发了缺页异常。
 - **解决**：修改 `usr/userprog.ld`，将用户程序的链接基址从 `0x400000` (4MB) 提升到 `0x40000000` (1GB)。1GB 远超内核恒等映射范围，使得每个用户进程都有自己完全独立的页表区域，销毁和修改不再相互干扰。
