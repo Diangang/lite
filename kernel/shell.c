@@ -5,7 +5,7 @@
 #include "syscall.h"
 #include "pmm.h"
 #include "kheap.h"
-#include "vfs.h"
+#include "fs.h"
 #include "file.h"
 #include "tty.h"
 #include "vga.h"

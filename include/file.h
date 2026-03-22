@@ -2,7 +2,7 @@
 #define FILE_H
 
 #include <stdint.h>
-#include "vfs.h"
+#include "fs.h"
 
 enum {
     O_CREAT = 1 << 6,

@@ -1,4 +1,4 @@
-#include "vfs.h"
+#include "fs.h"
 #include "task.h"
 #include "libc.h"
 
@@ -16,13 +16,11 @@ void close_fs(struct vfs_inode *node)
         node->f_ops->close(node);
 }
 
-char vfs_boot_cwd[128];
-
 const char *vfs_getcwd(void)
 {
     const char *cwd = task_get_cwd();
     if (cwd && *cwd) return cwd;
-    return vfs_boot_cwd;
+    return "/";
 }
 
 int vfs_chdir(const char *path)
@@ -35,9 +33,5 @@ int vfs_chdir(const char *path)
     if ((node->flags & 0x7) != FS_DIRECTORY) return -1;
     if (!vfs_check_access(node, 0, 0, 1)) return -1;
     if (task_set_cwd(abs) == 0) return 0;
-    uint32_t n = (uint32_t)strlen(abs);
-    if (n >= sizeof(vfs_boot_cwd)) n = sizeof(vfs_boot_cwd) - 1;
-    memcpy(vfs_boot_cwd, abs, n);
-    vfs_boot_cwd[n] = 0;
-    return 0;
+    return -1;
 }

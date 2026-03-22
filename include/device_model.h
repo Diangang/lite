@@ -2,7 +2,7 @@
 #define DEVICE_MODEL_H
 
 #include <stdint.h>
-#include "vfs.h"
+#include "fs.h"
 
 struct kobject {
     char name[32];

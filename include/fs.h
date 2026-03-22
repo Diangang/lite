@@ -1,5 +1,5 @@
-#ifndef VFS_H
-#define VFS_H
+#ifndef FS_H
+#define FS_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -56,7 +56,10 @@ struct dirent {
 struct vfs_dentry {
     const char *name;
     struct vfs_dentry *parent;
+    struct vfs_dentry *children;
+    struct vfs_dentry *sibling;
     struct vfs_inode *inode;
+    struct vfs_mount *mount;
     uint32_t refcount;
     void *cache;
 };
@@ -80,15 +83,11 @@ struct vfs_super_block {
 struct vfs_mount {
     const char *path;
     struct vfs_super_block *sb;
+    struct vfs_dentry *root;
 };
 
 /* Internal VFS state */
-extern struct vfs_mount vfs_mounts[8];
-extern uint32_t vfs_mount_count;
-extern struct vfs_inode vfs_root_node;
-extern struct vfs_inode *vfs_base_root;
-extern struct vfs_file_operations vfs_root_ops;
-extern char vfs_boot_cwd[128];
+extern struct vfs_dentry *vfs_root_dentry;
 
 enum {
     VFS_O_CREAT = 1 << 6,
@@ -104,7 +103,6 @@ int vfs_normalize_path(const char *path, char *out, uint32_t cap);
 int vfs_build_abs(const char *path, char *abs, uint32_t cap);
 const char *vfs_getcwd(void);
 
-void init_vfs(void);
 int vfs_mount_root(const char *path, struct vfs_inode *root_node);
 int vfs_chdir(const char *path);
 const char *vfs_getcwd(void);
@@ -113,7 +111,7 @@ struct vfs_inode *vfs_resolve(const char *path);
 int vfs_chmod(const char *path, uint32_t mode);
 int vfs_check_access(struct vfs_inode *node, int want_read, int want_write, int want_exec);
 struct vfs_file *vfs_open(const char *path, uint32_t flags);
-struct vfs_file *vfs_open_node(struct vfs_inode *node, uint32_t flags);
+struct vfs_file *vfs_open_dentry(struct vfs_dentry *dentry, uint32_t flags);
 uint32_t vfs_read(struct vfs_file *f, uint8_t *buf, uint32_t len);
 uint32_t vfs_write(struct vfs_file *f, const uint8_t *buf, uint32_t len);
 int vfs_ioctl(struct vfs_file *f, uint32_t request, uint32_t arg);
@@ -130,6 +128,10 @@ int vfs_check_access(struct vfs_inode *node, int want_read, int want_write, int 
 int vfs_chmod(const char *path, uint32_t mode);
 
 int ioctl_fs(struct vfs_inode *node, uint32_t request, uint32_t arg);
+
+struct vfs_dentry *d_alloc(struct vfs_dentry *parent, const char *name);
+struct vfs_dentry *d_lookup(struct vfs_dentry *parent, const char *name);
+struct vfs_dentry *path_walk(const char *path);
 
 struct vfs_dentry *vfs_dentry_get(struct vfs_inode *node, const char *name);
 void vfs_dentry_put(struct vfs_dentry *d);

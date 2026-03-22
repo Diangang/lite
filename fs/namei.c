@@ -1,32 +1,11 @@
-#include "vfs.h"
+#include "fs.h"
 #include "libc.h"
 #include "task.h"
 #include "ramfs.h"
 
-int vfs_path_is_prefix(const char *path, const char *prefix, uint32_t *out_tail_off)
-{
-    if (!path || !prefix) return 0;
-    if (prefix[0] == '/' && prefix[1] == 0) {
-        if (path[0] != '/') return 0;
-        if (out_tail_off) *out_tail_off = 1;
-        return 1;
-    }
-    uint32_t i = 0;
-    while (prefix[i]) {
-        if (path[i] != prefix[i]) return 0;
-        i++;
-    }
-    if (path[i] == 0) {
-        if (out_tail_off) *out_tail_off = i;
-        return 1;
-    }
-    if (path[i] == '/') {
-        if (out_tail_off) *out_tail_off = i + 1;
-        return 1;
-    }
-    return 0;
-}
-
+// Keep vfs_build_abs to build absolute path strings for simplicity
+// Alternatively, we could do path_walk from task cwd dentry without strings, but this is simpler
+// because task struct currently stores cwd as string.
 static int vfs_append_component(char *out, uint32_t *len, uint32_t cap, const char *start, uint32_t n)
 {
     if (!out || !len || !start) return 0;
@@ -123,26 +102,64 @@ int vfs_build_abs(const char *path, char *abs, uint32_t cap)
     return vfs_normalize_path(tmp, abs, cap);
 }
 
-static struct vfs_mount *vfs_find_mount(const char *path, uint32_t *out_tail_off)
+struct vfs_dentry *path_walk(const char *path)
 {
-    struct vfs_mount *best = NULL;
-    uint32_t best_len = 0;
-    uint32_t tail = 0;
+    if (!path || !*path) return NULL;
+    char abs[256];
+    if (!vfs_build_abs(path, abs, sizeof(abs))) return NULL;
 
-    for (uint32_t i = 0; i < vfs_mount_count; i++) {
-        struct vfs_mount *m = &vfs_mounts[i];
-        if (!m->path) continue;
-        uint32_t off = 0;
-        if (!vfs_path_is_prefix(path, m->path, &off)) continue;
-        uint32_t len = (uint32_t)strlen(m->path);
-        if (len >= best_len) {
-            best = m;
-            best_len = len;
-            tail = off;
+    struct vfs_dentry *curr = vfs_root_dentry;
+    if (!curr) return NULL;
+
+    const char *p = abs;
+    while (*p == '/') p++;
+
+    while (*p) {
+        const char *s = p;
+        while (*p && *p != '/') p++;
+        uint32_t len = (uint32_t)(p - s);
+
+        char part[128];
+        if (len >= sizeof(part)) return NULL;
+        memcpy(part, s, len);
+        part[len] = 0;
+
+        if (strcmp(part, ".") == 0) {
+            // curr stays the same
+        } else if (strcmp(part, "..") == 0) {
+            if (curr->parent) curr = curr->parent;
+        } else {
+            struct vfs_dentry *next = d_lookup(curr, part);
+            if (!next) {
+                // Not in cache, try underlying FS
+                if (curr->inode && curr->inode->f_ops && curr->inode->f_ops->finddir) {
+                    struct vfs_inode *child_inode = curr->inode->f_ops->finddir(curr->inode, part);
+                    if (child_inode) {
+                        next = d_alloc(curr, part);
+                        next->inode = child_inode;
+                    }
+                }
+            }
+            if (!next) return NULL; // Not found
+            curr = next;
         }
+
+        // Traverse mount point if it's mounted over
+        if (curr->mount && curr->mount->root) {
+            curr = curr->mount->root;
+        }
+
+        while (*p == '/') p++;
     }
-    if (out_tail_off) *out_tail_off = tail;
-    return best;
+
+    return curr;
+}
+
+struct vfs_inode *vfs_resolve(const char *path)
+{
+    struct vfs_dentry *d = path_walk(path);
+    if (d) return d->inode;
+    return NULL;
 }
 
 int vfs_mkdir(const char *path)
@@ -166,39 +183,14 @@ int vfs_mkdir(const char *path)
     if (!*name) return -1;
 
     struct vfs_inode *pnode = vfs_resolve(parent);
-    if (pnode == &vfs_root_node) pnode = vfs_base_root;
     if (!pnode || (pnode->flags & 0x7) != FS_DIRECTORY) return -1;
     if (!vfs_check_access(pnode, 0, 1, 1)) return -1;
-    if (finddir_fs(pnode, (char*)name)) return -1;
+
+    // Check if exists
+    if (pnode->f_ops && pnode->f_ops->finddir && pnode->f_ops->finddir(pnode, name)) {
+        return -1;
+    }
+
     if (!ramfs_create_child(pnode, name, FS_DIRECTORY)) return -1;
     return 0;
-}
-
-struct vfs_inode *vfs_resolve(const char *path)
-{
-    if (!path || !*path) return NULL;
-    char abs[256];
-    if (!vfs_build_abs(path, abs, sizeof(abs))) {
-        return NULL;
-    }
-    uint32_t tail = 0;
-    struct vfs_mount *m = vfs_find_mount(abs, &tail);
-    if (!m || !m->sb || !m->sb->root) {
-        return NULL;
-    }
-    const char *sub = abs + tail;
-    while (*sub == '/') sub++;
-    if (*sub == 0) {
-        return m->sb->root;
-    }
-
-    if (m == &vfs_mounts[0] && m->sb->root == &vfs_root_node) {
-        if (!vfs_base_root) return NULL;
-        if (!*sub) return &vfs_root_node;
-        struct vfs_inode *res = finddir_fs(vfs_base_root, (char*)sub);
-        return res;
-    }
-
-    struct vfs_inode *node = finddir_fs(m->sb->root, (char*)sub);
-    return node;
 }

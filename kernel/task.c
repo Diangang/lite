@@ -8,7 +8,7 @@
 #include "syscall.h"
 #include "gdt.h"
 #include "devfs.h"
-#include "vfs.h"
+#include "fs.h"
 #include "console.h"
 
 static void enter_user_mode(uint32_t entry, uint32_t user_stack)
@@ -969,8 +969,7 @@ void init_task(void)
 
     task_head = task;
     task_current = task;
-    const char *boot_cwd = vfs_getcwd();
-    if (boot_cwd) task_set_cwd(boot_cwd);
+    strcpy(task->cwd, "/");
     wait_queue_init(&exit_waitq);
     tss_set_kernel_stack((uint32_t)task_current->stack + 4096);
 
@@ -1030,13 +1029,7 @@ static int task_create_internal(void (*entry)(void), const char *program)
         memcpy(task->cwd, task_current->cwd, n);
         task->cwd[n] = 0;
     } else {
-        const char *boot_cwd = vfs_getcwd();
-        if (boot_cwd) {
-            uint32_t n = (uint32_t)strlen(boot_cwd);
-            if (n >= sizeof(task->cwd)) n = sizeof(task->cwd) - 1;
-            memcpy(task->cwd, boot_cwd, n);
-            task->cwd[n] = 0;
-        }
+        strcpy(task->cwd, "/");
     }
     task_fdtable_init(task);
     if (program) {

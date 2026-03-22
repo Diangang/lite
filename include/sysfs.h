@@ -1,7 +1,7 @@
 #ifndef SYSFS_H
 #define SYSFS_H
 
-#include "vfs.h"
+#include "fs.h"
 
 struct vfs_inode *init_sysfs(void);
 

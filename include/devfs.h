@@ -1,7 +1,7 @@
 #ifndef DEVFS_H
 #define DEVFS_H
 
-#include "vfs.h"
+#include "fs.h"
 
 enum {
     CONSOLE_IOCTL_GETFLAGS = 0x100,

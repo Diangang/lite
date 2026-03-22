@@ -4,7 +4,7 @@
 #include "string.h"
 #include "shell.h"
 #include "vmm.h"
-#include "vfs.h"
+#include "fs.h"
 #include "file.h"
 #include "kheap.h"
 

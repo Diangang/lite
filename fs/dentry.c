@@ -1,70 +1,48 @@
-#include "vfs.h"
+#include "fs.h"
 #include "kheap.h"
 #include "libc.h"
 
-struct vfs_icache_entry {
-    struct vfs_inode *node;
-    struct vfs_inode inode;
-    struct vfs_dentry dentry;
-    uint32_t refs;
-    struct vfs_icache_entry *next;
-};
-static struct vfs_icache_entry *vfs_icache_head = NULL;
+struct vfs_dentry *vfs_root_dentry = NULL;
+
+struct vfs_dentry *d_alloc(struct vfs_dentry *parent, const char *name)
+{
+    struct vfs_dentry *d = (struct vfs_dentry*)kmalloc(sizeof(struct vfs_dentry));
+    if (!d) return NULL;
+    memset(d, 0, sizeof(*d));
+    d->name = name ? strdup(name) : NULL;
+    d->parent = parent;
+    d->refcount = 1;
+    if (parent) {
+        d->sibling = parent->children;
+        parent->children = d;
+    }
+    return d;
+}
+
+struct vfs_dentry *d_lookup(struct vfs_dentry *parent, const char *name)
+{
+    if (!parent || !name) return NULL;
+    struct vfs_dentry *c = parent->children;
+    while (c) {
+        if (c->name && strcmp(c->name, name) == 0) return c;
+        c = c->sibling;
+    }
+    return NULL;
+}
 
 struct vfs_dentry *vfs_dentry_get(struct vfs_inode *node, const char *name)
 {
-    if (!node) return NULL;
-    struct vfs_icache_entry *e = vfs_icache_head;
-    while (e) {
-        if (e->node == node) {
-            e->refs++;
-            e->inode.refcount++;
-            e->dentry.refcount++;
-            return &e->dentry;
-        }
-        e = e->next;
-    }
-    e = (struct vfs_icache_entry*)kmalloc(sizeof(struct vfs_icache_entry));
-    if (!e) return NULL;
-    memset(e, 0, sizeof(*e));
-    e->node = node;
-    e->inode.f_ops = node->f_ops;
-    e->inode.private_data = node->private_data;
-    e->inode.mask = node->mask;
-    e->inode.uid = node->uid;
-    e->inode.gid = node->gid;
-    e->inode.flags = node->flags;
-    e->inode.inode = node->inode;
-    e->inode.length = node->length;
-    e->inode.impl = node->impl;
-    e->dentry.name = name ? strdup(name) : NULL;
-    e->dentry.parent = NULL;
-    e->dentry.inode = &e->inode;
-    e->dentry.refcount = 1;
-    e->dentry.cache = e;
-    e->refs = 1;
-    e->next = vfs_icache_head;
-    vfs_icache_head = e;
-    return &e->dentry;
+    // For legacy compat where code just wanted a dummy dentry for an inode
+    // Not recommended for new dcache
+    struct vfs_dentry *d = d_alloc(NULL, name);
+    d->inode = node;
+    return d;
 }
 
 void vfs_dentry_put(struct vfs_dentry *d)
 {
     if (!d) return;
-    struct vfs_icache_entry *e = (struct vfs_icache_entry*)d->cache;
-    if (!e) return;
-    if (e->refs > 0) e->refs--;
-    if (e->inode.refcount > 0) e->inode.refcount--;
-    if (e->dentry.refcount > 0) e->dentry.refcount--;
-    if (e->refs > 0) return;
-    struct vfs_icache_entry **pp = &vfs_icache_head;
-    while (*pp) {
-        if (*pp == e) {
-            *pp = e->next;
-            break;
-        }
-        pp = &(*pp)->next;
-    }
-    if (e->dentry.name) kfree((void*)e->dentry.name);
-    kfree(e);
+    if (d->refcount > 0) d->refcount--;
+    // Simple dcache: we never actually free them to keep tree intact,
+    // unless system is out of memory.
 }

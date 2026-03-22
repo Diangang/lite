@@ -6,7 +6,7 @@
 #include "gdt.h"
 #include "idt.h"
 #include "mm.h"
-#include "vfs.h"
+#include "fs.h"
 #include "ramfs.h"
 #include "initrd.h"
 #include "procfs.h"
@@ -39,9 +39,6 @@ void kernel_main(struct multiboot_info* mbi, uint32_t magic)
 
     /* Initialize the entire Memory Management subsystem (PMM, VMM, KHEAP) */
     init_mm(mbi);
-
-    /* Initialize the VFS subsystem */
-    init_vfs();
 
     /* Mount core filesystems */
     struct vfs_inode *ram_root = init_ramfs();

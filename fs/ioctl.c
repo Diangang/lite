@@ -1,4 +1,4 @@
-#include "vfs.h"
+#include "fs.h"
 #include "libc.h"
 
 int ioctl_fs(struct vfs_inode *node, uint32_t request, uint32_t arg)

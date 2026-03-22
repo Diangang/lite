@@ -1,7 +1,7 @@
 #ifndef INITRD_H
 #define INITRD_H
 
-#include "vfs.h"
+#include "fs.h"
 #include "multiboot.h"
 
 /*

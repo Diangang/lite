@@ -1,13 +1,15 @@
 #include "file.h"
 #include "kheap.h"
 #include "libc.h"
-#include "vfs.h"
+#include "fs.h"
 #include "ramfs.h"
 
 struct vfs_file *vfs_open(const char *path, uint32_t flags)
 {
-    struct vfs_inode *node = vfs_resolve(path);
-    if (!node && (flags & VFS_O_CREAT)) {
+    struct vfs_dentry *dentry = path_walk(path);
+    struct vfs_inode *node = dentry ? dentry->inode : NULL;
+
+    if (!dentry && (flags & VFS_O_CREAT)) {
         char abs[256];
         if (!vfs_build_abs(path, abs, sizeof(abs))) return NULL;
         char parent[256];
@@ -25,16 +27,25 @@ struct vfs_file *vfs_open(const char *path, uint32_t flags)
         const char *name = abs + slash;
         if (!*name) return NULL;
 
-        struct vfs_inode *pnode = vfs_resolve(parent);
+        struct vfs_dentry *pdentry = path_walk(parent);
+        if (!pdentry) return NULL;
+        struct vfs_inode *pnode = pdentry->inode;
         if (!pnode || (pnode->flags & 0x7) != FS_DIRECTORY) return NULL;
         if (!vfs_check_access(pnode, 0, 1, 1)) return NULL;
+
         struct vfs_inode *created = ramfs_create_child(pnode, name, FS_FILE);
         if (!created) return NULL;
+
+        dentry = d_alloc(pdentry, name);
+        if (!dentry) return NULL;
+        dentry->inode = created;
         node = created;
     }
-    if (!node) {
+
+    if (!dentry || !node) {
         return NULL;
     }
+
     if ((node->flags & 0x7) == FS_DIRECTORY) {
         if (!vfs_check_access(node, 1, 0, 1)) {
             return NULL;
@@ -46,7 +57,7 @@ struct vfs_file *vfs_open(const char *path, uint32_t flags)
         }
     }
 
-    struct vfs_file *f = vfs_open_node(node, flags);
+    struct vfs_file *f = vfs_open_dentry(dentry, flags);
     if (!f) return NULL;
     if ((flags & VFS_O_TRUNC) && (node->flags & 0x7) == FS_FILE) {
         node->length = 0;
@@ -54,24 +65,27 @@ struct vfs_file *vfs_open(const char *path, uint32_t flags)
     return f;
 }
 
-struct vfs_file *vfs_open_node(struct vfs_inode *node, uint32_t flags)
+struct vfs_file *vfs_open_dentry(struct vfs_dentry *dentry, uint32_t flags)
 {
-    if (!node) return NULL;
+    if (!dentry || !dentry->inode) return NULL;
     struct vfs_file *f = (struct vfs_file*)kmalloc(sizeof(struct vfs_file));
-    if (!f) {
-        if (f) kfree(f);
-        return NULL;
-    }
-    struct vfs_dentry *d = vfs_dentry_get(node, "");
-    if (!d) {
-        kfree(f);
-        return NULL;
-    }
-    f->dentry = d;
+    if (!f) return NULL;
+    dentry->refcount++;
+    f->dentry = dentry;
     f->pos = 0;
     f->flags = flags;
     f->refcount = 1;
-    open_fs(node, 1, 1);
+    open_fs(dentry->inode, 1, 1);
+    return f;
+}
+
+struct vfs_file *vfs_open_node(struct vfs_inode *node, uint32_t flags)
+{
+    if (!node) return NULL;
+    struct vfs_dentry *d = vfs_dentry_get(node, "");
+    if (!d) return NULL;
+    struct vfs_file *f = vfs_open_dentry(d, flags);
+    vfs_dentry_put(d); // open_dentry incremented it
     return f;
 }
 
