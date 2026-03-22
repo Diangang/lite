@@ -7,8 +7,6 @@
 // We don't even need a private data struct anymore!
 enum { RAMFS_MAGIC = 0x52414D46 };
 
-static uint32_t ramfs_next_inode = 1;
-
 static struct file_operations ramfs_dir_ops;
 static struct file_operations ramfs_file_ops;
 
@@ -39,7 +37,7 @@ struct inode *ramfs_create_child(struct inode *dir, const char *name, uint32_t t
     if (!inode) return NULL;
     memset(inode, 0, sizeof(*inode));
 
-    inode->inode = ramfs_next_inode++;
+    inode->i_ino = get_next_ino();
     inode->uid = task_get_uid();
     inode->gid = task_get_gid();
 
@@ -50,12 +48,12 @@ struct inode *ramfs_create_child(struct inode *dir, const char *name, uint32_t t
     if (type == FS_DIRECTORY) {
         inode->flags = FS_DIRECTORY;
         inode->f_ops = &ramfs_dir_ops;
-        inode->mask = ramfs_apply_umask(0777);
+        inode->i_mode = ramfs_apply_umask(0777);
     } else {
         inode->flags = FS_FILE;
         inode->f_ops = &ramfs_file_ops;
-        inode->length = 0;
-        inode->mask = ramfs_apply_umask(0666);
+        inode->i_size = 0;
+        inode->i_mode = ramfs_apply_umask(0666);
     }
     
     return inode;
@@ -81,7 +79,7 @@ static struct file_operations ramfs_file_ops = {
     .ioctl = NULL
 };
 
-struct inode *init_ramfs(void)
+void init_ramfs(void)
 {
     struct inode *inode = (struct inode*)kmalloc(sizeof(struct inode));
     if (!inode)
@@ -90,16 +88,15 @@ struct inode *init_ramfs(void)
     memset(inode, 0, sizeof(*inode));
 
     inode->flags = FS_DIRECTORY;
-    inode->inode = ramfs_next_inode++;
+    inode->i_ino = 1; // The root of the whole filesystem is typically 1 or 2
     inode->f_ops = &ramfs_dir_ops;
     inode->uid = 0;
     inode->gid = 0;
-    inode->mask = 0755;
+    inode->i_mode = 0755;
     
     struct address_space *mapping = (struct address_space*)kmalloc(sizeof(struct address_space));
     address_space_init(mapping, inode);
     inode->i_mapping = mapping;
 
     vfs_mount_root("/", inode);
-    return inode;
 }

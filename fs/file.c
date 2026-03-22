@@ -31,17 +31,15 @@ struct file *vfs_open(const char *path, uint32_t flags)
         if (!*name) return NULL;
 
         struct dentry *pdentry = path_walk(parent);
-        if (!pdentry) return NULL;
-        struct inode *pnode = pdentry->inode;
-        if (!pnode || (pnode->flags & 0x7) != FS_DIRECTORY) return NULL;
-        if (!vfs_check_access(pnode, 0, 1, 1)) return NULL;
-
-        struct inode *created = ramfs_create_child(pnode, name, FS_FILE);
+        if (!pdentry || !pdentry->inode || (pdentry->inode->flags & 0x7) != FS_DIRECTORY) return NULL;
+        
+        struct inode *created = ramfs_create_child(pdentry->inode, name, FS_FILE);
         if (!created) return NULL;
-
-        dentry = d_alloc(pdentry, name);
-        if (!dentry) return NULL;
-        dentry->inode = created;
+        
+        struct dentry *new_d = d_alloc(pdentry, name);
+        if (!new_d) return NULL;
+        new_d->inode = created;
+        dentry = new_d;
         node = created;
     }
 
@@ -63,7 +61,7 @@ struct file *vfs_open(const char *path, uint32_t flags)
     struct file *f = vfs_open_dentry(dentry, flags);
     if (!f) return NULL;
     if ((flags & VFS_O_TRUNC) && (node->flags & 0x7) == FS_FILE) {
-        node->length = 0;
+        node->i_size = 0;
     }
     return f;
 }

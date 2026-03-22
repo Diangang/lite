@@ -13,7 +13,7 @@ enum {
     CONSOLE_TTY_CANON = 1 << 1
 };
 
-struct inode *init_devfs(void);
+void init_devfs(void);
 struct inode *devfs_get_console(void);
 
 #endif

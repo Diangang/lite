@@ -2,13 +2,22 @@
 #include "task.h"
 #include "libc.h"
 
+/* Global inode allocator for pseudo filesystems */
+static uint32_t last_ino = 100; // Start at 100 to avoid conflicts with special statically assigned ones like root(1) or proc entries
+
+uint32_t get_next_ino(void)
+{
+    // In a real SMP kernel, this would be an atomic operation or per-CPU counter
+    return ++last_ino;
+}
+
 int vfs_check_access(struct inode *node, int want_read, int want_write, int want_exec)
 {
     if (!node) return 0;
     uint32_t uid = task_get_uid();
     uint32_t gid = task_get_gid();
     if (uid == 0) return 1;
-    uint32_t mode = node->mask & 0777;
+    uint32_t mode = node->i_mode & 0777;
     uint32_t bits;
     if (uid == node->uid) {
         bits = (mode >> 6) & 0x7;
@@ -29,6 +38,6 @@ int vfs_chmod(const char *path, uint32_t mode)
     if (!node) return -1;
     uint32_t uid = task_get_uid();
     if (uid != 0 && uid != node->uid) return -1;
-    node->mask = mode & 0777;
+    node->i_mode = mode & 0777;
     return 0;
 }

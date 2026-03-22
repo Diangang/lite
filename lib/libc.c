@@ -36,13 +36,22 @@ char *strcpy(char *dest, const char *src)
     return tmp;
 }
 
-int strcmp(const char *s1, const char *s2)
-{
-    while (*s1 && (*s1 == *s2)) {
+int strcmp(const char *s1, const char *s2) {
+    while(*s1 && (*s1 == *s2)) {
         s1++;
         s2++;
     }
-    return *(const unsigned char *)s1 - *(const unsigned char *)s2;
+    return *(const unsigned char*)s1 - *(const unsigned char*)s2;
+}
+
+char *strcat(char *dest, const char *src) {
+    char *rdest = dest;
+    while (*dest)
+        dest++;
+    while (*src)
+        *dest++ = *src++;
+    *dest = '\0';
+    return rdest;
 }
 
 int strncmp(const char *s1, const char *s2, size_t n)

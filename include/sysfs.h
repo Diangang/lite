@@ -3,6 +3,6 @@
 
 #include "fs.h"
 
-struct inode *init_sysfs(void);
+void init_sysfs(void);
 
 #endif

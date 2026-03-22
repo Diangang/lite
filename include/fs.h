@@ -32,12 +32,12 @@ struct file_operations {
 
 /* VFS Inode - Represents a file entity */
 struct inode {
-    uint32_t mask;      /* Permissions */
+    uint32_t i_mode;    /* Permissions/Mode */
     uint32_t uid;       /* User ID */
     uint32_t gid;       /* Group ID */
     uint32_t flags;     /* Node type (File, Directory, etc.) */
-    uint32_t inode;     /* Inode number */
-    uint32_t length;    /* Size of the file */
+    uint32_t i_ino;     /* Inode number */
+    uint32_t i_size;    /* Size of the file */
     uint32_t impl;      /* Implementation defined number */
 
     struct address_space *i_mapping; /* Page cache mapping */
@@ -114,6 +114,7 @@ int vfs_ioctl(struct file *f, uint32_t request, uint32_t arg);
 void vfs_close(struct file *f);
 
 /* Internal operation wrappers */
+uint32_t get_next_ino(void);
 uint32_t read_fs(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer);
 uint32_t write_fs(struct inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer);
 void open_fs(struct inode *node, uint8_t read, uint8_t write);

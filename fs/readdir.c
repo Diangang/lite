@@ -34,12 +34,12 @@ struct dirent *generic_readdir(struct file *file, uint32_t index)
 
     if (index == 0) {
         strcpy(generic_dirent.name, ".");
-        generic_dirent.ino = d->inode->inode;
+        generic_dirent.ino = d->inode->i_ino;
         return &generic_dirent;
     }
     if (index == 1) {
         strcpy(generic_dirent.name, "..");
-        generic_dirent.ino = d->parent ? d->parent->inode->inode : d->inode->inode;
+        generic_dirent.ino = d->parent ? d->parent->inode->i_ino : d->inode->i_ino;
         return &generic_dirent;
     }
 
@@ -53,6 +53,6 @@ struct dirent *generic_readdir(struct file *file, uint32_t index)
     if (!child) return NULL;
 
     strcpy(generic_dirent.name, child->name);
-    generic_dirent.ino = child->inode ? child->inode->inode : 0;
+    generic_dirent.ino = child->inode ? child->inode->i_ino : 0;
     return &generic_dirent;
 }

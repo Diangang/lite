@@ -3,6 +3,6 @@
 
 #include "fs.h"
 
-struct inode *init_procfs(void);
+void init_procfs(void);
 
 #endif

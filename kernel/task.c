@@ -5,7 +5,6 @@
 #include "timer.h"
 #include "vmm.h"
 #include "pmm.h"
-#include "shell.h"
 #include "syscall.h"
 #include "gdt.h"
 #include "devfs.h"
@@ -134,21 +133,21 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
         }
     }
 
-    if (node->length == 0)
+    if (node->i_size == 0)
         return printf("User program is empty.\n"), -1;
 
-    uint8_t *buf = (uint8_t*)kmalloc(node->length);
+    uint8_t *buf = (uint8_t*)kmalloc(node->i_size);
     if (!buf)
         return printf("User program buffer alloc failed.\n"), -1;
 
-    uint32_t read = read_fs(node, 0, node->length, buf);
-    if (read != node->length) {
+    uint32_t read = read_fs(node, 0, node->i_size, buf);
+    if (read != node->i_size) {
         printf("User program read failed.\n");
         kfree(buf);
         return -1;
     }
 
-    if (node->length < sizeof(Elf32_Ehdr))
+    if (node->i_size < sizeof(Elf32_Ehdr))
         return printf("User program too small.\n"), kfree(buf), -1;
 
     Elf32_Ehdr *ehdr = (Elf32_Ehdr*)buf;
@@ -168,7 +167,7 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
     if (ehdr->e_type != 2 || ehdr->e_machine != 3 || ehdr->e_version != 1)
         return printf("User program ELF header invalid.\n"), kfree(buf), -1;
 
-    if (ehdr->e_phoff + (uint32_t)ehdr->e_phnum * ehdr->e_phentsize > node->length)
+    if (ehdr->e_phoff + (uint32_t)ehdr->e_phnum * ehdr->e_phentsize > node->i_size)
         return printf("User program header out of range.\n"), kfree(buf), -1;
 
     uint32_t min_vaddr = 0xFFFFFFFF;
@@ -180,7 +179,7 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
         if (phdr->p_vaddr >= 0xC0000000 || (phdr->p_vaddr + phdr->p_memsz) >= 0xC0000000)
             return printf("User program vaddr out of range.\n"), kfree(buf), -1;
 
-        if (phdr->p_filesz > 0 && phdr->p_offset + phdr->p_filesz > node->length)
+        if (phdr->p_filesz > 0 && phdr->p_offset + phdr->p_filesz > node->i_size)
             return printf("User program segment out of range.\n"), kfree(buf), -1;
 
         if (phdr->p_vaddr < min_vaddr) min_vaddr = phdr->p_vaddr;
@@ -1353,9 +1352,6 @@ void task_exit_with_reason(int code, int reason, uint32_t info0, uint32_t info1)
     task_current->exit_reason = reason;
     task_current->exit_info0 = info0;
     task_current->exit_info1 = info1;
-    if (task_current->mm && (task_current->mm->user_pages || task_current->mm->user_stack_base)) {
-        shell_on_user_exit();
-    }
     task_current->state = TASK_ZOMBIE;
     wait_queue_wake_all(&exit_waitq);
     task_yield();

@@ -18,7 +18,8 @@
 #include "task.h"
 #include "device_model.h"
 #include "tty.h"
-#include "shell.h"
+
+void populate_rootfs(struct multiboot_info *mbi);
 
 void kernel_main(struct multiboot_info* mbi, uint32_t magic)
 {
@@ -41,16 +42,19 @@ void kernel_main(struct multiboot_info* mbi, uint32_t magic)
     init_mm(mbi);
 
     /* Mount core filesystems */
-    struct inode *ram_root = init_ramfs();
-    struct inode *initrd_root = init_initrd(mbi);
+    init_ramfs();
+    
+    // Extract initramfs directly into the root ramfs
+    populate_rootfs(mbi);
+
     init_procfs();
     init_devfs();
     init_sysfs();
 
-    device_model_init(ram_root, initrd_root);
+    // Since initrd is gone, we don't pass its root to device_model_init anymore.
+    // The device model can just use the rootfs.
+    device_model_init();
 
-    /* Validate root chdir after all mounts are done */
-    vfs_chdir("/");
     printf("File System initialized.\n");
 
     /* Initialize System Calls */
@@ -75,14 +79,14 @@ void kernel_main(struct multiboot_info* mbi, uint32_t magic)
 	printf("Memory address 0xB8000 is directly manipulated.\n");
 	printf("Enjoy your OS development journey!\n");
 
-    /* Initialize the shell */
-    init_shell();
-    int init_pid = task_create_user("/initrd/init.elf");
-    if (init_pid < 0)
-        shell_set_foreground(0), printf("init.elf not found, staying in kernel shell.\n");
-    else
-        shell_set_foreground_pid((uint32_t)init_pid), printf("init task created.\n");
-    task_create(shell_task);
+    /* Switch to user mode and start init process */
+    int init_pid = task_create_user("/init.elf");
+    if (init_pid < 0) {
+        printf("Panic: init.elf not found!\n");
+        while (1) asm volatile("hlt");
+    } else {
+        printf("init task created (pid %d).\n", init_pid);
+    }
 
     /* Infinite loop to keep the kernel running and responsive to interrupts */
     while (1) {

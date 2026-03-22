@@ -52,9 +52,9 @@ uint32_t generic_file_read(struct inode *node, uint32_t offset, uint32_t size, u
 {
     if (!node || !buffer || size == 0) return 0;
     if ((node->flags & 0x7) != FS_FILE) return 0;
-    if (offset >= node->length) return 0;
+    if (offset >= node->i_size) return 0;
 
-    uint32_t remain = node->length - offset;
+    uint32_t remain = node->i_size - offset;
     if (size > remain) size = remain;
 
     uint32_t bytes_read = 0;
@@ -112,8 +112,8 @@ uint32_t generic_file_write(struct inode *node, uint32_t offset, uint32_t size, 
         size -= bytes;
     }
 
-    if (offset > node->length) {
-        node->length = offset;
+    if (offset > node->i_size) {
+        node->i_size = offset;
     }
 
     return bytes_written;

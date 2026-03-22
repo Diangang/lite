@@ -260,7 +260,7 @@ static struct dirent *proc_pid_fd_readdir(struct file *file, uint32_t index)
         if (n == 0) continue;
         if (index == 0) {
                 itoa((int)fd, 10, e->dirent.name);
-                e->dirent.ino = e->fd_files[fd].inode;
+                e->dirent.ino = e->fd_files[fd].i_ino;
                 return &e->dirent;
             }
         index--;
@@ -294,32 +294,32 @@ static struct dirent *proc_pid_readdir(struct file *file, uint32_t index)
     if (!e->used) return NULL;
     if (index == 0) {
         strcpy(e->dirent.name, "maps");
-        e->dirent.ino = e->maps.inode;
+        e->dirent.ino = e->maps.i_ino;
         return &e->dirent;
     }
     if (index == 1) {
         strcpy(e->dirent.name, "stat");
-        e->dirent.ino = e->stat.inode;
+        e->dirent.ino = e->stat.i_ino;
         return &e->dirent;
     }
     if (index == 2) {
         strcpy(e->dirent.name, "cmdline");
-        e->dirent.ino = e->cmdline.inode;
+        e->dirent.ino = e->cmdline.i_ino;
         return &e->dirent;
     }
     if (index == 3) {
         strcpy(e->dirent.name, "status");
-        e->dirent.ino = e->status.inode;
+        e->dirent.ino = e->status.i_ino;
         return &e->dirent;
     }
     if (index == 4) {
         strcpy(e->dirent.name, "cwd");
-        e->dirent.ino = e->cwd.inode;
+        e->dirent.ino = e->cwd.i_ino;
         return &e->dirent;
     }
     if (index == 5) {
         strcpy(e->dirent.name, "fd");
-        e->dirent.ino = e->fd_dir.inode;
+        e->dirent.ino = e->fd_dir.i_ino;
         return &e->dirent;
     }
     return NULL;
@@ -451,82 +451,82 @@ struct inode *proc_get_pid_dir(uint32_t pid)
 
             memset(&e->dir, 0, sizeof(e->dir));
             e->dir.flags = FS_DIRECTORY;
-            e->dir.inode = 0x1000 + i;
+            e->dir.i_ino = 0x1000 + i;
             e->dir.f_ops = &proc_pid_dir_ops;
             e->dir.impl = i;
             e->dir.uid = 0;
             e->dir.gid = 0;
-            e->dir.mask = 0555;
+            e->dir.i_mode = 0555;
 
             memset(&e->maps, 0, sizeof(e->maps));
             e->maps.flags = FS_FILE;
-            e->maps.inode = 0x2000 + i;
-            e->maps.length = 2048;
+            e->maps.i_ino = 0x2000 + i;
+            e->maps.i_size = 2048;
             e->maps.f_ops = &proc_pid_maps_ops;
             e->maps.impl = pid;
             e->maps.uid = 0;
             e->maps.gid = 0;
-            e->maps.mask = 0444;
+            e->maps.i_mode = 0444;
 
             memset(&e->stat, 0, sizeof(e->stat));
             e->stat.flags = FS_FILE;
-            e->stat.inode = 0x3000 + i;
-            e->stat.length = 256;
+            e->stat.i_ino = 0x3000 + i;
+            e->stat.i_size = 256;
             e->stat.f_ops = &proc_pid_stat_ops;
             e->stat.impl = pid;
             e->stat.uid = 0;
             e->stat.gid = 0;
-            e->stat.mask = 0444;
+            e->stat.i_mode = 0444;
 
             memset(&e->cmdline, 0, sizeof(e->cmdline));
             e->cmdline.flags = FS_FILE;
-            e->cmdline.inode = 0x4000 + i;
-            e->cmdline.length = 256;
+            e->cmdline.i_ino = 0x4000 + i;
+            e->cmdline.i_size = 256;
             e->cmdline.f_ops = &proc_pid_cmdline_ops;
             e->cmdline.impl = pid;
             e->cmdline.uid = 0;
             e->cmdline.gid = 0;
-            e->cmdline.mask = 0444;
+            e->cmdline.i_mode = 0444;
 
             memset(&e->status, 0, sizeof(e->status));
             e->status.flags = FS_FILE;
-            e->status.inode = 0x5000 + i;
-            e->status.length = 256;
+            e->status.i_ino = 0x5000 + i;
+            e->status.i_size = 256;
             e->status.f_ops = &proc_pid_status_ops;
             e->status.impl = pid;
             e->status.uid = 0;
             e->status.gid = 0;
-            e->status.mask = 0444;
+            e->status.i_mode = 0444;
 
             memset(&e->cwd, 0, sizeof(e->cwd));
             e->cwd.flags = FS_FILE;
-            e->cwd.inode = 0x5100 + i;
-            e->cwd.length = 256;
+            e->cwd.i_ino = 0x5100 + i;
+            e->cwd.i_size = 256;
             e->cwd.f_ops = &proc_pid_cwd_ops;
             e->cwd.impl = pid;
             e->cwd.uid = 0;
             e->cwd.gid = 0;
-            e->cwd.mask = 0444;
+            e->cwd.i_mode = 0444;
 
             memset(&e->fd_dir, 0, sizeof(e->fd_dir));
             e->fd_dir.flags = FS_DIRECTORY;
-            e->fd_dir.inode = 0x6000 + i;
+            e->fd_dir.i_ino = 0x6000 + i;
             e->fd_dir.f_ops = &proc_pid_fd_dir_ops;
             e->fd_dir.impl = i;
             e->fd_dir.uid = 0;
             e->fd_dir.gid = 0;
-            e->fd_dir.mask = 0555;
+            e->fd_dir.i_mode = 0555;
 
             for (uint32_t fd = 0; fd < TASK_FD_MAX; fd++) {
                 memset(&e->fd_files[fd], 0, sizeof(struct inode));
                 e->fd_files[fd].flags = FS_FILE;
-                e->fd_files[fd].inode = 0x7000 + i * TASK_FD_MAX + fd;
-                e->fd_files[fd].length = 256;
+                e->fd_files[fd].i_ino = 0x7000 + i * TASK_FD_MAX + fd;
+                e->fd_files[fd].i_size = 256;
                 e->fd_files[fd].f_ops = &proc_pid_fd_ops;
                 e->fd_files[fd].impl = (i << 16) | fd;
                 e->fd_files[fd].uid = 0;
                 e->fd_files[fd].gid = 0;
-                e->fd_files[fd].mask = 0444;
+                e->fd_files[fd].i_mode = 0444;
             }
 
             return &e->dir;
@@ -541,32 +541,32 @@ static struct dirent *proc_readdir(struct file *file, uint32_t index)
     (void)node;
     if (index == 0) {
         strcpy(proc_dirent.name, "tasks");
-        proc_dirent.ino = proc_tasks.inode;
+        proc_dirent.ino = proc_tasks.i_ino;
         return &proc_dirent;
     }
     if (index == 1) {
         strcpy(proc_dirent.name, "sched");
-        proc_dirent.ino = proc_sched.inode;
+        proc_dirent.ino = proc_sched.i_ino;
         return &proc_dirent;
     }
     if (index == 2) {
         strcpy(proc_dirent.name, "irq");
-        proc_dirent.ino = proc_irq.inode;
+        proc_dirent.ino = proc_irq.i_ino;
         return &proc_dirent;
     }
     if (index == 3) {
         strcpy(proc_dirent.name, "maps");
-        proc_dirent.ino = proc_maps.inode;
+        proc_dirent.ino = proc_maps.i_ino;
         return &proc_dirent;
     }
     if (index == 4) {
         strcpy(proc_dirent.name, "meminfo");
-        proc_dirent.ino = proc_meminfo.inode;
+        proc_dirent.ino = proc_meminfo.i_ino;
         return &proc_dirent;
     }
     if (index == 5) {
         strcpy(proc_dirent.name, "cow");
-        proc_dirent.ino = proc_cow.inode;
+        proc_dirent.ino = proc_cow.i_ino;
         return &proc_dirent;
     }
     if (index == 6) {
@@ -665,75 +665,74 @@ static struct file_operations proc_cow_ops = {
     .ioctl = NULL
 };
 
-struct inode *init_procfs(void)
+void init_procfs(void)
 {
     memset(proc_pids, 0, sizeof(proc_pids));
     proc_get_pid_dir(0xFFFFFFFF);
 
     struct inode *proc_root = (struct inode *)kmalloc(sizeof(struct inode));
-    if (!proc_root) return NULL;
+    if (!proc_root) return;
 
     memset(proc_root, 0, sizeof(struct inode));
     proc_root->flags = FS_DIRECTORY;
     proc_root->f_ops = &procfs_dir_ops;
     proc_root->uid = 0;
     proc_root->gid = 0;
-    proc_root->mask = 0555;
+    proc_root->i_mode = 0555;
 
     memset(&proc_tasks, 0, sizeof(proc_tasks));
     proc_tasks.flags = FS_FILE;
-    proc_tasks.inode = 1;
-    proc_tasks.length = 4096;
+    proc_tasks.i_ino = 1;
+    proc_tasks.i_size = 4096;
     proc_tasks.f_ops = &proc_tasks_ops;
     proc_tasks.uid = 0;
     proc_tasks.gid = 0;
-    proc_tasks.mask = 0444;
+    proc_tasks.i_mode = 0444;
 
     memset(&proc_sched, 0, sizeof(proc_sched));
     proc_sched.flags = FS_FILE;
-    proc_sched.inode = 2;
-    proc_sched.length = 1024;
+    proc_sched.i_ino = 2;
+    proc_sched.i_size = 1024;
     proc_sched.f_ops = &proc_sched_ops;
     proc_sched.uid = 0;
     proc_sched.gid = 0;
-    proc_sched.mask = 0444;
+    proc_sched.i_mode = 0444;
 
     memset(&proc_irq, 0, sizeof(proc_irq));
     proc_irq.flags = FS_FILE;
-    proc_irq.inode = 3;
-    proc_irq.length = 1024;
+    proc_irq.i_ino = 3;
+    proc_irq.i_size = 1024;
     proc_irq.f_ops = &proc_irq_ops;
     proc_irq.uid = 0;
     proc_irq.gid = 0;
-    proc_irq.mask = 0444;
+    proc_irq.i_mode = 0444;
 
     memset(&proc_maps, 0, sizeof(proc_maps));
     proc_maps.flags = FS_FILE;
-    proc_maps.inode = 4;
-    proc_maps.length = 2048;
+    proc_maps.i_ino = 4;
+    proc_maps.i_size = 2048;
     proc_maps.f_ops = &proc_maps_ops;
     proc_maps.uid = 0;
     proc_maps.gid = 0;
-    proc_maps.mask = 0444;
+    proc_maps.i_mode = 0444;
 
     memset(&proc_meminfo, 0, sizeof(proc_meminfo));
     proc_meminfo.flags = FS_FILE;
-    proc_meminfo.inode = 5;
-    proc_meminfo.length = 256;
+    proc_meminfo.i_ino = 5;
+    proc_meminfo.i_size = 256;
     proc_meminfo.f_ops = &proc_meminfo_ops;
     proc_meminfo.uid = 0;
     proc_meminfo.gid = 0;
-    proc_meminfo.mask = 0444;
+    proc_meminfo.i_mode = 0444;
 
     memset(&proc_cow, 0, sizeof(proc_cow));
     proc_cow.flags = FS_FILE;
-    proc_cow.inode = 6;
-    proc_cow.length = 128;
+    proc_cow.i_ino = 6;
+    proc_cow.i_size = 128;
     proc_cow.f_ops = &proc_cow_ops;
     proc_cow.uid = 0;
     proc_cow.gid = 0;
-    proc_cow.mask = 0444;
+    proc_cow.i_mode = 0444;
 
     vfs_mount_root("/proc", proc_root);
-    return proc_root;
 }

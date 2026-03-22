@@ -3,7 +3,6 @@
 #include "task.h"
 #include "libc.h"
 #include "string.h"
-#include "shell.h"
 #include "vmm.h"
 #include "fs.h"
 #include "file.h"

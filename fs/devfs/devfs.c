@@ -67,12 +67,12 @@ static struct dirent *dev_readdir(struct file *file, uint32_t index)
     (void)node;
     if (index == 0) {
         strcpy(dev_dirent.name, "console");
-        dev_dirent.ino = dev_console.inode;
+        dev_dirent.ino = dev_console.i_ino;
         return &dev_dirent;
     }
     if (index == 1) {
         strcpy(dev_dirent.name, "tty");
-        dev_dirent.ino = dev_tty.inode;
+        dev_dirent.ino = dev_tty.i_ino;
         return &dev_dirent;
     }
     return NULL;
@@ -122,36 +122,35 @@ struct inode *devfs_get_console(void)
     return &dev_console;
 }
 
-struct inode *init_devfs(void)
+void init_devfs(void)
 {
     struct inode *dev_root = (struct inode *)kmalloc(sizeof(struct inode));
-    if (!dev_root) return NULL;
+    if (!dev_root) return;
 
     memset(dev_root, 0, sizeof(struct inode));
     dev_root->flags = FS_DIRECTORY;
     dev_root->f_ops = &devfs_dir_ops;
     dev_root->uid = 0;
     dev_root->gid = 0;
-    dev_root->mask = 0555;
+    dev_root->i_mode = 0555;
 
     memset(&dev_console, 0, sizeof(dev_console));
     dev_console.flags = FS_CHARDEVICE;
-    dev_console.inode = 1;
-    dev_console.length = 0;
+    dev_console.i_ino = 1;
+    dev_console.i_size = 0;
     dev_console.f_ops = &dev_console_ops;
     dev_console.uid = 0;
     dev_console.gid = 0;
-    dev_console.mask = 0666;
+    dev_console.i_mode = 0666;
 
     memset(&dev_tty, 0, sizeof(dev_tty));
     dev_tty.flags = FS_CHARDEVICE;
-    dev_tty.inode = 2;
-    dev_tty.length = 0;
+    dev_tty.i_ino = 2;
+    dev_tty.i_size = 0;
     dev_tty.f_ops = &dev_tty_ops;
     dev_tty.uid = 0;
     dev_tty.gid = 0;
-    dev_tty.mask = 0666;
+    dev_tty.i_mode = 0666;
 
     vfs_mount_root("/dev", dev_root);
-    return dev_root;
 }

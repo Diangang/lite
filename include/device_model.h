@@ -37,7 +37,7 @@ struct device_driver {
     struct device_driver *next;
 };
 
-void device_model_init(struct inode *ram_root, struct inode *initrd_root);
+void device_model_init(void);
 struct bus_type *bus_register(const char *name, int (*match)(struct device *, struct device_driver *));
 int driver_register(struct device_driver *drv);
 int device_register(struct device *dev);
