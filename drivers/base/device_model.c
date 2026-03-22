@@ -1,6 +1,7 @@
 #include "device_model.h"
 #include "kheap.h"
 #include "libc.h"
+#include "vfs.h"
 
 #define OFFSETOF(type, member) ((uint32_t)(&((type*)0)->member))
 #define CONTAINER_OF(ptr, type, member) ((type*)((uint8_t*)(ptr) - OFFSETOF(type, member)))
@@ -142,7 +143,28 @@ struct bus_type *device_model_platform_bus(void)
     return &platform_bus;
 }
 
-void device_model_init(void)
+static int probe_nop(struct device *dev)
+{
+    (void)dev;
+    return 0;
+}
+
+static void init_driver(struct device_driver *drv, const char *name, struct bus_type *bus, int (*probe)(struct device *))
+{
+    if (!drv) return;
+    memset(drv, 0, sizeof(*drv));
+    if (name) {
+        uint32_t n = (uint32_t)strlen(name);
+        if (n >= sizeof(drv->kobj.name)) n = sizeof(drv->kobj.name) - 1;
+        memcpy(drv->kobj.name, name, n);
+        drv->kobj.name[n] = 0;
+    }
+    drv->kobj.refcount = 1;
+    drv->bus = bus;
+    drv->probe = probe;
+}
+
+void device_model_init(struct vfs_inode *ram_root, struct vfs_inode *initrd_root)
 {
     if (devmodel_inited) return;
     memset(&platform_bus, 0, sizeof(platform_bus));
@@ -153,6 +175,24 @@ void device_model_init(void)
     platform_bus.next = NULL;
     bus_list = &platform_bus;
     devmodel_inited = 1;
+
+    struct bus_type *platform = device_model_platform_bus();
+    if (platform) {
+        device_register_simple("console", "console", platform, NULL);
+        device_register_simple("initrd", "initrd", platform, initrd_root);
+        device_register_simple("ramfs", "memfs", platform, ram_root);
+
+        static struct device_driver drv_console;
+        static struct device_driver drv_initrd;
+        static struct device_driver drv_memfs;
+        init_driver(&drv_console, "console", platform, probe_nop);
+        init_driver(&drv_initrd, "initrd", platform, probe_nop);
+        init_driver(&drv_memfs, "memfs", platform, probe_nop);
+
+        driver_register(&drv_console);
+        driver_register(&drv_initrd);
+        driver_register(&drv_memfs);
+    }
 }
 
 uint32_t device_model_device_count(void)

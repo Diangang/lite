@@ -8,7 +8,7 @@
 #include "vmm.h"
 
 static struct dirent proc_dirent;
-// Note: proc_root is dynamically allocated in procfs_init now
+// Note: proc_root is dynamically allocated in init_procfs now
 static struct vfs_inode proc_tasks;
 static struct vfs_inode proc_sched;
 static struct vfs_inode proc_irq;
@@ -661,7 +661,7 @@ static struct vfs_file_operations proc_cow_ops = {
     .ioctl = NULL
 };
 
-struct vfs_inode *procfs_init(void)
+struct vfs_inode *init_procfs(void)
 {
     memset(proc_pids, 0, sizeof(proc_pids));
     proc_get_pid_dir(0xFFFFFFFF);
@@ -730,5 +730,6 @@ struct vfs_inode *procfs_init(void)
     proc_cow.gid = 0;
     proc_cow.mask = 0444;
 
+    vfs_mount_root("/proc", proc_root);
     return proc_root;
 }

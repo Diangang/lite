@@ -2,6 +2,7 @@
 #define DEVICE_MODEL_H
 
 #include <stdint.h>
+#include "vfs.h"
 
 struct kobject {
     char name[32];
@@ -36,7 +37,7 @@ struct device_driver {
     struct device_driver *next;
 };
 
-void device_model_init(void);
+void device_model_init(struct vfs_inode *ram_root, struct vfs_inode *initrd_root);
 struct bus_type *bus_register(const char *name, int (*match)(struct device *, struct device_driver *));
 int driver_register(struct device_driver *drv);
 int device_register(struct device *dev);

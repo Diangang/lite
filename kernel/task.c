@@ -1019,6 +1019,9 @@ static int task_create_internal(void (*entry)(void), const char *program)
     task->exit_reason = 0;
     task->exit_info0 = 0;
     task->exit_info1 = 0;
+    task->uid = task_current ? task_current->uid : 0;
+    task->gid = task_current ? task_current->gid : 0;
+    task->umask = task_current ? task_current->umask : 022;
     task_set_program_name(task, program);
     task->cwd[0] = 0;
     if (task_current && task_current->cwd[0]) {

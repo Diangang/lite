@@ -3,14 +3,14 @@
 #include "libc.h"
 #include "task.h"
 
-typedef struct ramfs_node {
+struct ramfs_inode {
     struct vfs_inode node;
     char name[128];
-    struct ramfs_node *first_child;
-    struct ramfs_node *next_sibling;
+    struct ramfs_inode *first_child;
+    struct ramfs_inode *next_sibling;
     uint8_t *data;
     uint32_t cap;
-} ramfs_node_t;
+};
 
 enum { RAMFS_MAGIC = 0x52414D46 };
 
@@ -26,15 +26,15 @@ static uint32_t ramfs_apply_umask(uint32_t mode)
     return mode & (~mask) & 0777;
 }
 
-static ramfs_node_t *ramfs_get(struct vfs_inode *n)
+static struct ramfs_inode *ramfs_get(struct vfs_inode *n)
 {
     if (!n) return NULL;
-    return (ramfs_node_t*)n->private_data;
+    return (struct ramfs_inode*)n->private_data;
 }
 
 static uint32_t ramfs_read(struct vfs_inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
-    ramfs_node_t *rn = ramfs_get(node);
+    struct ramfs_inode *rn = ramfs_get(node);
     if (!rn || !buffer || size == 0) return 0;
     if ((node->flags & 0x7) != FS_FILE) return 0;
     if (offset >= node->length) return 0;
@@ -46,7 +46,7 @@ static uint32_t ramfs_read(struct vfs_inode *node, uint32_t offset, uint32_t siz
 
 static uint32_t ramfs_write(struct vfs_inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer)
 {
-    ramfs_node_t *rn = ramfs_get(node);
+    struct ramfs_inode *rn = ramfs_get(node);
     if (!rn || !buffer || size == 0) return 0;
     if ((node->flags & 0x7) != FS_FILE) return 0;
     uint32_t end = offset + size;
@@ -92,13 +92,13 @@ static struct dirent *ramfs_readdir(struct vfs_inode *node, uint32_t index)
         ramfs_dirent.ino = node->inode; // Just stubbed to current node
         return &ramfs_dirent;
     }
-    
+
     index -= 2;
 
-    ramfs_node_t *rn = ramfs_get(node);
+    struct ramfs_inode *rn = ramfs_get(node);
     if (!rn) return NULL;
     if ((node->flags & 0x7) != FS_DIRECTORY) return NULL;
-    ramfs_node_t *c = rn->first_child;
+    struct ramfs_inode *c = rn->first_child;
     while (c && index) {
         c = c->next_sibling;
         index--;
@@ -111,10 +111,11 @@ static struct dirent *ramfs_readdir(struct vfs_inode *node, uint32_t index)
 
 static struct vfs_inode *ramfs_finddir(struct vfs_inode *node, const char *name)
 {
-    ramfs_node_t *rn = ramfs_get(node);
+    struct ramfs_inode *rn = ramfs_get(node);
     if (!rn || !name) return NULL;
     if ((node->flags & 0x7) != FS_DIRECTORY) return NULL;
-    ramfs_node_t *c = rn->first_child;
+    if (!strcmp(name, ".")) return node;
+    struct ramfs_inode *c = rn->first_child;
     while (c) {
         if (!strcmp(c->name, name)) return &c->node;
         c = c->next_sibling;
@@ -136,12 +137,12 @@ struct vfs_inode *ramfs_create_child(struct vfs_inode *dir, const char *name, ui
     if (!dir || !name) return NULL;
     if (!ramfs_valid_name(name)) return NULL;
     if ((dir->flags & 0x7) != FS_DIRECTORY) return NULL;
-    ramfs_node_t *parent = ramfs_get(dir);
+    struct ramfs_inode *parent = ramfs_get(dir);
     if (!parent) return NULL;
 
     if (ramfs_finddir(dir, (char*)name)) return NULL;
 
-    ramfs_node_t *rn = (ramfs_node_t*)kmalloc(sizeof(ramfs_node_t));
+    struct ramfs_inode *rn = (struct ramfs_inode*)kmalloc(sizeof(struct ramfs_inode));
     if (!rn) return NULL;
     memset(rn, 0, sizeof(*rn));
     rn->first_child = NULL;
@@ -171,28 +172,6 @@ struct vfs_inode *ramfs_create_child(struct vfs_inode *dir, const char *name, ui
     return &rn->node;
 }
 
-struct vfs_inode *ramfs_init(void)
-{
-    ramfs_node_t *rn = (ramfs_node_t*)kmalloc(sizeof(ramfs_node_t));
-    if (!rn) return NULL;
-    memset(rn, 0, sizeof(*rn));
-    rn->first_child = NULL;
-    rn->next_sibling = NULL;
-    rn->data = NULL;
-    rn->cap = 0;
-
-    memset(&rn->node, 0, sizeof(rn->node));
-    strcpy(rn->name, "/");
-    rn->node.flags = FS_DIRECTORY;
-    rn->node.inode = ramfs_next_inode++;
-    rn->node.private_data = rn;
-    rn->node.f_ops = &ramfs_dir_ops;
-    rn->node.uid = 0;
-    rn->node.gid = 0;
-    rn->node.mask = 0755;
-    return &rn->node;
-}
-
 static struct vfs_file_operations ramfs_dir_ops = {
     .read = NULL,
     .write = NULL,
@@ -212,3 +191,29 @@ static struct vfs_file_operations ramfs_file_ops = {
     .finddir = NULL,
     .ioctl = NULL
 };
+
+struct vfs_inode *init_ramfs(void)
+{
+    struct ramfs_inode *rn = (struct ramfs_inode*)kmalloc(sizeof(struct ramfs_inode));
+    if (!rn)
+        panic("Failed to alloc ramfs inode.");
+
+    memset(rn, 0, sizeof(*rn));
+    rn->first_child = NULL;
+    rn->next_sibling = NULL;
+    rn->data = NULL;
+    rn->cap = 0;
+
+    memset(&rn->node, 0, sizeof(rn->node));
+    strcpy(rn->name, "/");
+    rn->node.flags = FS_DIRECTORY;
+    rn->node.inode = ramfs_next_inode++;
+    rn->node.private_data = rn;
+    rn->node.f_ops = &ramfs_dir_ops;
+    rn->node.uid = 0;
+    rn->node.gid = 0;
+    rn->node.mask = 0755;
+
+    vfs_mount_root("/", &rn->node);
+    return &rn->node;
+}

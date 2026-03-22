@@ -5,7 +5,7 @@
 #include "device_model.h"
 
 static struct dirent sys_dirent;
-// Note: sys_root is dynamically allocated in sysfs_init now
+// Note: sys_root is dynamically allocated in init_sysfs now
 static struct vfs_inode sys_kernel;
 static struct vfs_inode sys_devices;
 static struct vfs_inode sys_kernel_version;
@@ -361,7 +361,7 @@ static struct vfs_file_operations sys_read_kernel_uptime_ops = {
     .ioctl = NULL
 };
 
-struct vfs_inode *sysfs_init(void)
+struct vfs_inode *init_sysfs(void)
 {
     struct vfs_inode *sys_root = (struct vfs_inode *)kmalloc(sizeof(struct vfs_inode));
     if (!sys_root) return NULL;
@@ -408,5 +408,6 @@ struct vfs_inode *sysfs_init(void)
     sys_kernel_uptime.gid = 0;
     sys_kernel_uptime.mask = 0444;
 
+    vfs_mount_root("/sys", sys_root);
     return sys_root;
 }

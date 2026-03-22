@@ -410,7 +410,7 @@ struct registers *syscall_handler(struct registers *regs)
                     }
                     break;
                 }
-                
+
                 struct linux_dirent *lde = (struct linux_dirent*)(out + off);
                 memset(lde, 0, reclen);
                 lde->d_ino = de->ino;
@@ -418,7 +418,7 @@ struct registers *syscall_handler(struct registers *regs)
                 lde->d_reclen = (uint16_t)reclen;
                 memcpy(lde->d_name, de->name, name_len);
                 lde->d_name[name_len] = 0;
-                
+
                 off += reclen;
                 d->file->vf->pos++;
             }

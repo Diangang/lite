@@ -37,11 +37,11 @@ struct vfs_inode {
     uint32_t inode;     /* Inode number */
     uint32_t length;    /* Size of the file */
     uint32_t impl;      /* Implementation defined number */
-    
+
     struct vfs_file_operations *f_ops; /* Pointer to operations */
-    
+
     void *private_data; /* Filesystem specific data (was ptr) */
-    
+
     uint32_t mode;      /* VFS specific mode */
     uint32_t refcount;  /* Reference count */
 };
@@ -82,6 +82,14 @@ struct vfs_mount {
     struct vfs_super_block *sb;
 };
 
+/* Internal VFS state */
+extern struct vfs_mount vfs_mounts[8];
+extern uint32_t vfs_mount_count;
+extern struct vfs_inode vfs_root_node;
+extern struct vfs_inode *vfs_base_root;
+extern struct vfs_file_operations vfs_root_ops;
+extern char vfs_boot_cwd[128];
+
 enum {
     VFS_O_CREAT = 1 << 6,
     VFS_O_TRUNC = 1 << 9
@@ -91,8 +99,12 @@ enum {
 struct multiboot_info;
 
 /* Standard VFS API */
-void init_fs(struct multiboot_info* mbi);
-void vfs_init(void);
+int vfs_path_is_prefix(const char *path, const char *prefix, uint32_t *out_tail_off);
+int vfs_normalize_path(const char *path, char *out, uint32_t cap);
+int vfs_build_abs(const char *path, char *abs, uint32_t cap);
+const char *vfs_getcwd(void);
+
+void init_vfs(void);
 int vfs_mount_root(const char *path, struct vfs_inode *root_node);
 int vfs_chdir(const char *path);
 const char *vfs_getcwd(void);
@@ -114,6 +126,12 @@ void open_fs(struct vfs_inode *node, uint8_t read, uint8_t write);
 void close_fs(struct vfs_inode *node);
 struct dirent *readdir_fs(struct vfs_inode *node, uint32_t index);
 struct vfs_inode *finddir_fs(struct vfs_inode *node, const char *name);
+int vfs_check_access(struct vfs_inode *node, int want_read, int want_write, int want_exec);
+int vfs_chmod(const char *path, uint32_t mode);
+
 int ioctl_fs(struct vfs_inode *node, uint32_t request, uint32_t arg);
+
+struct vfs_dentry *vfs_dentry_get(struct vfs_inode *node, const char *name);
+void vfs_dentry_put(struct vfs_dentry *d);
 
 #endif

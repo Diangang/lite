@@ -7,6 +7,11 @@
 #include "idt.h"
 #include "mm.h"
 #include "vfs.h"
+#include "ramfs.h"
+#include "initrd.h"
+#include "procfs.h"
+#include "devfs.h"
+#include "sysfs.h"
 #include "syscall.h"
 #include "keyboard.h"
 #include "timer.h"
@@ -35,8 +40,20 @@ void kernel_main(struct multiboot_info* mbi, uint32_t magic)
     /* Initialize the entire Memory Management subsystem (PMM, VMM, KHEAP) */
     init_mm(mbi);
 
-    /* Initialize the entire File System subsystem */
-    init_fs(mbi);
+    /* Initialize the VFS subsystem */
+    init_vfs();
+
+    /* Mount core filesystems */
+    struct vfs_inode *ram_root = init_ramfs();
+    struct vfs_inode *initrd_root = init_initrd(mbi);
+    init_procfs();
+    init_devfs();
+    init_sysfs();
+
+    device_model_init(ram_root, initrd_root);
+
+    /* Validate root chdir after all mounts are done */
+    vfs_chdir("/");
     printf("File System initialized.\n");
 
     /* Initialize System Calls */

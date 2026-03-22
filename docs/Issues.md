@@ -132,10 +132,10 @@
 - **现象**：`ush$ ls` 无任何输出也不报错，且在内核层重构 VFS 后，即使调用 `SYS_GETDENTS` 也无法读出目录项。
 - **定位**：
   1. **结构体布局不匹配**：内核态实现的 `SYS_GETDENTS` 没有采用标准的 `linux_dirent` 结构体（缺少 `d_off` 和 `d_reclen` 等字段的正确填充），导致用户态汇编解析时按偏移量读取出现错乱。
-  2. **VFS 缓存初始化时序错误**：在 `vfs_init()` 中，根节点 `vfs_root_node` 被添加到 dentry 缓存时，其文件操作表 `f_ops` 尚未赋值（为 `NULL`）。这导致后续打开 `/` 目录时拿到的缓存 inode 缺少 `readdir` 方法，从而无法读取任何条目。
+  2. **VFS 缓存初始化时序错误**：在 `init_vfs()` 中，根节点 `vfs_root_node` 被添加到 dentry 缓存时，其文件操作表 `f_ops` 尚未赋值（为 `NULL`）。这导致后续打开 `/` 目录时拿到的缓存 inode 缺少 `readdir` 方法，从而无法读取任何条目。
 - **解决**：
   1. 引入标准 `struct linux_dirent`（含 `d_ino`, `d_off`, `d_reclen`, `d_name[]`），在 `SYS_GETDENTS` 中计算 `reclen` 并按 4 字节对齐打包目录项。
-  2. 调整 `vfs_init()` 的初始化顺序，提前声明 `vfs_root_ops`，并在将 `vfs_root_node` 存入缓存前正确挂载 `f_ops`。
+  2. 调整 `init_vfs()` 的初始化顺序，提前声明 `vfs_root_ops`，并在将 `vfs_root_node` 存入缓存前正确挂载 `f_ops`。
   3. 为虚拟根目录、`initrd` 和 `ramfs` 的 `readdir` 补充硬编码的 `.` 和 `..` 目录项返回逻辑，以符合 POSIX 预期。
 
 ### 6.9 用户态 execve 退出后父进程触发 Page Fault (EIP 0x400037)

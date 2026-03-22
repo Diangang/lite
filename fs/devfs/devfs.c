@@ -8,7 +8,7 @@
 #define MAX_DEVICES 32
 
 static struct dirent dev_dirent;
-// Note: dev_root is dynamically allocated in devfs_init now
+// Note: dev_root is dynamically allocated in init_devfs now
 static struct vfs_inode dev_console;
 static struct vfs_inode dev_tty;
 
@@ -115,7 +115,12 @@ static struct vfs_file_operations devfs_dir_ops = {
     .ioctl = NULL
 };
 
-struct vfs_inode *devfs_init(void)
+struct vfs_inode *devfs_get_console(void)
+{
+    return &dev_console;
+}
+
+struct vfs_inode *init_devfs(void)
 {
     struct vfs_inode *dev_root = (struct vfs_inode *)kmalloc(sizeof(struct vfs_inode));
     if (!dev_root) return NULL;
@@ -145,10 +150,6 @@ struct vfs_inode *devfs_init(void)
     dev_tty.gid = 0;
     dev_tty.mask = 0666;
 
+    vfs_mount_root("/dev", dev_root);
     return dev_root;
-}
-
-struct vfs_inode *devfs_get_console(void)
-{
-    return &dev_console;
 }
