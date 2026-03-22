@@ -37,7 +37,7 @@ struct device_driver {
     struct device_driver *next;
 };
 
-void device_model_init(void);
+void driver_init(void);
 struct bus_type *bus_register(const char *name, int (*match)(struct device *, struct device_driver *));
 int driver_register(struct device_driver *drv);
 int device_register(struct device *dev);
@@ -46,6 +46,7 @@ int device_rebind(struct device *dev);
 
 struct device *device_register_simple(const char *name, const char *type, struct bus_type *bus, void *data);
 struct bus_type *device_model_platform_bus(void);
+void init_driver(struct device_driver *drv, const char *name, struct bus_type *bus, int (*probe)(struct device *));
 
 uint32_t device_model_device_count(void);
 struct device *device_model_device_at(uint32_t index);

@@ -3,6 +3,18 @@
 #include "serial.h"
 #include "vga.h"
 #include "console.h"
+#include "init.h"
+
+extern initcall_t __initcall_start[];
+extern initcall_t __initcall_end[];
+
+static void do_initcalls(void)
+{
+    initcall_t *call;
+    for (call = __initcall_start; call < __initcall_end; call++) {
+        (*call)();
+    }
+}
 #include "gdt.h"
 #include "idt.h"
 #include "mm.h"
@@ -51,11 +63,12 @@ void kernel_main(struct multiboot_info* mbi, uint32_t magic)
     init_devfs();
     init_sysfs();
 
-    // Since initrd is gone, we don't pass its root to device_model_init anymore.
+    // Since initrd is gone, we don't pass its root to driver_init anymore.
     // The device model can just use the rootfs.
-    device_model_init();
-
-    printf("File System initialized.\n");
+    driver_init();
+    
+    /* Execute all registered module init functions */
+    do_initcalls();
 
     /* Initialize System Calls */
     init_syscall();

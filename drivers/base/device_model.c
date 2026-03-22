@@ -143,13 +143,7 @@ struct bus_type *device_model_platform_bus(void)
     return &platform_bus;
 }
 
-static int probe_nop(struct device *dev)
-{
-    (void)dev;
-    return 0;
-}
-
-static void init_driver(struct device_driver *drv, const char *name, struct bus_type *bus, int (*probe)(struct device *))
+void init_driver(struct device_driver *drv, const char *name, struct bus_type *bus, int (*probe)(struct device *))
 {
     if (!drv) return;
     memset(drv, 0, sizeof(*drv));
@@ -164,7 +158,7 @@ static void init_driver(struct device_driver *drv, const char *name, struct bus_
     drv->probe = probe;
 }
 
-void device_model_init(void)
+void driver_init(void)
 {
     if (devmodel_inited) return;
     memset(&platform_bus, 0, sizeof(platform_bus));
@@ -176,21 +170,7 @@ void device_model_init(void)
     bus_list = &platform_bus;
     devmodel_inited = 1;
 
-    struct bus_type *platform = device_model_platform_bus();
-    if (platform) {
-        device_register_simple("console", "console", platform, NULL);
-        // Note: initrd is gone, we don't register it anymore.
-        device_register_simple("ramfs", "memfs", platform, NULL); // We don't really need the root pointer here just to register the device.
-
-        static struct device_driver drv_console;
-        static struct device_driver drv_memfs;
-
-        init_driver(&drv_console, "console", platform, probe_nop);
-        init_driver(&drv_memfs, "memfs", platform, probe_nop);
-
-        driver_register(&drv_console);
-        driver_register(&drv_memfs);
-    }
+    printf("Driver core initialized.\n");
 }
 
 uint32_t device_model_device_count(void)

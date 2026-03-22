@@ -59,24 +59,9 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
 - **sysfs（最小自描述接口）**：
   - `/sys/kernel/version`、`/sys/kernel/uptime`。
   - `/sys/devices/<dev>/{type,bus,driver}`：设备模型最小视图（目前默认注册 console/initrd/ramfs 并自动绑定同名 driver）。
-- **VFS（对象化进行中）**：
-  - 已引入最小 VFS 层（mount 表 + super_block/inode/dentry/file 结构雏形），并用 mount 表驱动 `/` 下的挂载点展示与路径解析。
-  - inode/dentry 引入简单缓存与引用计数，避免重复创建对象。
-  - 目录遍历接口支持 getdents 语义，权限模型引入 uid/gid/mode/umask 最小闭环。
-- **交互式 Shell**：
-  - 内置极简内核态 Shell，支持 `help`, `clear`, `info`, `echo`, `uptime`, `meminfo`, `alloc`, `vmmtest`, `heaptest`, `ls`, `cat`, `demo`, `yield`, `sleep`, `ps`, `syscall`, `run`, `user` 等命令（demo 默认关闭）。
-  - 支持 `cd`/`pwd` 与相对路径；cwd 为 per-task；`ls` 默认列出当前目录；支持 `mkdir`/`touch`/`writefile` 在 ramfs 上创建与写入。
-  - **双模式输入输出**：同时支持 VGA 显示器+键盘 和 **串口 (COM1)** 终端交互。
-  - `user` 进入用户态后切换输入前台为 `user>`，用户任务退出后自动恢复 `lite-os>`。
-  - `run <file>` 从 InitRD 启动指定用户程序，并在退出后打印退出信息。
-  - `run mmap.elf` 可验证匿名 mmap/munmap 与 `/proc/self/maps` 输出一致性。
-  - `run fork.elf` 可验证 fork + COW 行为与 `/proc/cow` 统计。
-  - fork 测试中出现两次 `Page Fault handled` 属于父子写时复制的正常表现。
-  - 用户态 `ush` 支持 `run <file>`，行为等价于 `exec`（替换当前 shell 进程）。
-  - 启动后默认运行 `init.elf`（PID1），由 init 负责拉起用户态 shell。
-  - 用户态 `ush` 支持输入回显与退格显示；`ls` 使用 `getdents` 批量遍历目录项。
-  - Shell 以独立内核任务运行，中断回调仅负责字符入队，避免在中断上下文执行命令。
-  - `ps` 可显示 `BLOCKED` 状态，用于识别等待中的任务（例如 `task_wait`）。
+- **驱动模型与设备树**：引入类 Linux 2.6 的 `driver_init`、`.initcall.init` 段收集与 `module_init` 宏自动加载机制。
+- **用户态交互**：完全移除内核态 Shell，由 1号进程 (`init.elf`) 挂载文件系统并 fork 执行真正的用户态 Shell (`ush.elf`)，实现彻底的特权级分离。内置提供 `/ktest.elf` 等独立测试程序。
+- **文件系统 (VFS)**：结构体 (`i_ino`, `i_mode`, `i_size`) 和全局动态 inode 分配器 (`get_next_ino`) 完美对齐 Linux 2.6 标准，支持虚拟文件系统如 `ramfs`、`devfs`、`procfs`、`sysfs`。
 - **系统调用 (int 0x80)**：
   - 用户态 syscall 会进行用户指针校验，避免非法地址导致内核崩溃。
   - `SYS_WRITE/SYS_READ` 在内核侧通过 `copyin/copyout` 分段拷贝访问用户缓冲区。
@@ -94,7 +79,6 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `SYS_FORK` 提供最小 fork，与 COW 页引用计数配合实现写时复制。
   - `SYS_BRK` 提供最小用户堆扩展接口（基于堆 VMA 与按需缺页分配）。
   - syscall 入口使用 trap gate，不会隐式关闭中断，内核态具备可抢占的基础语义。
-  - shell 的 `syscall` 命令运行在内核态，允许传入内核指针用于演示。
 - **用户态异常处理**：
   - 用户态触发 `#PF/#GP/#UD` 等异常时，内核终止当前用户任务并继续运行 shell。
 

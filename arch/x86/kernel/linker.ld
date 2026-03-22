@@ -34,6 +34,14 @@ SECTIONS
 		*(.rodata.*)
 	}
 
+	/* Linux-style initcalls */
+	.initcall.init BLOCK(4K) : ALIGN(4K)
+	{
+		__initcall_start = .;
+		*(.initcall.init)
+		__initcall_end = .;
+	}
+
 	/* Read-write data (initialized) */
 	.data BLOCK(4K) : ALIGN(4K)
 	{
