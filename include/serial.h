@@ -6,6 +6,6 @@
 /* Serial Helper Functions */
 void init_serial(void);
 void serial_put_char(char a);
-void serial_handler(struct registers* regs);
+void serial_handler();
 
 #endif

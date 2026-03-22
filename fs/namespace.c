@@ -38,7 +38,7 @@ int vfs_mount_root(const char *path, struct vfs_inode *root_node)
     m->sb->root = root_node;
     m->sb->fs_private = NULL;
 
-    struct vfs_dentry *mount_root = d_alloc(d->parent, "/"); // The root of the mounted FS
+    struct vfs_dentry *mount_root = d_alloc(d->parent, d->name); // The root of the mounted FS should have the name of the mount point
     mount_root->inode = root_node;
     m->root = mount_root;
 

@@ -1,4 +1,3 @@
-#include "serial.h"
 #include "console.h"
 #include "libc.h"
 #include "tty.h"
@@ -12,8 +11,7 @@ void serial_put_char(char a) {
    outb(0x3f8, a);
 }
 
-void serial_handler(struct registers *regs) {
-    (void)regs;
+void serial_handler() {
     /* Check if it's a read interrupt (IIR) */
     /* Read the character */
     if (inb(0x3f8 + 5) & 1) {

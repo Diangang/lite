@@ -100,12 +100,10 @@ struct multiboot_info;
 /* Standard VFS API */
 int vfs_path_is_prefix(const char *path, const char *prefix, uint32_t *out_tail_off);
 int vfs_normalize_path(const char *path, char *out, uint32_t cap);
-int vfs_build_abs(const char *path, char *abs, uint32_t cap);
-const char *vfs_getcwd(void);
+const char *task_get_cwd(void);
 
 int vfs_mount_root(const char *path, struct vfs_inode *root_node);
 int vfs_chdir(const char *path);
-const char *vfs_getcwd(void);
 int vfs_mkdir(const char *path);
 struct vfs_inode *vfs_resolve(const char *path);
 int vfs_chmod(const char *path, uint32_t mode);

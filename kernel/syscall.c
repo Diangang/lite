@@ -297,7 +297,7 @@ struct registers *syscall_handler(struct registers *regs)
                 regs->eax = 0;
                 break;
             }
-            const char *cwd = vfs_getcwd();
+            const char *cwd = task_get_cwd();
             if (!cwd) {
                 regs->eax = (uint32_t)-1;
                 break;

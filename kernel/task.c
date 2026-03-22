@@ -308,7 +308,8 @@ typedef struct task {
     uint32_t exit_info0;
     uint32_t exit_info1;
     char program[32];
-    char cwd[128];
+    struct vfs_dentry *cwd;
+    struct vfs_dentry *root;
     uint32_t uid;
     uint32_t gid;
     uint32_t umask;
@@ -569,19 +570,60 @@ static void mm_destroy(mm_t *mm)
     kfree(mm);
 }
 
+// We need a helper to format dentry to path. For now, a very naive implementation for shell PWD
 const char *task_get_cwd(void)
+{
+    static char buf[256];
+    if (!task_current || !task_current->cwd) return "/";
+    struct vfs_dentry *d = task_current->cwd;
+    if (!d->parent) return "/"; // root
+    
+    // Reverse path build
+    char tmp[256];
+    int pos = 255;
+    tmp[pos] = 0;
+    
+    while (d && d->parent) {
+        int n = strlen(d->name);
+        if (pos - n - 1 < 0) break; // Path too long
+        pos -= n;
+        memcpy(tmp + pos, d->name, n);
+        pos -= 1;
+        tmp[pos] = '/';
+        d = d->parent;
+    }
+    
+    if (pos == 255) {
+        strcpy(buf, "/");
+    } else {
+        // Fix double slashes if any mount root accidentally had "/" as name
+        int final_pos = pos;
+        if (tmp[final_pos] == '/' && tmp[final_pos + 1] == '/') final_pos++;
+        strcpy(buf, tmp + final_pos);
+    }
+    return buf;
+}
+
+struct vfs_dentry *task_get_cwd_dentry(void)
 {
     if (!task_current) return NULL;
     return task_current->cwd;
 }
 
-int task_set_cwd(const char *cwd)
+struct vfs_dentry *task_get_root_dentry(void)
 {
-    if (!task_current || !cwd) return -1;
-    uint32_t n = (uint32_t)strlen(cwd);
-    if (n >= sizeof(task_current->cwd)) n = sizeof(task_current->cwd) - 1;
-    memcpy(task_current->cwd, cwd, n);
-    task_current->cwd[n] = 0;
+    if (!task_current) return NULL;
+    return task_current->root;
+}
+
+int task_set_cwd_dentry(struct vfs_dentry *d)
+{
+    if (!task_current || !d) return -1;
+    if (task_current->cwd) {
+        vfs_dentry_put(task_current->cwd);
+    }
+    d->refcount++;
+    task_current->cwd = d;
     return 0;
 }
 
@@ -771,13 +813,11 @@ int task_fork(struct registers *regs)
     task->exit_info0 = 0;
     task->exit_info1 = 0;
     task_set_program_name(task, task_current->program);
-    task->cwd[0] = 0;
-    if (task_current->cwd[0]) {
-        uint32_t n = (uint32_t)strlen(task_current->cwd);
-        if (n >= sizeof(task->cwd)) n = sizeof(task->cwd) - 1;
-        memcpy(task->cwd, task_current->cwd, n);
-        task->cwd[n] = 0;
-    }
+    task->cwd = task_current->cwd;
+    if (task->cwd) task->cwd->refcount++;
+    task->root = task_current->root;
+    if (task->root) task->root->refcount++;
+
     if (task_current) {
         task->uid = task_current->uid;
         task->gid = task_current->gid;
@@ -958,7 +998,10 @@ void init_task(void)
     task->exit_info0 = 0;
     task->exit_info1 = 0;
     task->program[0] = 0;
-    task->cwd[0] = 0;
+    task->cwd = vfs_root_dentry; // Temporary bootstrap, will be properly handled in user init
+    if (task->cwd) task->cwd->refcount++;
+    task->root = vfs_root_dentry;
+    if (task->root) task->root->refcount++;
     task->uid = 0;
     task->gid = 0;
     task->umask = 022;
@@ -969,7 +1012,6 @@ void init_task(void)
 
     task_head = task;
     task_current = task;
-    strcpy(task->cwd, "/");
     wait_queue_init(&exit_waitq);
     tss_set_kernel_stack((uint32_t)task_current->stack + 4096);
 
@@ -1022,14 +1064,16 @@ static int task_create_internal(void (*entry)(void), const char *program)
     task->gid = task_current ? task_current->gid : 0;
     task->umask = task_current ? task_current->umask : 022;
     task_set_program_name(task, program);
-    task->cwd[0] = 0;
-    if (task_current && task_current->cwd[0]) {
-        uint32_t n = (uint32_t)strlen(task_current->cwd);
-        if (n >= sizeof(task->cwd)) n = sizeof(task->cwd) - 1;
-        memcpy(task->cwd, task_current->cwd, n);
-        task->cwd[n] = 0;
+    if (task_current) {
+        task->cwd = task_current->cwd;
+        if (task->cwd) task->cwd->refcount++;
+        task->root = task_current->root;
+        if (task->root) task->root->refcount++;
     } else {
-        strcpy(task->cwd, "/");
+        task->cwd = vfs_root_dentry;
+        if (task->cwd) task->cwd->refcount++;
+        task->root = vfs_root_dentry;
+        if (task->root) task->root->refcount++;
     }
     task_fdtable_init(task);
     if (program) {
@@ -1697,7 +1741,8 @@ uint32_t task_dump_status_pid(uint32_t pid, char *buf, uint32_t len)
     buf_append(buf, &off, len, "\nType:\t");
     buf_append(buf, &off, len, t->mm ? "user" : "kthread");
     buf_append(buf, &off, len, "\nCwd:\t");
-    buf_append(buf, &off, len, t->cwd[0] ? t->cwd : "/");
+    // We cannot dump absolute path easily right now without a helper, dummy output
+    buf_append(buf, &off, len, "/");
     buf_append(buf, &off, len, "\n");
     if (off < len) buf[off] = 0;
     irq_restore(flags);
@@ -1717,7 +1762,7 @@ uint32_t task_dump_cwd_pid(uint32_t pid, char *buf, uint32_t len)
         return 0;
     }
     uint32_t off = 0;
-    buf_append(buf, &off, len, t->cwd[0] ? t->cwd : "/");
+    buf_append(buf, &off, len, "/");
     buf_append(buf, &off, len, "\n");
     if (off < len) buf[off] = 0;
     irq_restore(flags);

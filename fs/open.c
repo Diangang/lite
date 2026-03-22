@@ -16,22 +16,15 @@ void close_fs(struct vfs_inode *node)
         node->f_ops->close(node);
 }
 
-const char *vfs_getcwd(void)
-{
-    const char *cwd = task_get_cwd();
-    if (cwd && *cwd) return cwd;
-    return "/";
-}
-
 int vfs_chdir(const char *path)
 {
     if (!path || !*path) return -1;
-    char abs[256];
-    if (!vfs_build_abs(path, abs, sizeof(abs))) return -1;
-    struct vfs_inode *node = vfs_resolve(abs);
+    struct vfs_dentry *d = path_walk(path);
+    if (!d) return -1;
+    struct vfs_inode *node = d->inode;
     if (!node) return -1;
     if ((node->flags & 0x7) != FS_DIRECTORY) return -1;
     if (!vfs_check_access(node, 0, 0, 1)) return -1;
-    if (task_set_cwd(abs) == 0) return 0;
+    if (task_set_cwd_dentry(d) == 0) return 0;
     return -1;
 }

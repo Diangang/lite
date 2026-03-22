@@ -74,44 +74,24 @@ int vfs_normalize_path(const char *path, char *out, uint32_t cap)
     return 1;
 }
 
-int vfs_build_abs(const char *path, char *abs, uint32_t cap)
-{
-    if (!path || !abs || cap < 2) return 0;
-    if (path[0] == '/') return vfs_normalize_path(path, abs, cap);
-
-    char tmp[256];
-    uint32_t off = 0;
-    const char *cwd = vfs_getcwd();
-    uint32_t cwd_len = (uint32_t)strlen(cwd);
-    if (cwd_len >= sizeof(tmp) - 1) return 0;
-    memcpy(tmp, cwd, cwd_len);
-    off = cwd_len;
-    if (off == 0) {
-        tmp[off++] = '/';
-    } else if (tmp[off - 1] != '/') {
-        if (off + 1 >= sizeof(tmp)) return 0;
-        tmp[off++] = '/';
-    }
-    tmp[off] = 0;
-
-    uint32_t path_len = (uint32_t)strlen(path);
-    if (off + path_len >= sizeof(tmp)) return 0;
-    memcpy(tmp + off, path, path_len);
-    off += path_len;
-    tmp[off] = 0;
-    return vfs_normalize_path(tmp, abs, cap);
-}
+// Removed vfs_build_abs entirely, no longer needed as path_walk now walks relative to dentry
 
 struct vfs_dentry *path_walk(const char *path)
 {
     if (!path || !*path) return NULL;
-    char abs[256];
-    if (!vfs_build_abs(path, abs, sizeof(abs))) return NULL;
 
-    struct vfs_dentry *curr = vfs_root_dentry;
+    struct vfs_dentry *curr;
+    if (path[0] == '/') {
+        curr = task_get_root_dentry();
+        if (!curr) curr = vfs_root_dentry; // Fallback for very early boot
+    } else {
+        curr = task_get_cwd_dentry();
+        if (!curr) curr = vfs_root_dentry;
+    }
+    
     if (!curr) return NULL;
 
-    const char *p = abs;
+    const char *p = path;
     while (*p == '/') p++;
 
     while (*p) {
@@ -165,21 +145,26 @@ struct vfs_inode *vfs_resolve(const char *path)
 int vfs_mkdir(const char *path)
 {
     if (!path || !*path) return -1;
-    char abs[256];
-    if (!vfs_build_abs(path, abs, sizeof(abs))) return -1;
-    uint32_t abs_len = (uint32_t)strlen(abs);
-    if (abs_len < 2) return -1;
-    uint32_t slash = abs_len;
-    while (slash > 0 && abs[slash - 1] != '/') slash--;
-    if (slash == 0 || slash >= abs_len) return -1;
+    
+    char tmp[256];
+    uint32_t len = (uint32_t)strlen(path);
+    if (len >= sizeof(tmp)) return -1;
+    strcpy(tmp, path);
+
+    // simple dirname/basename split
+    uint32_t slash = len;
+    while (slash > 0 && tmp[slash - 1] != '/') slash--;
+    
     char parent[256];
-    if (slash == 1) {
+    if (slash == 0) {
+        strcpy(parent, ".");
+    } else if (slash == 1) {
         strcpy(parent, "/");
     } else {
-        memcpy(parent, abs, slash);
+        memcpy(parent, tmp, slash);
         parent[slash] = 0;
     }
-    const char *name = abs + slash;
+    const char *name = tmp + slash;
     if (!*name) return -1;
 
     struct vfs_inode *pnode = vfs_resolve(parent);

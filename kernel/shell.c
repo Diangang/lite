@@ -82,7 +82,7 @@ static void shell_execute(void)
         pmm_print_info();
     }
     else if (strcmp(cmd_buffer, "pwd") == 0) {
-        printf("%s\n", vfs_getcwd());
+        printf("%s\n", task_get_cwd());
     }
     else if (strcmp(cmd_buffer, "cd") == 0 || strncmp(cmd_buffer, "cd ", 3) == 0) {
         const char *path = "/";

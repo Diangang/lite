@@ -1,4 +1,3 @@
-#include "serial.h"
 #include "console.h"
 #include "libc.h"
 

@@ -10,21 +10,24 @@ struct vfs_file *vfs_open(const char *path, uint32_t flags)
     struct vfs_inode *node = dentry ? dentry->inode : NULL;
 
     if (!dentry && (flags & VFS_O_CREAT)) {
-        char abs[256];
-        if (!vfs_build_abs(path, abs, sizeof(abs))) return NULL;
+        char tmp[256];
+        uint32_t len = (uint32_t)strlen(path);
+        if (len >= sizeof(tmp)) return NULL;
+        strcpy(tmp, path);
+
+        uint32_t slash = len;
+        while (slash > 0 && tmp[slash - 1] != '/') slash--;
+        
         char parent[256];
-        uint32_t abs_len = (uint32_t)strlen(abs);
-        if (abs_len < 2) return NULL;
-        uint32_t slash = abs_len;
-        while (slash > 0 && abs[slash - 1] != '/') slash--;
-        if (slash == 0 || slash >= abs_len) return NULL;
-        if (slash == 1) {
+        if (slash == 0) {
+            strcpy(parent, ".");
+        } else if (slash == 1) {
             strcpy(parent, "/");
         } else {
-            memcpy(parent, abs, slash);
+            memcpy(parent, tmp, slash);
             parent[slash] = 0;
         }
-        const char *name = abs + slash;
+        const char *name = tmp + slash;
         if (!*name) return NULL;
 
         struct vfs_dentry *pdentry = path_walk(parent);

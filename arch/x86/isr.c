@@ -170,7 +170,7 @@ struct registers *irq_handler(struct registers *regs)
 
     /* Handle Serial Interrupt specifically if needed, or through handler array */
     if (regs->int_no == 36) // IRQ 4
-        serial_handler(regs);
+        serial_handler();
     else if (interrupt_handlers[regs->int_no] != 0)
         interrupt_handlers[regs->int_no](regs);
 
