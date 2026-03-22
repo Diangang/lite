@@ -41,8 +41,8 @@ void kernel_main(struct multiboot_info* mbi, uint32_t magic)
     init_mm(mbi);
 
     /* Mount core filesystems */
-    struct vfs_inode *ram_root = init_ramfs();
-    struct vfs_inode *initrd_root = init_initrd(mbi);
+    struct inode *ram_root = init_ramfs();
+    struct inode *initrd_root = init_initrd(mbi);
     init_procfs();
     init_devfs();
     init_sysfs();

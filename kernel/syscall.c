@@ -1,3 +1,4 @@
+#include "file.h"
 #include "syscall.h"
 #include "task.h"
 #include "libc.h"
@@ -331,26 +332,27 @@ struct registers *syscall_handler(struct registers *regs)
         case SYS_GETDENT: {
             int fd = (int)regs->ebx;
             task_fd_t *d = task_fd_get(fd);
-            if (!d || !d->file || !d->file->node || !d->file->vf) {
+            if (!d || !d->file || !d->file->dentry || !d->file->dentry->inode) {
                 regs->eax = (uint32_t)-1;
                 break;
             }
-            if ((d->file->node->flags & 0x7) != FS_DIRECTORY) {
+            if ((d->file->dentry->inode->flags & 0x7) != FS_DIRECTORY) {
+                /* Not a directory */
                 regs->eax = (uint32_t)-1;
                 break;
             }
-            if (!vfs_check_access(d->file->node, 1, 0, 1)) {
+            if (!vfs_check_access(d->file->dentry->inode, 1, 0, 1)) {
                 printf("DEBUG: sys_getdents fd %d access denied\n", fd);
                 regs->eax = (uint32_t)-1;
                 break;
             }
 
-            struct dirent *de = readdir_fs(d->file->node, d->file->vf->pos);
+            struct dirent *de = readdir_fs(d->file, d->file->pos);
             if (!de) {
                 regs->eax = 0;
                 break;
             }
-            d->file->vf->pos++;
+            d->file->pos++;
 
             uint32_t out_cap = regs->edx;
             if (out_cap < sizeof(struct dirent)) {
@@ -371,15 +373,16 @@ struct registers *syscall_handler(struct registers *regs)
         case SYS_GETDENTS: {
             int fd = (int)regs->ebx;
             task_fd_t *d = task_fd_get(fd);
-            if (!d || !d->file || !d->file->node || !d->file->vf) {
+            if (!d || !d->file || !d->file->dentry || !d->file->dentry->inode) {
                 regs->eax = (uint32_t)-1;
                 break;
             }
-            if ((d->file->node->flags & 0x7) != FS_DIRECTORY) {
+            struct inode *node = d->file->dentry->inode;
+            if ((node->flags & 0x7) != FS_DIRECTORY) {
                 regs->eax = (uint32_t)-1;
                 break;
             }
-            if (!vfs_check_access(d->file->node, 1, 0, 1)) {
+            if (!vfs_check_access(node, 1, 0, 1)) {
                 regs->eax = (uint32_t)-1;
                 break;
             }
@@ -395,7 +398,7 @@ struct registers *syscall_handler(struct registers *regs)
             }
             uint32_t off = 0;
             while (off + 12 <= out_cap) {
-                struct dirent *de = readdir_fs(d->file->node, d->file->vf->pos);
+                struct dirent *de = readdir_fs(d->file, d->file->pos);
                 if (!de) {
                     break;
                 }
@@ -414,13 +417,13 @@ struct registers *syscall_handler(struct registers *regs)
                 struct linux_dirent *lde = (struct linux_dirent*)(out + off);
                 memset(lde, 0, reclen);
                 lde->d_ino = de->ino;
-                lde->d_off = d->file->vf->pos + 1;
+                lde->d_off = d->file->pos + 1;
                 lde->d_reclen = (uint16_t)reclen;
                 memcpy(lde->d_name, de->name, name_len);
                 lde->d_name[name_len] = 0;
 
                 off += reclen;
-                d->file->vf->pos++;
+                d->file->pos++;
             }
             if (off == 0) {
                 kfree(out);
@@ -490,7 +493,7 @@ getdents_end:
             uint32_t req = regs->ecx;
             uint32_t arg = regs->edx;
             task_fd_t *d = task_fd_get(fd);
-            if (!d || !d->file || !d->file->node) {
+            if (!d || !d->file || !d->file->dentry || !d->file->dentry->inode) {
                 regs->eax = (uint32_t)-1;
                 break;
             }

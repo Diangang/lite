@@ -4,10 +4,10 @@
 #include "fs.h"
 #include "ramfs.h"
 
-struct vfs_file *vfs_open(const char *path, uint32_t flags)
+struct file *vfs_open(const char *path, uint32_t flags)
 {
-    struct vfs_dentry *dentry = path_walk(path);
-    struct vfs_inode *node = dentry ? dentry->inode : NULL;
+    struct dentry *dentry = path_walk(path);
+    struct inode *node = dentry ? dentry->inode : NULL;
 
     if (!dentry && (flags & VFS_O_CREAT)) {
         char tmp[256];
@@ -30,13 +30,13 @@ struct vfs_file *vfs_open(const char *path, uint32_t flags)
         const char *name = tmp + slash;
         if (!*name) return NULL;
 
-        struct vfs_dentry *pdentry = path_walk(parent);
+        struct dentry *pdentry = path_walk(parent);
         if (!pdentry) return NULL;
-        struct vfs_inode *pnode = pdentry->inode;
+        struct inode *pnode = pdentry->inode;
         if (!pnode || (pnode->flags & 0x7) != FS_DIRECTORY) return NULL;
         if (!vfs_check_access(pnode, 0, 1, 1)) return NULL;
 
-        struct vfs_inode *created = ramfs_create_child(pnode, name, FS_FILE);
+        struct inode *created = ramfs_create_child(pnode, name, FS_FILE);
         if (!created) return NULL;
 
         dentry = d_alloc(pdentry, name);
@@ -60,7 +60,7 @@ struct vfs_file *vfs_open(const char *path, uint32_t flags)
         }
     }
 
-    struct vfs_file *f = vfs_open_dentry(dentry, flags);
+    struct file *f = vfs_open_dentry(dentry, flags);
     if (!f) return NULL;
     if ((flags & VFS_O_TRUNC) && (node->flags & 0x7) == FS_FILE) {
         node->length = 0;
@@ -68,10 +68,10 @@ struct vfs_file *vfs_open(const char *path, uint32_t flags)
     return f;
 }
 
-struct vfs_file *vfs_open_dentry(struct vfs_dentry *dentry, uint32_t flags)
+struct file *vfs_open_dentry(struct dentry *dentry, uint32_t flags)
 {
     if (!dentry || !dentry->inode) return NULL;
-    struct vfs_file *f = (struct vfs_file*)kmalloc(sizeof(struct vfs_file));
+    struct file *f = (struct file*)kmalloc(sizeof(struct file));
     if (!f) return NULL;
     dentry->refcount++;
     f->dentry = dentry;
@@ -82,17 +82,17 @@ struct vfs_file *vfs_open_dentry(struct vfs_dentry *dentry, uint32_t flags)
     return f;
 }
 
-struct vfs_file *vfs_open_node(struct vfs_inode *node, uint32_t flags)
+struct file *vfs_open_node(struct inode *node, uint32_t flags)
 {
     if (!node) return NULL;
-    struct vfs_dentry *d = vfs_dentry_get(node, "");
+    struct dentry *d = vfs_dentry_get(node, "");
     if (!d) return NULL;
-    struct vfs_file *f = vfs_open_dentry(d, flags);
+    struct file *f = vfs_open_dentry(d, flags);
     vfs_dentry_put(d); // open_dentry incremented it
     return f;
 }
 
-uint32_t vfs_read(struct vfs_file *f, uint8_t *buf, uint32_t len)
+uint32_t vfs_read(struct file *f, uint8_t *buf, uint32_t len)
 {
     if (!f || !f->dentry || !f->dentry->inode) return 0;
     if (!vfs_check_access(f->dentry->inode, 1, 0, 0)) return 0;
@@ -101,7 +101,7 @@ uint32_t vfs_read(struct vfs_file *f, uint8_t *buf, uint32_t len)
     return n;
 }
 
-uint32_t vfs_write(struct vfs_file *f, const uint8_t *buf, uint32_t len)
+uint32_t vfs_write(struct file *f, const uint8_t *buf, uint32_t len)
 {
     if (!f || !f->dentry || !f->dentry->inode) return 0;
     if (!vfs_check_access(f->dentry->inode, 0, 1, 0)) return 0;
@@ -110,13 +110,13 @@ uint32_t vfs_write(struct vfs_file *f, const uint8_t *buf, uint32_t len)
     return n;
 }
 
-int vfs_ioctl(struct vfs_file *f, uint32_t request, uint32_t arg)
+int vfs_ioctl(struct file *f, uint32_t request, uint32_t arg)
 {
     if (!f || !f->dentry || !f->dentry->inode) return -1;
     return ioctl_fs(f->dentry->inode, request, arg);
 }
 
-void vfs_close(struct vfs_file *f)
+void vfs_close(struct file *f)
 {
     if (!f) return;
     if (f->refcount > 1) {
@@ -130,60 +130,34 @@ void vfs_close(struct vfs_file *f)
     kfree(f);
 }
 
-struct file *file_open_node(struct vfs_inode *node, uint32_t flags)
+struct file *file_open_node(struct inode *node, uint32_t flags)
 {
     if (!node) return NULL;
-    struct file *f = (struct file*)kmalloc(sizeof(struct file));
-    if (!f) return NULL;
-    f->node = node;
-    f->flags = flags;
-    f->vf = vfs_open_node(node, flags);
-    f->refcount = 1;
-    if (!f->vf) {
-        kfree(f);
-        return NULL;
-    }
-    return f;
+    return vfs_open_node(node, flags);
 }
 
 struct file *file_open_path(const char *path, uint32_t flags)
 {
     if (!path) return NULL;
-    struct vfs_file *vf = vfs_open(path, flags);
-    if (!vf) return NULL;
-
-    struct file *f = (struct file*)kmalloc(sizeof(struct file));
-    if (!f) {
-        vfs_close(vf);
-        return NULL;
-    }
-    f->node = vf->dentry && vf->dentry->inode ? vf->dentry->inode : NULL;
-    f->flags = flags;
-    f->vf = vf;
-    f->refcount = 1;
-    if (!f->node) {
-        file_close(f);
-        return NULL;
-    }
-    return f;
+    return vfs_open(path, flags);
 }
 
 uint32_t file_read(struct file *f, uint8_t *buf, uint32_t len)
 {
-    if (!f || !f->vf || !buf || len == 0) return 0;
-    return vfs_read(f->vf, buf, len);
+    if (!f || !buf || len == 0) return 0;
+    return vfs_read(f, buf, len);
 }
 
 uint32_t file_write(struct file *f, const uint8_t *buf, uint32_t len)
 {
-    if (!f || !f->vf || !buf || len == 0) return 0;
-    return vfs_write(f->vf, buf, len);
+    if (!f || !buf || len == 0) return 0;
+    return vfs_write(f, buf, len);
 }
 
 int file_ioctl(struct file *f, uint32_t request, uint32_t arg)
 {
-    if (!f || !f->node) return -1;
-    return ioctl_fs(f->node, request, arg);
+    if (!f) return -1;
+    return vfs_ioctl(f, request, arg);
 }
 
 struct file *file_dup(struct file *f)
@@ -196,10 +170,5 @@ struct file *file_dup(struct file *f)
 void file_close(struct file *f)
 {
     if (!f) return;
-    if (f->refcount > 1) {
-        f->refcount--;
-        return;
-    }
-    if (f->vf) vfs_close(f->vf);
-    kfree(f);
+    vfs_close(f);
 }

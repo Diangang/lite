@@ -164,7 +164,7 @@ static void init_driver(struct device_driver *drv, const char *name, struct bus_
     drv->probe = probe;
 }
 
-void device_model_init(struct vfs_inode *ram_root, struct vfs_inode *initrd_root)
+void device_model_init(struct inode *ram_root, struct inode *initrd_root)
 {
     if (devmodel_inited) return;
     memset(&platform_bus, 0, sizeof(platform_bus));

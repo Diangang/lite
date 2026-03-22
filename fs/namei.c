@@ -76,11 +76,11 @@ int vfs_normalize_path(const char *path, char *out, uint32_t cap)
 
 // Removed vfs_build_abs entirely, no longer needed as path_walk now walks relative to dentry
 
-struct vfs_dentry *path_walk(const char *path)
+struct dentry *path_walk(const char *path)
 {
     if (!path || !*path) return NULL;
 
-    struct vfs_dentry *curr;
+    struct dentry *curr;
     if (path[0] == '/') {
         curr = task_get_root_dentry();
         if (!curr) curr = vfs_root_dentry; // Fallback for very early boot
@@ -109,11 +109,11 @@ struct vfs_dentry *path_walk(const char *path)
         } else if (strcmp(part, "..") == 0) {
             if (curr->parent) curr = curr->parent;
         } else {
-            struct vfs_dentry *next = d_lookup(curr, part);
+            struct dentry *next = d_lookup(curr, part);
             if (!next) {
                 // Not in cache, try underlying FS
                 if (curr->inode && curr->inode->f_ops && curr->inode->f_ops->finddir) {
-                    struct vfs_inode *child_inode = curr->inode->f_ops->finddir(curr->inode, part);
+                    struct inode *child_inode = curr->inode->f_ops->finddir(curr->inode, part);
                     if (child_inode) {
                         next = d_alloc(curr, part);
                         next->inode = child_inode;
@@ -135,9 +135,9 @@ struct vfs_dentry *path_walk(const char *path)
     return curr;
 }
 
-struct vfs_inode *vfs_resolve(const char *path)
+struct inode *vfs_resolve(const char *path)
 {
-    struct vfs_dentry *d = path_walk(path);
+    struct dentry *d = path_walk(path);
     if (d) return d->inode;
     return NULL;
 }
@@ -167,7 +167,7 @@ int vfs_mkdir(const char *path)
     const char *name = tmp + slash;
     if (!*name) return -1;
 
-    struct vfs_inode *pnode = vfs_resolve(parent);
+    struct inode *pnode = vfs_resolve(parent);
     if (!pnode || (pnode->flags & 0x7) != FS_DIRECTORY) return -1;
     if (!vfs_check_access(pnode, 0, 1, 1)) return -1;
 
@@ -176,6 +176,17 @@ int vfs_mkdir(const char *path)
         return -1;
     }
 
-    if (!ramfs_create_child(pnode, name, FS_DIRECTORY)) return -1;
+    // In new generic VFS, ramfs_create_child just returns an inode.
+    // We need to attach it to a dentry.
+    struct dentry *pdentry = path_walk(parent);
+    if (!pdentry) return -1;
+    
+    struct inode *created = ramfs_create_child(pnode, name, FS_DIRECTORY);
+    if (!created) return -1;
+    
+    struct dentry *d = d_alloc(pdentry, name);
+    if (!d) return -1;
+    d->inode = created;
+
     return 0;
 }

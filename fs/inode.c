@@ -2,7 +2,7 @@
 #include "task.h"
 #include "libc.h"
 
-int vfs_check_access(struct vfs_inode *node, int want_read, int want_write, int want_exec)
+int vfs_check_access(struct inode *node, int want_read, int want_write, int want_exec)
 {
     if (!node) return 0;
     uint32_t uid = task_get_uid();
@@ -25,7 +25,7 @@ int vfs_check_access(struct vfs_inode *node, int want_read, int want_write, int 
 
 int vfs_chmod(const char *path, uint32_t mode)
 {
-    struct vfs_inode *node = vfs_resolve(path);
+    struct inode *node = vfs_resolve(path);
     if (!node) return -1;
     uint32_t uid = task_get_uid();
     if (uid != 0 && uid != node->uid) return -1;

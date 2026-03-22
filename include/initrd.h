@@ -23,6 +23,6 @@ struct initrd_file_header {
     uint32_t length;
 };
 
-struct vfs_inode *init_initrd(struct multiboot_info* mbi);
+struct inode *init_initrd(struct multiboot_info* mbi);
 
 #endif

@@ -1,3 +1,4 @@
+#include "file.h"
 #include "initrd.h"
 #include "libc.h"
 #include "kheap.h"
@@ -7,17 +8,17 @@
 
 /* The InitRD image in memory */
 struct initrd_file_header *file_headers;
-struct vfs_inode *initrd_dev;
-struct vfs_inode *root_nodes;
+struct inode *initrd_dev;
+struct inode *root_nodes;
 int nroot_nodes;
 
 struct dirent dirent;
 
-static uint32_t initrd_read(struct vfs_inode *node, uint32_t offset, uint32_t size, uint8_t *buffer);
-static struct dirent *initrd_readdir(struct vfs_inode *node, uint32_t index);
-static struct vfs_inode *initrd_finddir(struct vfs_inode *node, const char *name);
+static uint32_t initrd_read(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer);
+static struct dirent *initrd_readdir(struct file *file, uint32_t index);
+static struct inode *initrd_finddir(struct inode *node, const char *name);
 
-static struct vfs_file_operations initrd_file_ops = {
+static struct file_operations initrd_file_ops = {
     .read = initrd_read,
     .write = NULL,
     .open = NULL,
@@ -27,7 +28,7 @@ static struct vfs_file_operations initrd_file_ops = {
     .ioctl = NULL
 };
 
-static struct vfs_file_operations initrd_dir_ops = {
+static struct file_operations initrd_dir_ops = {
     .read = NULL,
     .write = NULL,
     .open = NULL,
@@ -38,7 +39,7 @@ static struct vfs_file_operations initrd_dir_ops = {
 };
 
 /* Read from a file in the InitRD */
-static uint32_t initrd_read(struct vfs_inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t initrd_read(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     struct initrd_file_header header = file_headers[node->inode];
     if (offset > header.length)
@@ -51,8 +52,9 @@ static uint32_t initrd_read(struct vfs_inode *node, uint32_t offset, uint32_t si
 }
 
 /* Read directory entry */
-static struct dirent *initrd_readdir(struct vfs_inode *node, uint32_t index)
+static struct dirent *initrd_readdir(struct file *file, uint32_t index)
 {
+    struct inode *node = file->dentry->inode;
     (void)node;
     if (index == 0) {
         strcpy(dirent.name, ".");
@@ -74,7 +76,7 @@ static struct dirent *initrd_readdir(struct vfs_inode *node, uint32_t index)
     return &dirent;
 }
 
-static struct vfs_inode *initrd_finddir(struct vfs_inode *node, const char *name)
+static struct inode *initrd_finddir(struct inode *node, const char *name)
 {
     (void)node;
     if (!name) return NULL;
@@ -129,11 +131,11 @@ static struct vfs_inode *initrd_finddir(struct vfs_inode *node, const char *name
     return NULL;
 }
 
-struct vfs_inode *init_initrd(struct multiboot_info* mbi)
+struct inode *init_initrd(struct multiboot_info* mbi)
 {
     struct multiboot_module* mod = (struct multiboot_module*)mbi->mods_addr;
     uint32_t location = mod->mod_start;
-    struct vfs_inode *initrd_root = NULL;
+    struct inode *initrd_root = NULL;
 
     if (location < 0x1000)
         panic("DEBUG: ERROR: InitRD location is too low (NULL or IVT)!\n");
@@ -155,7 +157,7 @@ struct vfs_inode *init_initrd(struct multiboot_info* mbi)
     file_headers = (struct initrd_file_header*)(location + sizeof(uint32_t));
 
     /* Initialize the root directory node */
-    initrd_root = (struct vfs_inode*)kmalloc(sizeof(struct vfs_inode));
+    initrd_root = (struct inode*)kmalloc(sizeof(struct inode));
     if (!initrd_root)
         panic("DEBUG: kmalloc failed for initrd_root\n");
 
@@ -171,7 +173,7 @@ struct vfs_inode *init_initrd(struct multiboot_info* mbi)
     initrd_root->impl = 0;
 
     /* Initialize file nodes */
-    root_nodes = (struct vfs_inode*)kmalloc(sizeof(struct vfs_inode) * nroot_nodes);
+    root_nodes = (struct inode*)kmalloc(sizeof(struct inode) * nroot_nodes);
     if (!root_nodes)
         panic("DEBUG: kmalloc failed for root_nodes\n");
 

@@ -10,13 +10,13 @@ enum {
 };
 
 struct file {
-    struct vfs_inode *node;
+    struct dentry *dentry;
+    uint32_t pos;
     uint32_t flags;
-    struct vfs_file *vf;
     uint32_t refcount;
 };
 
-struct file *file_open_node(struct vfs_inode *node, uint32_t flags);
+struct file *file_open_node(struct inode *node, uint32_t flags);
 struct file *file_open_path(const char *path, uint32_t flags);
 uint32_t file_read(struct file *f, uint8_t *buf, uint32_t len);
 uint32_t file_write(struct file *f, const uint8_t *buf, uint32_t len);

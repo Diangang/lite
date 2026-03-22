@@ -2,7 +2,7 @@
 #include "task.h"
 #include "libc.h"
 
-void open_fs(struct vfs_inode *node, uint8_t read, uint8_t write)
+void open_fs(struct inode *node, uint8_t read, uint8_t write)
 {
     (void)read;
     (void)write;
@@ -10,7 +10,7 @@ void open_fs(struct vfs_inode *node, uint8_t read, uint8_t write)
         node->f_ops->open(node);
 }
 
-void close_fs(struct vfs_inode *node)
+void close_fs(struct inode *node)
 {
     if (node->f_ops && node->f_ops->close != NULL)
         node->f_ops->close(node);
@@ -19,9 +19,9 @@ void close_fs(struct vfs_inode *node)
 int vfs_chdir(const char *path)
 {
     if (!path || !*path) return -1;
-    struct vfs_dentry *d = path_walk(path);
+    struct dentry *d = path_walk(path);
     if (!d) return -1;
-    struct vfs_inode *node = d->inode;
+    struct inode *node = d->inode;
     if (!node) return -1;
     if ((node->flags & 0x7) != FS_DIRECTORY) return -1;
     if (!vfs_check_access(node, 0, 0, 1)) return -1;

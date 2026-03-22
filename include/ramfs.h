@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include "fs.h"
 
-struct vfs_inode *init_ramfs(void);
-struct vfs_inode *ramfs_create_child(struct vfs_inode *dir, const char *name, uint32_t type);
+struct inode *init_ramfs(void);
+struct inode *ramfs_create_child(struct inode *dir, const char *name, uint32_t type);
 
 #endif

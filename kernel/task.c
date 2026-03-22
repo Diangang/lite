@@ -1,3 +1,4 @@
+#include "file.h"
 #include "task.h"
 #include "kheap.h"
 #include "libc.h"
@@ -105,7 +106,7 @@ static void ensure_private_table_range(uint32_t* dir, uint32_t start, uint32_t e
 int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_stack, uint32_t** out_dir,
                              uint32_t* out_base, uint32_t* out_pages, uint32_t* out_stack_base)
 {
-    struct vfs_inode *node = vfs_resolve(name);
+    struct inode *node = vfs_resolve(name);
     if (!node) {
         char try_path[128];
         strcpy(try_path, "/initrd/");
@@ -122,7 +123,7 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
             node = vfs_resolve(basename);
             if (!node) {
                 // Manually try to find in initrd for extreme fallback
-                struct vfs_inode *initrd_node = vfs_resolve("/initrd");
+                struct inode *initrd_node = vfs_resolve("/initrd");
                 if (initrd_node) {
                     node = finddir_fs(initrd_node, basename);
                 }
@@ -308,8 +309,8 @@ typedef struct task {
     uint32_t exit_info0;
     uint32_t exit_info1;
     char program[32];
-    struct vfs_dentry *cwd;
-    struct vfs_dentry *root;
+    struct dentry *cwd;
+    struct dentry *root;
     uint32_t uid;
     uint32_t gid;
     uint32_t umask;
@@ -575,7 +576,7 @@ const char *task_get_cwd(void)
 {
     static char buf[256];
     if (!task_current || !task_current->cwd) return "/";
-    struct vfs_dentry *d = task_current->cwd;
+    struct dentry *d = task_current->cwd;
     if (!d->parent) return "/"; // root
     
     // Reverse path build
@@ -604,19 +605,19 @@ const char *task_get_cwd(void)
     return buf;
 }
 
-struct vfs_dentry *task_get_cwd_dentry(void)
+struct dentry *task_get_cwd_dentry(void)
 {
     if (!task_current) return NULL;
     return task_current->cwd;
 }
 
-struct vfs_dentry *task_get_root_dentry(void)
+struct dentry *task_get_root_dentry(void)
 {
     if (!task_current) return NULL;
     return task_current->root;
 }
 
-int task_set_cwd_dentry(struct vfs_dentry *d)
+int task_set_cwd_dentry(struct dentry *d)
 {
     if (!task_current || !d) return -1;
     if (task_current->cwd) {
@@ -1782,13 +1783,13 @@ uint32_t task_dump_fd_pid(uint32_t pid, uint32_t fd, char *buf, uint32_t len)
         irq_restore(flags);
         return 0;
     }
-    if (!t->fds[fd].used || !t->fds[fd].file || !t->fds[fd].file->node) {
+    if (!t->fds[fd].used || !t->fds[fd].file || !t->fds[fd].file->dentry->inode) {
         irq_restore(flags);
         return 0;
     }
 
     uint32_t off = 0;
-    buf_append(buf, &off, len, t->fds[fd].file->vf->dentry->name);
+    buf_append(buf, &off, len, t->fds[fd].file->dentry->name);
     buf_append(buf, &off, len, "\n");
     if (off < len) buf[off] = 0;
     irq_restore(flags);
@@ -1828,7 +1829,7 @@ int task_fd_close(int fd)
     return 0;
 }
 
-void task_install_stdio(struct vfs_inode *console)
+void task_install_stdio(struct inode *console)
 {
     if (!task_current) return;
     if (!console) return;

@@ -2,11 +2,11 @@
 #include "kheap.h"
 #include "libc.h"
 
-struct vfs_dentry *vfs_root_dentry = NULL;
+struct dentry *vfs_root_dentry = NULL;
 
-struct vfs_dentry *d_alloc(struct vfs_dentry *parent, const char *name)
+struct dentry *d_alloc(struct dentry *parent, const char *name)
 {
-    struct vfs_dentry *d = (struct vfs_dentry*)kmalloc(sizeof(struct vfs_dentry));
+    struct dentry *d = (struct dentry*)kmalloc(sizeof(struct dentry));
     if (!d) return NULL;
     memset(d, 0, sizeof(*d));
     d->name = name ? strdup(name) : NULL;
@@ -19,10 +19,10 @@ struct vfs_dentry *d_alloc(struct vfs_dentry *parent, const char *name)
     return d;
 }
 
-struct vfs_dentry *d_lookup(struct vfs_dentry *parent, const char *name)
+struct dentry *d_lookup(struct dentry *parent, const char *name)
 {
     if (!parent || !name) return NULL;
-    struct vfs_dentry *c = parent->children;
+    struct dentry *c = parent->children;
     while (c) {
         if (c->name && strcmp(c->name, name) == 0) return c;
         c = c->sibling;
@@ -30,16 +30,16 @@ struct vfs_dentry *d_lookup(struct vfs_dentry *parent, const char *name)
     return NULL;
 }
 
-struct vfs_dentry *vfs_dentry_get(struct vfs_inode *node, const char *name)
+struct dentry *vfs_dentry_get(struct inode *node, const char *name)
 {
     // For legacy compat where code just wanted a dummy dentry for an inode
     // Not recommended for new dcache
-    struct vfs_dentry *d = d_alloc(NULL, name);
+    struct dentry *d = d_alloc(NULL, name);
     d->inode = node;
     return d;
 }
 
-void vfs_dentry_put(struct vfs_dentry *d)
+void vfs_dentry_put(struct dentry *d)
 {
     if (!d) return;
     if (d->refcount > 0) d->refcount--;

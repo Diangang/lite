@@ -3,7 +3,7 @@
 #include "libc.h"
 #include "console.h"
 
-int vfs_mount_root(const char *path, struct vfs_inode *root_node)
+int vfs_mount_root(const char *path, struct inode *root_node)
 {
     if (!path || !root_node)
         panic("mount path null.");
@@ -16,7 +16,7 @@ int vfs_mount_root(const char *path, struct vfs_inode *root_node)
         return 0;
     }
 
-    struct vfs_dentry *d = path_walk(path);
+    struct dentry *d = path_walk(path);
     if (!d) {
         if (vfs_mkdir(path) != 0) {
             printf("Failed to create mountpoint %s\n", path);
@@ -38,7 +38,11 @@ int vfs_mount_root(const char *path, struct vfs_inode *root_node)
     m->sb->root = root_node;
     m->sb->fs_private = NULL;
 
-    struct vfs_dentry *mount_root = d_alloc(d->parent, d->name); // The root of the mounted FS should have the name of the mount point
+    struct dentry *mount_root = d_alloc(NULL, d->name); 
+    // We manually set the parent to allow "cd .." to escape the mount point,
+    // BUT we intentionally DO NOT use d_alloc(d->parent) because that would 
+    // inject this new root into the parent's children list, causing duplicate ls entries!
+    mount_root->parent = d->parent;
     mount_root->inode = root_node;
     m->root = mount_root;
 

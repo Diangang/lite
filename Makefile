@@ -11,7 +11,7 @@ LDFLAGS = -m elf_i386 -T arch/x86/linker.ld -nostdlib
 SOURCES_S = arch/x86/boot.s arch/x86/interrupt.s
 SOURCES_C = kernel/kernel.c kernel/syscall.c kernel/task.c kernel/shell.c \
 	arch/x86/gdt.c arch/x86/idt.c arch/x86/isr.c \
-	mm/mm.c mm/pmm.c mm/vmm.c mm/kheap.c lib/libc.c \
+	mm/mm.c mm/pmm.c mm/vmm.c mm/kheap.c mm/filemap.c lib/libc.c \
         fs/file.c fs/inode.c fs/dentry.c fs/namei.c fs/read_write.c fs/open.c fs/readdir.c fs/ioctl.c fs/namespace.c fs/ramfs/ramfs.c fs/initrd/initrd.c fs/procfs/procfs.c fs/devfs/devfs.c fs/sysfs/sysfs.c \
         drivers/base/device_model.c drivers/input/keyboard.c drivers/clock/timer.c drivers/tty/tty.c drivers/tty/serial.c drivers/vga/vga.c drivers/console/console.c
 OBJECTS = $(SOURCES_S:.s=.o) $(SOURCES_C:.c=.o)

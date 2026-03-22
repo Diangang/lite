@@ -1,3 +1,4 @@
+#include "file.h"
 #include "devfs.h"
 #include "libc.h"
 #include "tty.h"
@@ -9,10 +10,10 @@
 
 static struct dirent dev_dirent;
 // Note: dev_root is dynamically allocated in init_devfs now
-static struct vfs_inode dev_console;
-static struct vfs_inode dev_tty;
+static struct inode dev_console;
+static struct inode dev_tty;
 
-static uint32_t dev_console_read(struct vfs_inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t dev_console_read(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
     (void)offset;
@@ -20,14 +21,14 @@ static uint32_t dev_console_read(struct vfs_inode *node, uint32_t offset, uint32
     return tty_read_blocking((char*)buffer, size);
 }
 
-static uint32_t dev_console_write(struct vfs_inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer)
+static uint32_t dev_console_write(struct inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer)
 {
     (void)node;
     (void)offset;
     return console_write(buffer, size);
 }
 
-static int dev_console_ioctl(struct vfs_inode *node, uint32_t request, uint32_t arg)
+static int dev_console_ioctl(struct inode *node, uint32_t request, uint32_t arg)
 {
     (void)node;
     if (request == CONSOLE_IOCTL_GETFLAGS) {
@@ -40,7 +41,7 @@ static int dev_console_ioctl(struct vfs_inode *node, uint32_t request, uint32_t 
     return -1;
 }
 
-static uint32_t dev_tty_read(struct vfs_inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t dev_tty_read(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
     (void)offset;
@@ -48,20 +49,21 @@ static uint32_t dev_tty_read(struct vfs_inode *node, uint32_t offset, uint32_t s
     return tty_read_blocking((char*)buffer, size);
 }
 
-static uint32_t dev_tty_write(struct vfs_inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer)
+static uint32_t dev_tty_write(struct inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer)
 {
     (void)node;
     (void)offset;
     return console_write(buffer, size);
 }
 
-static int dev_tty_ioctl(struct vfs_inode *node, uint32_t request, uint32_t arg)
+static int dev_tty_ioctl(struct inode *node, uint32_t request, uint32_t arg)
 {
     return dev_console_ioctl(node, request, arg);
 }
 
-static struct dirent *dev_readdir(struct vfs_inode *node, uint32_t index)
+static struct dirent *dev_readdir(struct file *file, uint32_t index)
 {
+    struct inode *node = file->dentry->inode;
     (void)node;
     if (index == 0) {
         strcpy(dev_dirent.name, "console");
@@ -76,7 +78,7 @@ static struct dirent *dev_readdir(struct vfs_inode *node, uint32_t index)
     return NULL;
 }
 
-static struct vfs_inode *dev_finddir(struct vfs_inode *node, const char *name)
+static struct inode *dev_finddir(struct inode *node, const char *name)
 {
     (void)node;
     if (!name) return NULL;
@@ -85,7 +87,7 @@ static struct vfs_inode *dev_finddir(struct vfs_inode *node, const char *name)
     return NULL;
 }
 
-static struct vfs_file_operations dev_console_ops = {
+static struct file_operations dev_console_ops = {
     .read = dev_console_read,
     .write = dev_console_write,
     .open = NULL,
@@ -95,7 +97,7 @@ static struct vfs_file_operations dev_console_ops = {
     .ioctl = dev_console_ioctl
 };
 
-static struct vfs_file_operations dev_tty_ops = {
+static struct file_operations dev_tty_ops = {
     .read = dev_tty_read,
     .write = dev_tty_write,
     .open = NULL,
@@ -105,7 +107,7 @@ static struct vfs_file_operations dev_tty_ops = {
     .ioctl = dev_tty_ioctl
 };
 
-static struct vfs_file_operations devfs_dir_ops = {
+static struct file_operations devfs_dir_ops = {
     .read = NULL,
     .write = NULL,
     .open = NULL,
@@ -115,17 +117,17 @@ static struct vfs_file_operations devfs_dir_ops = {
     .ioctl = NULL
 };
 
-struct vfs_inode *devfs_get_console(void)
+struct inode *devfs_get_console(void)
 {
     return &dev_console;
 }
 
-struct vfs_inode *init_devfs(void)
+struct inode *init_devfs(void)
 {
-    struct vfs_inode *dev_root = (struct vfs_inode *)kmalloc(sizeof(struct vfs_inode));
+    struct inode *dev_root = (struct inode *)kmalloc(sizeof(struct inode));
     if (!dev_root) return NULL;
 
-    memset(dev_root, 0, sizeof(struct vfs_inode));
+    memset(dev_root, 0, sizeof(struct inode));
     dev_root->flags = FS_DIRECTORY;
     dev_root->f_ops = &devfs_dir_ops;
     dev_root->uid = 0;

@@ -265,34 +265,25 @@ static void shell_execute(void)
         }
     }
     else if (strcmp(cmd_buffer, "ls") == 0 || strncmp(cmd_buffer, "ls ", 3) == 0) {
-        struct vfs_inode *dir = vfs_resolve(".");
-        if (strncmp(cmd_buffer, "ls ", 3) == 0) {
-            char *path = cmd_buffer + 3;
-            if (path[0]) {
-                struct vfs_inode *found = vfs_resolve(path);
-                if (!found || ((found->flags & 0x7) != FS_DIRECTORY)) {
-                    printf("Directory not found: %s\n", path);
-                    cmd_index = 0;
-                    return;
-                }
-                dir = found;
-            }
+        const char *path = ".";
+        if (strncmp(cmd_buffer, "ls ", 3) == 0 && cmd_buffer[3]) {
+            path = cmd_buffer + 3;
         }
-        if (!dir) {
+        struct dentry *dir_d = path_walk(path);
+        if (!dir_d || ((dir_d->inode->flags & 0x7) != FS_DIRECTORY)) {
             printf("No file system mounted or directory not found!\n");
             cmd_index = 0;
             return;
         }
-        int i = 0;
-        struct dirent *node = 0;
-        while ((node = readdir_fs(dir, i)) != 0) {
-            printf("Found file: %s\n", node->name);
-            struct vfs_inode *fsnode = finddir_fs(dir, node->name);
-            if ((fsnode->flags & 0x7) == FS_DIRECTORY)
-                printf("\t(directory)\n");
-            else
-                printf("\t(file)\n");
-            i++;
+        struct file *f_dir = vfs_open_dentry(dir_d, 0);
+        if (f_dir) {
+            struct dirent *node = 0;
+            int i = 0;
+            while ((node = readdir_fs(f_dir, i)) != 0) {
+                printf("%s ", node->name);
+                i++;
+            }
+            vfs_close(f_dir);
         }
     }
     else if (strncmp(cmd_buffer, "cat ", 4) == 0) {
@@ -303,7 +294,7 @@ static void shell_execute(void)
             cmd_index = 0;
             return;
         }
-        if ((f->node->flags & 0x7) == FS_DIRECTORY) {
+        if ((f->dentry->inode->flags & 0x7) == FS_DIRECTORY) {
             printf("Not a file: %s\n", filename);
             file_close(f);
             cmd_index = 0;

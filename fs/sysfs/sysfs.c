@@ -1,3 +1,4 @@
+#include "file.h"
 #include "sysfs.h"
 #include "libc.h"
 #include "timer.h"
@@ -6,21 +7,21 @@
 
 static struct dirent sys_dirent;
 // Note: sys_root is dynamically allocated in init_sysfs now
-static struct vfs_inode sys_kernel;
-static struct vfs_inode sys_devices;
-static struct vfs_inode sys_kernel_version;
-static struct vfs_inode sys_kernel_uptime;
+static struct inode sys_kernel;
+static struct inode sys_devices;
+static struct inode sys_kernel_version;
+static struct inode sys_kernel_uptime;
 typedef struct sysfs_dev_entry {
     int used;
     struct device *dev;
-    struct vfs_inode dir;
-    struct vfs_inode f_type;
-    struct vfs_inode f_bus;
-    struct vfs_inode f_driver;
+    struct inode dir;
+    struct inode f_type;
+    struct inode f_bus;
+    struct inode f_driver;
 } sysfs_dev_entry_t;
 static sysfs_dev_entry_t sys_dev_entries[16];
 
-static uint32_t sys_read_kernel_version(struct vfs_inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t sys_read_kernel_version(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
     static const char *text = "lite-os 0.2\n";
@@ -32,7 +33,7 @@ static uint32_t sys_read_kernel_version(struct vfs_inode *node, uint32_t offset,
     return size;
 }
 
-static uint32_t sys_read_kernel_uptime(struct vfs_inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t sys_read_kernel_uptime(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
     static char tmp[64];
@@ -51,7 +52,7 @@ static uint32_t sys_read_kernel_uptime(struct vfs_inode *node, uint32_t offset, 
     return size;
 }
 
-static uint32_t sys_read_device_type(struct vfs_inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t sys_read_device_type(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!node || !buffer) return 0;
     struct device *dev = (struct device*)(uintptr_t)node->impl;
@@ -69,7 +70,7 @@ static uint32_t sys_read_device_type(struct vfs_inode *node, uint32_t offset, ui
     return size;
 }
 
-static uint32_t sys_read_device_bus(struct vfs_inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t sys_read_device_bus(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!node || !buffer) return 0;
     struct device *dev = (struct device*)(uintptr_t)node->impl;
@@ -87,7 +88,7 @@ static uint32_t sys_read_device_bus(struct vfs_inode *node, uint32_t offset, uin
     return size;
 }
 
-static uint32_t sys_read_device_driver(struct vfs_inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t sys_read_device_driver(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!node || !buffer) return 0;
     struct device *dev = (struct device*)(uintptr_t)node->impl;
@@ -105,10 +106,10 @@ static uint32_t sys_read_device_driver(struct vfs_inode *node, uint32_t offset, 
     return size;
 }
 
-static struct dirent *sys_devdir_readdir(struct vfs_inode *node, uint32_t index);
-static struct vfs_inode *sys_devdir_finddir(struct vfs_inode *node, const char *name);
+static struct dirent *sys_devdir_readdir(struct file *file, uint32_t index);
+static struct inode *sys_devdir_finddir(struct inode *node, const char *name);
 
-static struct vfs_file_operations sys_devdir_ops = {
+static struct file_operations sys_devdir_ops = {
     .read = NULL,
     .write = NULL,
     .open = NULL,
@@ -118,7 +119,7 @@ static struct vfs_file_operations sys_devdir_ops = {
     .ioctl = NULL
 };
 
-static struct vfs_file_operations sys_read_device_type_ops = {
+static struct file_operations sys_read_device_type_ops = {
     .read = sys_read_device_type,
     .write = NULL,
     .open = NULL,
@@ -128,7 +129,7 @@ static struct vfs_file_operations sys_read_device_type_ops = {
     .ioctl = NULL
 };
 
-static struct vfs_file_operations sys_read_device_bus_ops = {
+static struct file_operations sys_read_device_bus_ops = {
     .read = sys_read_device_bus,
     .write = NULL,
     .open = NULL,
@@ -138,7 +139,7 @@ static struct vfs_file_operations sys_read_device_bus_ops = {
     .ioctl = NULL
 };
 
-static struct vfs_file_operations sys_read_device_driver_ops = {
+static struct file_operations sys_read_device_driver_ops = {
     .read = sys_read_device_driver,
     .write = NULL,
     .open = NULL,
@@ -206,8 +207,9 @@ static sysfs_dev_entry_t *sysfs_get_device_entry(struct device *dev)
     return NULL;
 }
 
-static struct dirent *sys_devdir_readdir(struct vfs_inode *node, uint32_t index)
+static struct dirent *sys_devdir_readdir(struct file *file, uint32_t index)
 {
+    struct inode *node = file->dentry->inode;
     if (!node) return NULL;
     sysfs_dev_entry_t *e = (sysfs_dev_entry_t*)(uintptr_t)node->impl;
     if (!e || !e->used) return NULL;
@@ -229,7 +231,7 @@ static struct dirent *sys_devdir_readdir(struct vfs_inode *node, uint32_t index)
     return NULL;
 }
 
-static struct vfs_inode *sys_devdir_finddir(struct vfs_inode *node, const char *name)
+static struct inode *sys_devdir_finddir(struct inode *node, const char *name)
 {
     if (!node || !name) return NULL;
     sysfs_dev_entry_t *e = (sysfs_dev_entry_t*)(uintptr_t)node->impl;
@@ -240,8 +242,9 @@ static struct vfs_inode *sys_devdir_finddir(struct vfs_inode *node, const char *
     return NULL;
 }
 
-static struct dirent *sys_kernel_readdir(struct vfs_inode *node, uint32_t index)
+static struct dirent *sys_kernel_readdir(struct file *file, uint32_t index)
 {
+    struct inode *node = file->dentry->inode;
     (void)node;
     if (index == 0) {
         strcpy(sys_dirent.name, "version");
@@ -256,7 +259,7 @@ static struct dirent *sys_kernel_readdir(struct vfs_inode *node, uint32_t index)
     return NULL;
 }
 
-static struct vfs_inode *sys_kernel_finddir(struct vfs_inode *node, const char *name)
+static struct inode *sys_kernel_finddir(struct inode *node, const char *name)
 {
     (void)node;
     if (!name) return NULL;
@@ -265,8 +268,9 @@ static struct vfs_inode *sys_kernel_finddir(struct vfs_inode *node, const char *
     return NULL;
 }
 
-static struct dirent *sys_devices_readdir(struct vfs_inode *node, uint32_t index)
+static struct dirent *sys_devices_readdir(struct file *file, uint32_t index)
 {
+    struct inode *node = file->dentry->inode;
     (void)node;
     struct device *dev = device_model_device_at(index);
     if (!dev) return NULL;
@@ -275,7 +279,7 @@ static struct dirent *sys_devices_readdir(struct vfs_inode *node, uint32_t index
     return &sys_dirent;
 }
 
-static struct vfs_inode *sys_devices_finddir(struct vfs_inode *node, const char *name)
+static struct inode *sys_devices_finddir(struct inode *node, const char *name)
 {
     (void)node;
     if (!name) return NULL;
@@ -286,8 +290,9 @@ static struct vfs_inode *sys_devices_finddir(struct vfs_inode *node, const char 
     return &e->dir;
 }
 
-static struct dirent *sys_readdir(struct vfs_inode *node, uint32_t index)
+static struct dirent *sys_readdir(struct file *file, uint32_t index)
 {
+    struct inode *node = file->dentry->inode;
     (void)node;
     if (index == 0) {
         strcpy(sys_dirent.name, "kernel");
@@ -302,7 +307,7 @@ static struct dirent *sys_readdir(struct vfs_inode *node, uint32_t index)
     return NULL;
 }
 
-static struct vfs_inode *sys_finddir(struct vfs_inode *node, const char *name)
+static struct inode *sys_finddir(struct inode *node, const char *name)
 {
     (void)node;
     if (!name) return NULL;
@@ -311,7 +316,7 @@ static struct vfs_inode *sys_finddir(struct vfs_inode *node, const char *name)
     return NULL;
 }
 
-static struct vfs_file_operations sys_dir_ops = {
+static struct file_operations sys_dir_ops = {
     .read = NULL,
     .write = NULL,
     .open = NULL,
@@ -321,7 +326,7 @@ static struct vfs_file_operations sys_dir_ops = {
     .ioctl = NULL
 };
 
-static struct vfs_file_operations sys_kernel_dir_ops = {
+static struct file_operations sys_kernel_dir_ops = {
     .read = NULL,
     .write = NULL,
     .open = NULL,
@@ -331,7 +336,7 @@ static struct vfs_file_operations sys_kernel_dir_ops = {
     .ioctl = NULL
 };
 
-static struct vfs_file_operations sys_devices_dir_ops = {
+static struct file_operations sys_devices_dir_ops = {
     .read = NULL,
     .write = NULL,
     .open = NULL,
@@ -341,7 +346,7 @@ static struct vfs_file_operations sys_devices_dir_ops = {
     .ioctl = NULL
 };
 
-static struct vfs_file_operations sys_read_kernel_version_ops = {
+static struct file_operations sys_read_kernel_version_ops = {
     .read = sys_read_kernel_version,
     .write = NULL,
     .open = NULL,
@@ -351,7 +356,7 @@ static struct vfs_file_operations sys_read_kernel_version_ops = {
     .ioctl = NULL
 };
 
-static struct vfs_file_operations sys_read_kernel_uptime_ops = {
+static struct file_operations sys_read_kernel_uptime_ops = {
     .read = sys_read_kernel_uptime,
     .write = NULL,
     .open = NULL,
@@ -361,13 +366,13 @@ static struct vfs_file_operations sys_read_kernel_uptime_ops = {
     .ioctl = NULL
 };
 
-struct vfs_inode *init_sysfs(void)
+struct inode *init_sysfs(void)
 {
-    struct vfs_inode *sys_root = (struct vfs_inode *)kmalloc(sizeof(struct vfs_inode));
+    struct inode *sys_root = (struct inode *)kmalloc(sizeof(struct inode));
     if (!sys_root) return NULL;
 
     memset(sys_dev_entries, 0, sizeof(sys_dev_entries));
-    memset(sys_root, 0, sizeof(struct vfs_inode));
+    memset(sys_root, 0, sizeof(struct inode));
     sys_root->flags = FS_DIRECTORY;
     sys_root->f_ops = &sys_dir_ops;
     sys_root->uid = 0;
