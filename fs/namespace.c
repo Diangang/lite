@@ -9,9 +9,8 @@ int vfs_mount_root(const char *path, struct inode *root_node)
         panic("mount path null.");
 
     if (strcmp(path, "/") == 0) {
-        if (!vfs_root_dentry) {
-            vfs_root_dentry = d_alloc(NULL, "/");
-        }
+        if (!vfs_root_dentry)
+        vfs_root_dentry = d_alloc(NULL, "/");
         vfs_root_dentry->inode = root_node;
         return 0;
     }

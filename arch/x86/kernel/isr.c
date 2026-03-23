@@ -168,10 +168,7 @@ struct registers *irq_handler(struct registers *regs)
     /* Always send to master PIC */
     outb(0x20, 0x20);
 
-    /* Handle Serial Interrupt specifically if needed, or through handler array */
-    if (regs->int_no == 36) // IRQ 4
-        serial_handler();
-    else if (interrupt_handlers[regs->int_no] != 0)
+    if (interrupt_handlers[regs->int_no] != 0)
         interrupt_handlers[regs->int_no](regs);
 
     if (regs->int_no == IRQ0) {

@@ -17,7 +17,8 @@ static uint32_t dev_console_read(struct inode *node, uint32_t offset, uint32_t s
 {
     (void)node;
     (void)offset;
-    if (!buffer || size == 0) return 0;
+    if (!buffer || size == 0)
+        return 0;
     return tty_read_blocking((char*)buffer, size);
 }
 
@@ -31,9 +32,8 @@ static uint32_t dev_console_write(struct inode *node, uint32_t offset, uint32_t 
 static int dev_console_ioctl(struct inode *node, uint32_t request, uint32_t arg)
 {
     (void)node;
-    if (request == CONSOLE_IOCTL_GETFLAGS) {
+    if (request == CONSOLE_IOCTL_GETFLAGS)
         return (int)tty_get_flags();
-    }
     if (request == CONSOLE_IOCTL_SETFLAGS) {
         tty_set_flags(arg);
         return 0;
@@ -45,7 +45,8 @@ static uint32_t dev_tty_read(struct inode *node, uint32_t offset, uint32_t size,
 {
     (void)node;
     (void)offset;
-    if (!buffer || size == 0) return 0;
+    if (!buffer || size == 0)
+        return 0;
     return tty_read_blocking((char*)buffer, size);
 }
 
@@ -81,9 +82,12 @@ static struct dirent *dev_readdir(struct file *file, uint32_t index)
 static struct inode *dev_finddir(struct inode *node, const char *name)
 {
     (void)node;
-    if (!name) return NULL;
-    if (!strcmp(name, "console")) return &dev_console;
-    if (!strcmp(name, "tty")) return &dev_tty;
+    if (!name)
+        return NULL;
+    if (!strcmp(name, "console"))
+        return &dev_console;
+    if (!strcmp(name, "tty"))
+        return &dev_tty;
     return NULL;
 }
 
@@ -125,7 +129,8 @@ struct inode *devfs_get_console(void)
 void init_devfs(void)
 {
     struct inode *dev_root = (struct inode *)kmalloc(sizeof(struct inode));
-    if (!dev_root) return;
+    if (!dev_root)
+        return;
 
     memset(dev_root, 0, sizeof(struct inode));
     dev_root->flags = FS_DIRECTORY;

@@ -11,7 +11,8 @@
 
 struct dirent *readdir_fs(struct file *file, uint32_t index)
 {
-    if (!file || !file->dentry || !file->dentry->inode) return NULL;
+    if (!file || !file->dentry || !file->dentry->inode)
+        return NULL;
     struct inode *node = file->dentry->inode;
     if ((node->flags & 0x7) == FS_DIRECTORY && node->f_ops && node->f_ops->readdir != NULL)
         return node->f_ops->readdir(file, index);
@@ -20,8 +21,10 @@ struct dirent *readdir_fs(struct file *file, uint32_t index)
 
 struct inode *finddir_fs(struct inode *node, const char *name)
 {
-    if (!node || !name) return NULL;
-    if ((node->flags & 0x7) != FS_DIRECTORY || !node->f_ops || node->f_ops->finddir == NULL) return NULL;
+    if (!node || !name)
+        return NULL;
+    if ((node->flags & 0x7) != FS_DIRECTORY || !node->f_ops || node->f_ops->finddir == NULL)
+        return NULL;
     return node->f_ops->finddir(node, name);
 }
 
@@ -29,7 +32,8 @@ static struct dirent generic_dirent;
 
 struct dirent *generic_readdir(struct file *file, uint32_t index)
 {
-    if (!file || !file->dentry || !file->dentry->inode) return NULL;
+    if (!file || !file->dentry || !file->dentry->inode)
+        return NULL;
     struct dentry *d = file->dentry;
 
     if (index == 0) {
@@ -45,14 +49,17 @@ struct dirent *generic_readdir(struct file *file, uint32_t index)
 
     index -= 2;
     struct dentry *child = d->children;
-    while (child && index > 0) {
+    while (child) {
+        if (child->inode && child->inode->flags != 0) {
+            if (index == 0) {
+                strcpy(generic_dirent.name, child->name);
+                generic_dirent.ino = child->inode ? child->inode->i_ino : 0;
+                return &generic_dirent;
+            }
+            index--;
+        }
         child = child->sibling;
-        index--;
     }
 
-    if (!child) return NULL;
-
-    strcpy(generic_dirent.name, child->name);
-    generic_dirent.ino = child->inode ? child->inode->i_ino : 0;
-    return &generic_dirent;
+    return NULL;
 }

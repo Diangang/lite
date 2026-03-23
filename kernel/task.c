@@ -78,16 +78,14 @@ static void ensure_private_table(uint32_t* dir, uint32_t pde_idx)
     if (dir[pde_idx] & PTE_PRESENT) {
         uint32_t* old_table = (uint32_t*)(dir[pde_idx] & ~0xFFF);
         uint32_t* new_table = (uint32_t*)pmm_alloc_page();
-        if (!new_table) {
+        if (!new_table)
             return;
-        }
         memcpy(new_table, old_table, 4096);
         dir[pde_idx] = ((uint32_t)new_table) | PTE_PRESENT | PTE_READ_WRITE | PTE_USER;
     } else {
         uint32_t* new_table = (uint32_t*)pmm_alloc_page();
-        if (!new_table) {
+        if (!new_table)
             return;
-        }
         memset(new_table, 0, 4096);
         dir[pde_idx] = ((uint32_t)new_table) | PTE_PRESENT | PTE_READ_WRITE | PTE_USER;
     }
@@ -97,9 +95,8 @@ static void ensure_private_table_range(uint32_t* dir, uint32_t start, uint32_t e
 {
     uint32_t start_idx = start / (1024 * 4096);
     uint32_t end_idx = (end - 1) / (1024 * 4096);
-    for (uint32_t i = start_idx; i <= end_idx; i++) {
+    for (uint32_t i = start_idx; i <= end_idx; i++)
         ensure_private_table(dir, i);
-    }
 }
 
 int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_stack, uint32_t** out_dir,
@@ -127,9 +124,8 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
                 strcpy(try_path, "/initrd/");
                 strcpy(try_path + 8, basename);
                 node = vfs_resolve(try_path);
-                if (!node) {
+                if (!node)
                     return printf("User program not found: %s\n", name), -1;
-                }
             }
         }
     }
@@ -210,9 +206,8 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
     task_user_vmas_reset();
     for (uint16_t i = 0; i < ehdr->e_phnum; i++) {
         Elf32_Phdr *phdr = (Elf32_Phdr*)(buf + ehdr->e_phoff + i * ehdr->e_phentsize);
-        if (phdr->p_type != 1 || phdr->p_memsz == 0) {
+        if (phdr->p_type != 1 || phdr->p_memsz == 0)
             continue;
-        }
         uint32_t seg_start = align_down(phdr->p_vaddr);
         uint32_t seg_end = align_up(phdr->p_vaddr + phdr->p_memsz);
         uint32_t vma_flags = VMA_READ;
@@ -223,9 +218,8 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
         ensure_private_table_range(user_dir, seg_start, seg_end);
         for (uint32_t va = seg_start; va < seg_end; va += 4096) {
             uint32_t old_phys = vmm_virt_to_phys_ex(user_dir, (void*)va);
-            if (old_phys != 0xFFFFFFFF && ((old_phys & ~0xFFF) != va)) {
+            if (old_phys != 0xFFFFFFFF && ((old_phys & ~0xFFF) != va))
                 continue;
-            }
             void *phys = pmm_alloc_page();
             if (!phys)
                 return printf("User program page alloc failed.\n"), kfree(buf), -1;
@@ -255,9 +249,8 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
         if (!(phdr->p_flags & PF_W)) {
             uint32_t seg_start = align_down(phdr->p_vaddr);
             uint32_t seg_end = align_up(phdr->p_vaddr + phdr->p_memsz);
-            for (uint32_t va = seg_start; va < seg_end; va += 4096) {
+            for (uint32_t va = seg_start; va < seg_end; va += 4096)
                 vmm_set_page_readonly_ex(user_dir, (void*)va);
-            }
         }
     }
     vmm_switch_directory(old_dir);
@@ -357,7 +350,8 @@ static void irq_restore(uint32_t flags)
 
 static void buf_append(char *buf, uint32_t *off, uint32_t cap, const char *s)
 {
-    if (!buf || !off || cap == 0 || !s) return;
+    if (!buf || !off || cap == 0 || !s)
+        return;
     while (*s && *off + 1 < cap) {
         buf[*off] = *s;
         (*off)++;
@@ -382,14 +376,14 @@ static void buf_append_hex(char *buf, uint32_t *off, uint32_t cap, uint32_t v)
 
 static void task_idle(void)
 {
-    for (;;) {
+    for (;;)
         __asm__ volatile ("hlt");
-    }
 }
 
 static void vma_list_free(mm_t *mm)
 {
-    if (!mm) return;
+    if (!mm)
+        return;
     vma_t *v = mm->vma_list;
     while (v) {
         vma_t *next = v->next;
@@ -401,7 +395,8 @@ static void vma_list_free(mm_t *mm)
 
 static void task_fdtable_init(task_t *task)
 {
-    if (!task) return;
+    if (!task)
+        return;
     for (int i = 0; i < TASK_FD_MAX; i++) {
         task->fds[i].used = 0;
         task->fds[i].file = NULL;
@@ -410,12 +405,12 @@ static void task_fdtable_init(task_t *task)
 
 static void task_fdtable_close_all(task_t *task)
 {
-    if (!task) return;
+    if (!task)
+        return;
     for (int i = 0; i < TASK_FD_MAX; i++) {
         if (task->fds[i].used) {
-            if (task->fds[i].file) {
+            if (task->fds[i].file)
                 file_close(task->fds[i].file);
-            }
             task->fds[i].used = 0;
             task->fds[i].file = NULL;
         }
@@ -424,7 +419,8 @@ static void task_fdtable_close_all(task_t *task)
 
 static void task_fdtable_clone(task_t *dst, task_t *src)
 {
-    if (!dst || !src) return;
+    if (!dst || !src)
+        return;
     for (int i = 0; i < TASK_FD_MAX; i++) {
         if (src->fds[i].used && src->fds[i].file) {
             dst->fds[i].used = 1;
@@ -436,7 +432,8 @@ static void task_fdtable_clone(task_t *dst, task_t *src)
 static mm_t *mm_create(void)
 {
     mm_t *mm = (mm_t*)kmalloc(sizeof(mm_t));
-    if (!mm) return NULL;
+    if (!mm)
+        return NULL;
     memset(mm, 0, sizeof(*mm));
     mm->page_directory = vmm_get_current_directory();
     return mm;
@@ -472,9 +469,11 @@ static vma_t *vma_clone_list(vma_t *src)
 
 static mm_t *mm_clone_cow(mm_t *src)
 {
-    if (!src) return NULL;
+    if (!src)
+        return NULL;
     uint32_t *new_dir = vmm_clone_kernel_directory();
-    if (!new_dir) return NULL;
+    if (!new_dir)
+        return NULL;
     mm_t *mm = (mm_t*)kmalloc(sizeof(mm_t));
     if (!mm) {
         pmm_free_page(new_dir);
@@ -499,8 +498,10 @@ static mm_t *mm_clone_cow(mm_t *src)
         uint32_t end = (v->end + 0xFFF) & ~0xFFF;
         for (uint32_t va = start; va < end; va += 4096) {
             uint32_t pte = vmm_get_pte_flags_ex(src->page_directory, (void*)va);
-            if (!(pte & PTE_PRESENT)) continue;
-            if (!(pte & PTE_USER)) continue;
+            if (!(pte & PTE_PRESENT))
+                continue;
+            if (!(pte & PTE_USER))
+                continue;
             uint32_t phys = pte & ~0xFFF;
             uint32_t flags = pte & 0xFFF;
             int was_write = (flags & PTE_READ_WRITE) != 0;
@@ -519,7 +520,8 @@ static mm_t *mm_clone_cow(mm_t *src)
 
 static struct registers *task_clone_regs(uint32_t *stack, struct registers *regs)
 {
-    if (!stack || !regs) return NULL;
+    if (!stack || !regs)
+        return NULL;
     uint32_t stack_top = (uint32_t)stack + 4096;
     struct registers *dst = (struct registers*)(stack_top - sizeof(struct registers));
     memcpy(dst, regs, sizeof(*regs));
@@ -531,7 +533,8 @@ static struct registers *task_clone_regs(uint32_t *stack, struct registers *regs
 
 static void mm_destroy(mm_t *mm)
 {
-    if (!mm) return;
+    if (!mm)
+        return;
     if (!mm->page_directory || mm->page_directory == vmm_get_kernel_directory()) {
         vma_list_free(mm);
         kfree(mm);
@@ -543,9 +546,8 @@ static void mm_destroy(mm_t *mm)
         uint32_t start = v->start & ~0xFFF;
         uint32_t end = (v->end + 0xFFF) & ~0xFFF;
         if (end > start) {
-            for (uint32_t va = start; va < end; va += 4096) {
+            for (uint32_t va = start; va < end; va += 4096)
                 task_free_user_page_mapped(mm->page_directory, va);
-            }
         }
         v = v->next;
     }
@@ -553,16 +555,15 @@ static void mm_destroy(mm_t *mm)
     uint32_t *kernel_dir = vmm_get_kernel_directory();
     for (uint32_t i = 0; i < 1024; i++) {
         uint32_t pde = mm->page_directory[i];
-        if (!(pde & PTE_PRESENT)) continue;
+        if (!(pde & PTE_PRESENT))
+            continue;
 
         uint32_t pde_phys = pde & ~0xFFF;
         uint32_t kernel_pde_phys = 0;
-        if (kernel_dir && (kernel_dir[i] & PTE_PRESENT)) {
+        if (kernel_dir && (kernel_dir[i] & PTE_PRESENT))
             kernel_pde_phys = kernel_dir[i] & ~0xFFF;
-        }
-        if (kernel_pde_phys && kernel_pde_phys == pde_phys) {
+        if (kernel_pde_phys && kernel_pde_phys == pde_phys)
             continue;
-        }
         pmm_free_page((void*)pde_phys);
     }
 
@@ -575,9 +576,11 @@ static void mm_destroy(mm_t *mm)
 const char *task_get_cwd(void)
 {
     static char buf[256];
-    if (!task_current || !task_current->cwd) return "/";
+    if (!task_current || !task_current->cwd)
+        return "/";
     struct dentry *d = task_current->cwd;
-    if (!d->parent) return "/"; // root
+    if (!d->parent)
+        return "/"; // root
 
     // Reverse path build
     char tmp[256];
@@ -586,7 +589,8 @@ const char *task_get_cwd(void)
 
     while (d && d->parent) {
         int n = strlen(d->name);
-        if (pos - n - 1 < 0) break; // Path too long
+        if (pos - n - 1 < 0)
+            break; // Path too long
         pos -= n;
         memcpy(tmp + pos, d->name, n);
         pos -= 1;
@@ -607,22 +611,24 @@ const char *task_get_cwd(void)
 
 struct dentry *task_get_cwd_dentry(void)
 {
-    if (!task_current) return NULL;
+    if (!task_current)
+        return NULL;
     return task_current->cwd;
 }
 
 struct dentry *task_get_root_dentry(void)
 {
-    if (!task_current) return NULL;
+    if (!task_current)
+        return NULL;
     return task_current->root;
 }
 
 int task_set_cwd_dentry(struct dentry *d)
 {
-    if (!task_current || !d) return -1;
-    if (task_current->cwd) {
+    if (!task_current || !d)
+        return -1;
+    if (task_current->cwd)
         vfs_dentry_put(task_current->cwd);
-    }
     d->refcount++;
     task_current->cwd = d;
     return 0;
@@ -630,13 +636,17 @@ int task_set_cwd_dentry(struct dentry *d)
 
 int task_execve(const char *program, struct registers *regs)
 {
-    if (!program || !*program || !regs) return -1;
-    if (!task_current) return -1;
-    if (!task_current->mm) return -1;
+    if (!program || !*program || !regs)
+        return -1;
+    if (!task_current)
+        return -1;
+    if (!task_current->mm)
+        return -1;
 
     mm_t *old_mm = task_current->mm;
     mm_t *new_mm = mm_create();
-    if (!new_mm) return -1;
+    if (!new_mm)
+        return -1;
     task_current->mm = new_mm;
 
     uint32_t entry = 0;
@@ -685,21 +695,30 @@ int task_execve(const char *program, struct registers *regs)
 
 uint32_t task_mmap(uint32_t addr, uint32_t length, uint32_t prot)
 {
-    if (!task_current || !task_current->mm) return 0;
-    if (length == 0) return 0;
+    if (!task_current || !task_current->mm)
+        return 0;
+    if (length == 0)
+        return 0;
     uint32_t len = align_up(length);
-    if (len == 0) return 0;
+    if (len == 0)
+        return 0;
     uint32_t limit = task_current->mm->user_stack_base ? task_current->mm->user_stack_base : 0xC0000000;
-    if (limit <= 0x1000) return 0;
+    if (limit <= 0x1000)
+        return 0;
 
     if (addr != 0) {
-        if (addr < 0x1000) return 0;
-        if (addr & 0xFFF) return 0;
-        if (addr + len > limit) return 0;
-        if (!vma_range_free(task_current->mm, addr, addr + len)) return 0;
+        if (addr < 0x1000)
+            return 0;
+        if (addr & 0xFFF)
+            return 0;
+        if (addr + len > limit)
+            return 0;
+        if (!vma_range_free(task_current->mm, addr, addr + len))
+            return 0;
     } else {
         addr = vma_find_gap(task_current->mm, len, limit);
-        if (addr == 0) return 0;
+        if (addr == 0)
+            return 0;
     }
 
     uint32_t flags = 0;
@@ -712,14 +731,20 @@ uint32_t task_mmap(uint32_t addr, uint32_t length, uint32_t prot)
 
 int task_munmap(uint32_t addr, uint32_t length)
 {
-    if (!task_current || !task_current->mm) return -1;
-    if (length == 0) return -1;
-    if (addr < 0x1000) return -1;
-    if (addr & 0xFFF) return -1;
+    if (!task_current || !task_current->mm)
+        return -1;
+    if (length == 0)
+        return -1;
+    if (addr < 0x1000)
+        return -1;
+    if (addr & 0xFFF)
+        return -1;
     uint32_t len = align_up(length);
-    if (len == 0) return -1;
+    if (len == 0)
+        return -1;
     uint32_t end = addr + len;
-    if (end <= addr) return -1;
+    if (end <= addr)
+        return -1;
 
     uint32_t flags = irq_save();
     vma_t *v = task_current->mm->vma_list;
@@ -771,15 +796,15 @@ int task_munmap(uint32_t addr, uint32_t length)
 
     uint32_t page_start = addr & ~0xFFF;
     uint32_t page_end = (end + 0xFFF) & ~0xFFF;
-    for (uint32_t va = page_start; va < page_end; va += 4096) {
+    for (uint32_t va = page_start; va < page_end; va += 4096)
         task_free_user_page_mapped(task_current->mm->page_directory, va);
-    }
     return 0;
 }
 
 int task_fork(struct registers *regs)
 {
-    if (!task_current || !task_current->mm || !regs) return -1;
+    if (!task_current || !task_current->mm || !regs)
+        return -1;
     task_t *task = (task_t*)kmalloc(sizeof(task_t));
     uint32_t *stack = (uint32_t*)kmalloc(4096);
     if (!task || !stack) {
@@ -846,15 +871,19 @@ int task_fork(struct registers *regs)
 
 static int task_free_user_page_mapped(uint32_t *dir, uint32_t va_page)
 {
-    if (!dir) return 0;
+    if (!dir)
+        return 0;
     uint32_t pde_idx = va_page / (1024 * 4096);
     uint32_t pte_idx = (va_page % (1024 * 4096)) / 4096;
     uint32_t pde = dir[pde_idx];
-    if (!(pde & PTE_PRESENT)) return 0;
+    if (!(pde & PTE_PRESENT))
+        return 0;
     uint32_t *table = (uint32_t*)(pde & ~0xFFF);
     uint32_t pte = table[pte_idx];
-    if (!(pte & PTE_PRESENT)) return 0;
-    if (!(pte & PTE_USER)) return 0;
+    if (!(pte & PTE_PRESENT))
+        return 0;
+    if (!(pte & PTE_USER))
+        return 0;
 
     uint32_t phys = pte & ~0xFFF;
     table[pte_idx] = 0;
@@ -864,10 +893,13 @@ static int task_free_user_page_mapped(uint32_t *dir, uint32_t va_page)
 
 static void vma_add(mm_t *mm, uint32_t start, uint32_t end, uint32_t flags)
 {
-    if (!mm) return;
-    if (start >= end) return;
+    if (!mm)
+        return;
+    if (start >= end)
+        return;
     vma_t *v = (vma_t*)kmalloc(sizeof(vma_t));
-    if (!v) return;
+    if (!v)
+        return;
     v->start = start;
     v->end = end;
     v->flags = flags;
@@ -877,7 +909,8 @@ static void vma_add(mm_t *mm, uint32_t start, uint32_t end, uint32_t flags)
 
 static int vma_range_free(mm_t *mm, uint32_t start, uint32_t end)
 {
-    if (!mm) return 0;
+    if (!mm)
+        return 0;
     vma_t *v = mm->vma_list;
     while (v) {
         if (end <= v->start || start >= v->end) {
@@ -891,17 +924,21 @@ static int vma_range_free(mm_t *mm, uint32_t start, uint32_t end)
 
 static uint32_t vma_find_gap(mm_t *mm, uint32_t size, uint32_t limit)
 {
-    if (!mm) return 0;
-    if (size == 0) return 0;
+    if (!mm)
+        return 0;
+    if (size == 0)
+        return 0;
     uint32_t start = mm->heap_brk ? align_up(mm->heap_brk) : 0x400000;
     if (mm->user_base && mm->user_pages) {
         uint32_t min = mm->user_base + mm->user_pages * 4096;
         if (start < min) start = align_up(min);
     }
     if (start < 0x1000) start = 0x1000;
-    if (limit <= start) return 0;
+    if (limit <= start)
+        return 0;
     while (start + size <= limit) {
-        if (vma_range_free(mm, start, start + size)) return start;
+        if (vma_range_free(mm, start, start + size))
+            return start;
         start += 0x1000;
     }
     return 0;
@@ -909,13 +946,14 @@ static uint32_t vma_find_gap(mm_t *mm, uint32_t size, uint32_t limit)
 
 static vma_t *vma_find_heap(mm_t *mm)
 {
-    if (!mm) return NULL;
-    if (!mm->heap_base) return NULL;
+    if (!mm)
+        return NULL;
+    if (!mm->heap_base)
+        return NULL;
     vma_t *v = mm->vma_list;
     while (v) {
-        if (v->start == mm->heap_base && (v->flags & (VMA_READ | VMA_WRITE)) == (VMA_READ | VMA_WRITE)) {
+        if (v->start == mm->heap_base && (v->flags & (VMA_READ | VMA_WRITE)) == (VMA_READ | VMA_WRITE))
             return v;
-        }
         v = v->next;
     }
     return NULL;
@@ -923,15 +961,19 @@ static vma_t *vma_find_heap(mm_t *mm)
 
 void task_user_vmas_reset(void)
 {
-    if (!task_current) return;
-    if (!task_current->mm) return;
+    if (!task_current)
+        return;
+    if (!task_current->mm)
+        return;
     vma_list_free(task_current->mm);
 }
 
 void task_user_vma_add(uint32_t start, uint32_t end, uint32_t flags)
 {
-    if (!task_current) return;
-    if (!task_current->mm) return;
+    if (!task_current)
+        return;
+    if (!task_current->mm)
+        return;
     vma_add(task_current->mm, start, end, flags);
 }
 
@@ -958,9 +1000,8 @@ static struct registers *task_build_regs(uint32_t *stack, void (*entry)(void))
 static void task_demo_a(void)
 {
     for (;;) {
-        if (task_get_demo_enabled()) {
+        if (task_get_demo_enabled())
             printf("A");
-        }
         task_sleep(5);
         task_yield();
     }
@@ -969,9 +1010,8 @@ static void task_demo_a(void)
 static void task_demo_b(void)
 {
     for (;;) {
-        if (task_get_demo_enabled()) {
+        if (task_get_demo_enabled())
             printf("B");
-        }
         task_sleep(5);
         task_yield();
     }
@@ -982,9 +1022,8 @@ void init_task(void)
     task_t *task = (task_t*)kmalloc(sizeof(task_t));
     uint32_t *stack = (uint32_t*)kmalloc(4096);
 
-    if (!task || !stack) {
+    if (!task || !stack)
         panic("TASK: Failed to initialize tasking.");
-    }
 
     task->id = 0;
     task->parent_id = 0;
@@ -1022,9 +1061,11 @@ void init_task(void)
 
 static void task_set_program_name(task_t *task, const char *program)
 {
-    if (!task) return;
+    if (!task)
+        return;
     task->program[0] = 0;
-    if (!program) return;
+    if (!program)
+        return;
     uint32_t i = 0;
     while (program[i] && i + 1 < sizeof(task->program)) {
         task->program[i] = program[i];
@@ -1107,23 +1148,27 @@ int task_create_user(const char *program)
 
 static void task_free_user_memory(task_t *task)
 {
-    if (!task) return;
-    if (!task->mm) return;
+    if (!task)
+        return;
+    if (!task->mm)
+        return;
     mm_destroy(task->mm);
     task->mm = NULL;
 }
 
 static void task_destroy(task_t *prev, task_t *task)
 {
-    if (!prev || !task) return;
-    if (!task_head || !task_current) return;
-    if (task == task_current) return;
+    if (!prev || !task)
+        return;
+    if (!task_head || !task_current)
+        return;
+    if (task == task_current)
+        return;
 
     uint32_t flags = irq_save();
     task_t *next = task->next;
-    if (task == task_head) {
+    if (task == task_head)
         task_head = next;
-    }
     prev->next = next;
     irq_restore(flags);
 
@@ -1135,14 +1180,17 @@ static void task_destroy(task_t *prev, task_t *task)
 
 void wait_queue_init(wait_queue_t *q)
 {
-    if (!q) return;
+    if (!q)
+        return;
     q->head = NULL;
 }
 
 void wait_queue_block(wait_queue_t *q)
 {
-    if (!q) return;
-    if (!task_current) return;
+    if (!q)
+        return;
+    if (!task_current)
+        return;
     uint32_t flags = irq_save();
     wait_queue_block_locked(q);
     irq_restore(flags);
@@ -1150,10 +1198,14 @@ void wait_queue_block(wait_queue_t *q)
 
 void wait_queue_block_locked(wait_queue_t *q)
 {
-    if (!q) return;
-    if (!task_current) return;
-    if (task_current->waitq == q) return;
-    if (task_current->state == TASK_ZOMBIE) return;
+    if (!q)
+        return;
+    if (!task_current)
+        return;
+    if (task_current->waitq == q)
+        return;
+    if (task_current->state == TASK_ZOMBIE)
+        return;
 
     task_current->waitq = q;
     task_current->wait_next = (task_t*)q->head;
@@ -1184,37 +1236,37 @@ void task_tick(void)
 {
     uint32_t now = timer_get_ticks();
     task_t *t = task_head;
-    if (!t) return;
+    if (!t)
+        return;
 
     do {
         if (t->state == TASK_SLEEPING) {
-            if ((int32_t)(now - t->wake_tick) >= 0) {
+            if ((int32_t)(now - t->wake_tick) >= 0)
                 t->state = TASK_RUNNABLE;
-            }
         }
         t = t->next;
     } while (t && t != task_head);
 
-    if (!task_current) return;
+    if (!task_current)
+        return;
     if (task_current->state != TASK_RUNNABLE) {
         need_resched = 1;
         return;
     }
 
     task_current->timeslice--;
-    if (task_current->timeslice <= 0) {
+    if (task_current->timeslice <= 0)
         need_resched = 1;
-    }
 }
 
 struct registers *task_schedule(struct registers *regs)
 {
-    if (!task_current) return regs;
+    if (!task_current)
+        return regs;
 
     task_current->regs = regs;
-    if (task_current->state == TASK_RUNNABLE && !need_resched) {
+    if (task_current->state == TASK_RUNNABLE && !need_resched)
         return task_current->regs;
-    }
 
     need_resched = 0;
     task_current->timeslice = TASK_TIMESLICE_TICKS;
@@ -1222,19 +1274,16 @@ struct registers *task_schedule(struct registers *regs)
     task_t *candidate = task_current->next;
     while (candidate) {
         if (candidate->state == TASK_RUNNABLE) {
-            if (candidate != task_current) {
+            if (candidate != task_current)
                 sched_switch_count++;
-            }
             task_current = candidate;
             if (task_current->mm && task_current->mm->page_directory) {
-                if (task_current->mm->page_directory != vmm_get_current_directory()) {
+                if (task_current->mm->page_directory != vmm_get_current_directory())
                     vmm_switch_directory(task_current->mm->page_directory);
-                }
             } else {
                 uint32_t *kdir = vmm_get_kernel_directory();
-                if (kdir && kdir != vmm_get_current_directory()) {
+                if (kdir && kdir != vmm_get_current_directory())
                     vmm_switch_directory(kdir);
-                }
             }
             tss_set_kernel_stack((uint32_t)task_current->stack + 4096);
             task_current->timeslice = TASK_TIMESLICE_TICKS;
@@ -1242,7 +1291,8 @@ struct registers *task_schedule(struct registers *regs)
         }
 
         candidate = candidate->next;
-        if (candidate == task_current) break;
+        if (candidate == task_current)
+            break;
     }
 
     return task_current->regs;
@@ -1250,8 +1300,10 @@ struct registers *task_schedule(struct registers *regs)
 
 void task_sleep(uint32_t ticks)
 {
-    if (!task_current) return;
-    if (ticks == 0) return;
+    if (!task_current)
+        return;
+    if (ticks == 0)
+        return;
     task_current->wake_tick = timer_get_ticks() + ticks;
     task_current->state = TASK_SLEEPING;
     need_resched = 1;
@@ -1287,31 +1339,33 @@ int task_get_demo_enabled(void)
 
 void task_set_current_page_directory(uint32_t* dir)
 {
-    if (!task_current || !dir) return;
+    if (!task_current || !dir)
+        return;
     if (!task_current->mm) {
         task_current->mm = mm_create();
-        if (!task_current->mm) return;
+        if (!task_current->mm)
+            return;
     }
     task_current->mm->page_directory = dir;
 }
 
 void task_set_user_info(uint32_t base, uint32_t pages, uint32_t stack_base)
 {
-    if (!task_current) return;
+    if (!task_current)
+        return;
     if (!task_current->mm) {
         task_current->mm = mm_create();
-        if (!task_current->mm) return;
+        if (!task_current->mm)
+            return;
     }
     task_current->mm->user_base = base;
     task_current->mm->user_pages = pages;
     task_current->mm->user_stack_base = stack_base;
     if (!task_current->mm->vma_list) {
-        if (base && pages) {
+        if (base && pages)
             vma_add(task_current->mm, base, base + pages * 4096, VMA_READ | VMA_WRITE | VMA_EXEC);
-        }
-        if (stack_base) {
+        if (stack_base)
             vma_add(task_current->mm, stack_base, stack_base + 4096, VMA_READ | VMA_WRITE);
-        }
     }
 }
 
@@ -1330,13 +1384,17 @@ void task_get_user_info(uint32_t *base, uint32_t *pages, uint32_t *stack_base)
 
 int task_user_vma_allows(uint32_t addr, int is_write, int is_exec)
 {
-    if (!task_current || !task_current->mm) return 0;
+    if (!task_current || !task_current->mm)
+        return 0;
     vma_t *v = task_current->mm->vma_list;
     while (v) {
         if (addr >= v->start && addr < v->end) {
-            if (is_exec && !(v->flags & VMA_EXEC)) return 0;
-            if (is_write && !(v->flags & VMA_WRITE)) return 0;
-            if (!is_write && !(v->flags & VMA_READ)) return 0;
+            if (is_exec && !(v->flags & VMA_EXEC))
+                return 0;
+            if (is_write && !(v->flags & VMA_WRITE))
+                return 0;
+            if (!is_write && !(v->flags & VMA_READ))
+                return 0;
             return 1;
         }
         v = v->next;
@@ -1346,8 +1404,10 @@ int task_user_vma_allows(uint32_t addr, int is_write, int is_exec)
 
 void task_exit(void)
 {
-    if (!task_current) return;
-    if (task_current->id == 0) return;
+    if (!task_current)
+        return;
+    if (task_current->id == 0)
+        return;
     task_exit_with_status(0);
 }
 
@@ -1358,9 +1418,12 @@ void task_exit_with_status(int code)
 
 void task_exit_with_reason(int code, int reason, uint32_t info0, uint32_t info1)
 {
-    if (!task_current) return;
-    if (task_current->id == 0) return;
-    if (task_current->state == TASK_ZOMBIE) return;
+    if (!task_current)
+        return;
+    if (task_current->id == 0)
+        return;
+    if (task_current->state == TASK_ZOMBIE)
+        return;
     task_current->exit_code = code;
     task_current->exit_reason = reason;
     task_current->exit_info0 = info0;
@@ -1386,9 +1449,12 @@ void task_exit_with_reason(int code, int reason, uint32_t info0, uint32_t info1)
 
 int task_wait(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0, uint32_t *out_info1)
 {
-    if (id == 0) return -1;
-    if (!task_head || !task_current) return -1;
-    if (task_current->id == id) return -1;
+    if (id == 0)
+        return -1;
+    if (!task_head || !task_current)
+        return -1;
+    if (task_current->id == id)
+        return -1;
 
     for (;;) {
         uint32_t flags = irq_save();
@@ -1427,8 +1493,10 @@ int task_wait(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0, 
 
 int task_kill(uint32_t id, int sig)
 {
-    if (id == 0) return -1;
-    if (!task_head) return -1;
+    if (id == 0)
+        return -1;
+    if (!task_head)
+        return -1;
     uint32_t flags = irq_save();
     task_t *t = task_find_by_pid(id);
     if (!t || t->id == 0) {
@@ -1460,46 +1528,51 @@ int task_kill(uint32_t id, int sig)
 
 const char *task_get_current_program(void)
 {
-    if (!task_current) return NULL;
-    if (!task_current->program[0]) return NULL;
+    if (!task_current)
+        return NULL;
+    if (!task_current->program[0])
+        return NULL;
     return task_current->program;
 }
 
 void task_user_heap_init(uint32_t heap_base, uint32_t stack_base)
 {
-    if (!task_current) return;
-    if (!task_current->mm) return;
-    if (heap_base < 0x1000) return;
-    if (heap_base >= 0xC0000000) return;
-    if (stack_base && heap_base + 0x1000 >= stack_base) return;
+    if (!task_current)
+        return;
+    if (!task_current->mm)
+        return;
+    if (heap_base < 0x1000)
+        return;
+    if (heap_base >= 0xC0000000)
+        return;
+    if (stack_base && heap_base + 0x1000 >= stack_base)
+        return;
     task_current->mm->heap_base = heap_base;
     task_current->mm->heap_brk = heap_base;
 
     vma_t *heap = vma_find_heap(task_current->mm);
-    if (!heap) {
+    if (!heap)
         vma_add(task_current->mm, heap_base, heap_base, VMA_READ | VMA_WRITE);
-    }
 }
 
 uint32_t task_brk(uint32_t new_end)
 {
-    if (!task_current) return 0;
-    if (!task_current->mm) return 0;
-    if (task_current->mm->heap_base == 0) return 0;
+    if (!task_current)
+        return 0;
+    if (!task_current->mm)
+        return 0;
+    if (task_current->mm->heap_base == 0)
+        return 0;
 
-    if (new_end == 0) {
+    if (new_end == 0)
         return task_current->mm->heap_brk;
-    }
 
-    if (new_end < task_current->mm->heap_base) {
+    if (new_end < task_current->mm->heap_base)
         return task_current->mm->heap_brk;
-    }
-    if (new_end >= 0xC0000000) {
+    if (new_end >= 0xC0000000)
         return task_current->mm->heap_brk;
-    }
-    if (task_current->mm->user_stack_base && align_up(new_end) + 0x1000 > task_current->mm->user_stack_base) {
+    if (task_current->mm->user_stack_base && align_up(new_end) + 0x1000 > task_current->mm->user_stack_base)
         return task_current->mm->heap_brk;
-    }
 
     task_current->mm->heap_brk = new_end;
 
@@ -1515,44 +1588,52 @@ uint32_t task_brk(uint32_t new_end)
 
 uint32_t task_get_current_id(void)
 {
-    if (!task_current) return 0;
+    if (!task_current)
+        return 0;
     return task_current->id;
 }
 
 int task_current_is_user(void)
 {
-    if (!task_current) return 0;
+    if (!task_current)
+        return 0;
     return task_current->mm != NULL;
 }
 
 int task_should_resched(void)
 {
-    if (!task_current) return 0;
-    if (task_current->state != TASK_RUNNABLE) return 1;
+    if (!task_current)
+        return 0;
+    if (task_current->state != TASK_RUNNABLE)
+        return 1;
     return need_resched != 0;
 }
 
 uint32_t task_get_uid(void)
 {
-    if (!task_current) return 0;
+    if (!task_current)
+        return 0;
     return task_current->uid;
 }
 
 uint32_t task_get_gid(void)
 {
-    if (!task_current) return 0;
+    if (!task_current)
+        return 0;
     return task_current->gid;
 }
 
 uint32_t task_get_umask(void)
 {
-    if (!task_current) return 022;
+    if (!task_current)
+        return 022;
     return task_current->umask;
 }
 
 uint32_t task_set_umask(uint32_t mask)
 {
-    if (!task_current) return 022;
+    if (!task_current)
+        return 022;
     uint32_t old = task_current->umask;
     task_current->umask = mask & 0777;
     return old;
@@ -1565,7 +1646,8 @@ uint32_t task_get_switch_count(void)
 
 uint32_t task_dump_tasks(char *buf, uint32_t len)
 {
-    if (!buf || len == 0) return 0;
+    if (!buf || len == 0)
+        return 0;
     if (!task_head) {
         const char *s = "No tasks.\n";
         uint32_t n = (uint32_t)strlen(s);
@@ -1594,7 +1676,8 @@ uint32_t task_dump_tasks(char *buf, uint32_t len)
         buf_append(buf, &off, len, "     ");
         buf_append(buf, &off, len, name);
         buf_append(buf, &off, len, "\n");
-        if (off >= len) break;
+        if (off >= len)
+            break;
         task = task->next;
     } while (task && task != task_head);
     if (off < len) buf[off] = 0;
@@ -1603,8 +1686,10 @@ uint32_t task_dump_tasks(char *buf, uint32_t len)
 
 uint32_t task_dump_maps(char *buf, uint32_t len)
 {
-    if (!buf || len == 0) return 0;
-    if (!task_current || !task_current->mm) return 0;
+    if (!buf || len == 0)
+        return 0;
+    if (!task_current || !task_current->mm)
+        return 0;
 
     uint32_t off = 0;
     vma_t *v = task_current->mm->vma_list;
@@ -1617,7 +1702,8 @@ uint32_t task_dump_maps(char *buf, uint32_t len)
         buf_append(buf, &off, len, (v->flags & VMA_WRITE) ? "w" : "-");
         buf_append(buf, &off, len, (v->flags & VMA_EXEC) ? "x" : "-");
         buf_append(buf, &off, len, "\n");
-        if (off >= len) break;
+        if (off >= len)
+            break;
         v = v->next;
     }
     if (off < len) buf[off] = 0;
@@ -1626,8 +1712,10 @@ uint32_t task_dump_maps(char *buf, uint32_t len)
 
 uint32_t task_dump_maps_pid(uint32_t pid, char *buf, uint32_t len)
 {
-    if (!buf || len == 0) return 0;
-    if (!task_head) return 0;
+    if (!buf || len == 0)
+        return 0;
+    if (!task_head)
+        return 0;
 
     uint32_t flags = irq_save();
     task_t *t = task_head;
@@ -1659,7 +1747,8 @@ uint32_t task_dump_maps_pid(uint32_t pid, char *buf, uint32_t len)
         buf_append(buf, &off, len, (v->flags & VMA_WRITE) ? "w" : "-");
         buf_append(buf, &off, len, (v->flags & VMA_EXEC) ? "x" : "-");
         buf_append(buf, &off, len, "\n");
-        if (off >= len) break;
+        if (off >= len)
+            break;
         v = v->next;
     }
     if (off < len) buf[off] = 0;
@@ -1669,8 +1758,10 @@ uint32_t task_dump_maps_pid(uint32_t pid, char *buf, uint32_t len)
 
 uint32_t task_dump_stat_pid(uint32_t pid, char *buf, uint32_t len)
 {
-    if (!buf || len == 0) return 0;
-    if (!task_head) return 0;
+    if (!buf || len == 0)
+        return 0;
+    if (!task_head)
+        return 0;
 
     uint32_t flags = irq_save();
     task_t *t = task_head;
@@ -1710,10 +1801,12 @@ uint32_t task_dump_stat_pid(uint32_t pid, char *buf, uint32_t len)
 
 static task_t *task_find_by_pid(uint32_t pid)
 {
-    if (!task_head) return NULL;
+    if (!task_head)
+        return NULL;
     task_t *t = task_head;
     do {
-        if (t->id == pid) return t;
+        if (t->id == pid)
+            return t;
         t = t->next;
     } while (t && t != task_head);
     return NULL;
@@ -1721,8 +1814,10 @@ static task_t *task_find_by_pid(uint32_t pid)
 
 uint32_t task_dump_cmdline_pid(uint32_t pid, char *buf, uint32_t len)
 {
-    if (!buf || len == 0) return 0;
-    if (!task_head) return 0;
+    if (!buf || len == 0)
+        return 0;
+    if (!task_head)
+        return 0;
     if (pid == 0xFFFFFFFF) pid = task_get_current_id();
 
     uint32_t flags = irq_save();
@@ -1742,8 +1837,10 @@ uint32_t task_dump_cmdline_pid(uint32_t pid, char *buf, uint32_t len)
 
 uint32_t task_dump_status_pid(uint32_t pid, char *buf, uint32_t len)
 {
-    if (!buf || len == 0) return 0;
-    if (!task_head) return 0;
+    if (!buf || len == 0)
+        return 0;
+    if (!task_head)
+        return 0;
     if (pid == 0xFFFFFFFF) pid = task_get_current_id();
 
     uint32_t flags = irq_save();
@@ -1779,8 +1876,10 @@ uint32_t task_dump_status_pid(uint32_t pid, char *buf, uint32_t len)
 
 uint32_t task_dump_cwd_pid(uint32_t pid, char *buf, uint32_t len)
 {
-    if (!buf || len == 0) return 0;
-    if (!task_head) return 0;
+    if (!buf || len == 0)
+        return 0;
+    if (!task_head)
+        return 0;
     if (pid == 0xFFFFFFFF) pid = task_get_current_id();
 
     uint32_t flags = irq_save();
@@ -1799,10 +1898,13 @@ uint32_t task_dump_cwd_pid(uint32_t pid, char *buf, uint32_t len)
 
 uint32_t task_dump_fd_pid(uint32_t pid, uint32_t fd, char *buf, uint32_t len)
 {
-    if (!buf || len == 0) return 0;
-    if (!task_head) return 0;
+    if (!buf || len == 0)
+        return 0;
+    if (!task_head)
+        return 0;
     if (pid == 0xFFFFFFFF) pid = task_get_current_id();
-    if (fd >= TASK_FD_MAX) return 0;
+    if (fd >= TASK_FD_MAX)
+        return 0;
 
     uint32_t flags = irq_save();
     task_t *t = task_find_by_pid(pid);
@@ -1825,7 +1927,8 @@ uint32_t task_dump_fd_pid(uint32_t pid, uint32_t fd, char *buf, uint32_t len)
 
 int task_fd_alloc(struct file *file)
 {
-    if (!task_current || !file) return -1;
+    if (!task_current || !file)
+        return -1;
     for (int i = 3; i < TASK_FD_MAX; i++) {
         if (!task_current->fds[i].used) {
             task_current->fds[i].used = 1;
@@ -1838,18 +1941,24 @@ int task_fd_alloc(struct file *file)
 
 task_fd_t *task_fd_get(int fd)
 {
-    if (!task_current) return NULL;
-    if (fd < 0 || fd >= TASK_FD_MAX) return NULL;
-    if (!task_current->fds[fd].used) return NULL;
-    if (!task_current->fds[fd].file) return NULL;
+    if (!task_current)
+        return NULL;
+    if (fd < 0 || fd >= TASK_FD_MAX)
+        return NULL;
+    if (!task_current->fds[fd].used)
+        return NULL;
+    if (!task_current->fds[fd].file)
+        return NULL;
     return &task_current->fds[fd];
 }
 
 int task_fd_close(int fd)
 {
-    if (fd < 3) return -1;
+    if (fd < 3)
+        return -1;
     task_fd_t *d = task_fd_get(fd);
-    if (!d) return -1;
+    if (!d)
+        return -1;
     if (d->file) file_close(d->file);
     d->used = 0;
     d->file = NULL;
@@ -1858,8 +1967,10 @@ int task_fd_close(int fd)
 
 void task_install_stdio(struct inode *console)
 {
-    if (!task_current) return;
-    if (!console) return;
+    if (!task_current)
+        return;
+    if (!console)
+        return;
 
     task_current->fds[0].used = 1;
     task_current->fds[0].file = file_open_node(console, 0);

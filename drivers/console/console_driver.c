@@ -14,8 +14,9 @@ static int console_probe(struct device *dev)
 static int console_driver_init(void)
 {
     struct bus_type *platform = device_model_platform_bus();
-    if (!platform) return -1;
-    
+    if (!platform)
+        return -1;
+
     init_driver(&drv_console, "console", platform, console_probe);
     driver_register(&drv_console);
     return 0;

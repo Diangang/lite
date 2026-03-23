@@ -33,7 +33,7 @@ int syscall6(int sys_num, int arg1, int arg2, int arg3, int arg4, int arg5, int 
         "mov %6, %%ebp\n\t"
         "int $0x80\n\t"
         "pop %%ebp\n\t"
-        : "=a"(ret) 
+        : "=a"(ret)
         : "a"(sys_num), "b"(arg1), "c"(arg2), "d"(arg3), "S"(arg4), "D"(arg5), "m"(arg6)
     );
     return ret;
@@ -70,6 +70,10 @@ int open(const char *path, int flags) {
 
 int close(int fd) {
     return syscall1(SYS_CLOSE, fd);
+}
+
+int unlink(const char *pathname) {
+    return syscall1(SYS_UNLINK, (int)pathname);
 }
 
 void *mmap(void *addr, int length, int prot, int flags, int fd, int offset) {
@@ -111,7 +115,7 @@ void print_int(int val) {
         }
     }
     if (is_neg) buf[i++] = '-';
-    
+
     // reverse
     for (int j = 0; j < i / 2; j++) {
         char t = buf[j];

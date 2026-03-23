@@ -61,9 +61,8 @@ int strncmp(const char *s1, const char *s2, size_t n)
         s2++;
         n--;
     }
-    if (n == 0) {
+    if (n == 0)
         return 0;
-    }
     return *(const unsigned char *)s1 - *(const unsigned char *)s2;
 }
 
@@ -93,9 +92,8 @@ void itoa(int num, int base, char *buf)
         u_num = u_num / base;
     }
 
-    if (is_negative) {
+    if (is_negative)
         buf[i++] = '-';
-    }
 
     buf[i] = '\0';
 
@@ -160,11 +158,11 @@ void printf(const char *format, ...)
 
 char *strdup(const char *s)
 {
-    if (!s) return NULL;
+    if (!s)
+        return NULL;
     int len = strlen(s);
     char *dup = (char*)kmalloc(len + 1);
-    if (dup) {
+    if (dup)
         memcpy(dup, s, len + 1);
-    }
     return dup;
 }

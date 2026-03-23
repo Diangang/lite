@@ -20,6 +20,8 @@ struct address_space {
 void address_space_init(struct address_space *mapping, struct inode *host);
 uint32_t generic_file_read(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer);
 uint32_t generic_file_write(struct inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer);
+void truncate_inode_pages(struct address_space *mapping, uint32_t lstart);
+
 struct file;
 struct dirent *generic_readdir(struct file *file, uint32_t index);
 struct inode *generic_finddir(struct inode *node, const char *name);

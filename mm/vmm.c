@@ -25,7 +25,8 @@ extern void enable_paging(void);
 
 void vmm_map_page_ex(uint32_t* dir, void* phys_addr, void* virt_addr, uint32_t flags)
 {
-    if (!dir) return;
+    if (!dir)
+        return;
 
     uint32_t pde_idx = (uint32_t)virt_addr / (1024 * 4096);
     uint32_t pte_idx = ((uint32_t)virt_addr % (1024 * 4096)) / 4096;
@@ -60,14 +61,16 @@ void vmm_map_page(void* phys_addr, void* virt_addr)
 
 int vmm_is_mapped(void* virt_addr)
 {
-    if (!page_directory) return 0;
+    if (!page_directory)
+        return 0;
 
     uint32_t va = (uint32_t)virt_addr;
     uint32_t pde_idx = va / (1024 * 4096);
     uint32_t pte_idx = (va % (1024 * 4096)) / 4096;
 
     uint32_t pde = page_directory[pde_idx];
-    if (!(pde & PTE_PRESENT)) return 0;
+    if (!(pde & PTE_PRESENT))
+        return 0;
 
     uint32_t* table = (uint32_t*)(pde & ~0xFFF);
     uint32_t pte = table[pte_idx];
@@ -77,76 +80,87 @@ int vmm_is_mapped(void* virt_addr)
 
 uint32_t vmm_virt_to_phys(void* virt_addr)
 {
-    if (!page_directory) return 0xFFFFFFFF;
+    if (!page_directory)
+        return 0xFFFFFFFF;
 
     uint32_t va = (uint32_t)virt_addr;
     uint32_t pde_idx = va / (1024 * 4096);
     uint32_t pte_idx = (va % (1024 * 4096)) / 4096;
 
     uint32_t pde = page_directory[pde_idx];
-    if (!(pde & PTE_PRESENT)) return 0xFFFFFFFF;
+    if (!(pde & PTE_PRESENT))
+        return 0xFFFFFFFF;
 
     uint32_t* table = (uint32_t*)(pde & ~0xFFF);
     uint32_t pte = table[pte_idx];
-    if (!(pte & PTE_PRESENT)) return 0xFFFFFFFF;
+    if (!(pte & PTE_PRESENT))
+        return 0xFFFFFFFF;
 
     return (pte & ~0xFFF) + (va & 0xFFF);
 }
 
 uint32_t vmm_virt_to_phys_ex(uint32_t* dir, void* virt_addr)
 {
-    if (!dir) return 0xFFFFFFFF;
+    if (!dir)
+        return 0xFFFFFFFF;
 
     uint32_t va = (uint32_t)virt_addr;
     uint32_t pde_idx = va / (1024 * 4096);
     uint32_t pte_idx = (va % (1024 * 4096)) / 4096;
 
     uint32_t pde = dir[pde_idx];
-    if (!(pde & PTE_PRESENT)) return 0xFFFFFFFF;
+    if (!(pde & PTE_PRESENT))
+        return 0xFFFFFFFF;
 
     uint32_t* table = (uint32_t*)(pde & ~0xFFF);
     uint32_t pte = table[pte_idx];
-    if (!(pte & PTE_PRESENT)) return 0xFFFFFFFF;
+    if (!(pte & PTE_PRESENT))
+        return 0xFFFFFFFF;
 
     return (pte & ~0xFFF) + (va & 0xFFF);
 }
 
 uint32_t vmm_get_pte_flags_ex(uint32_t* dir, void* virt_addr)
 {
-    if (!dir) return 0;
+    if (!dir)
+        return 0;
 
     uint32_t va = (uint32_t)virt_addr;
     uint32_t pde_idx = va / (1024 * 4096);
     uint32_t pte_idx = (va % (1024 * 4096)) / 4096;
 
     uint32_t pde = dir[pde_idx];
-    if (!(pde & PTE_PRESENT)) return 0;
+    if (!(pde & PTE_PRESENT))
+        return 0;
 
     uint32_t* table = (uint32_t*)(pde & ~0xFFF);
     uint32_t pte = table[pte_idx];
-    if (!(pte & PTE_PRESENT)) return 0;
+    if (!(pte & PTE_PRESENT))
+        return 0;
 
     return pte;
 }
 
 void vmm_update_page_flags_ex(uint32_t* dir, void* virt_addr, uint32_t flags)
 {
-    if (!dir) return;
+    if (!dir)
+        return;
 
     uint32_t va = (uint32_t)virt_addr;
     uint32_t pde_idx = va / (1024 * 4096);
     uint32_t pte_idx = (va % (1024 * 4096)) / 4096;
 
     uint32_t pde = dir[pde_idx];
-    if (!(pde & PTE_PRESENT)) return;
+    if (!(pde & PTE_PRESENT))
+        return;
 
-    if (flags & PTE_USER) {
+    if (flags & PTE_USER)
         dir[pde_idx] |= PTE_USER;
-    }
 
     uint32_t* table = (uint32_t*)(pde & ~0xFFF);
     uint32_t pte = table[pte_idx];
-    if (!(pte & PTE_PRESENT)) return;
+    if (!(pte & PTE_PRESENT))
+        return;
 
     table[pte_idx] = (pte & ~0xFFF) | (flags & 0xFFF);
     __asm__ volatile("invlpg (%0)" :: "r" (virt_addr) : "memory");
@@ -159,18 +173,21 @@ void vmm_set_page_user(void* virt_addr)
 
 void vmm_set_page_user_ex(uint32_t* dir, void* virt_addr)
 {
-    if (!dir) return;
+    if (!dir)
+        return;
 
     uint32_t va = (uint32_t)virt_addr;
     uint32_t pde_idx = va / (1024 * 4096);
     uint32_t pte_idx = (va % (1024 * 4096)) / 4096;
 
     uint32_t pde = dir[pde_idx];
-    if (!(pde & PTE_PRESENT)) return;
+    if (!(pde & PTE_PRESENT))
+        return;
 
     uint32_t* table = (uint32_t*)(pde & ~0xFFF);
     uint32_t pte = table[pte_idx];
-    if (!(pte & PTE_PRESENT)) return;
+    if (!(pte & PTE_PRESENT))
+        return;
 
     dir[pde_idx] |= PTE_USER;
     table[pte_idx] = pte | PTE_USER;
@@ -180,18 +197,21 @@ void vmm_set_page_user_ex(uint32_t* dir, void* virt_addr)
 
 void vmm_set_page_readonly_ex(uint32_t* dir, void* virt_addr)
 {
-    if (!dir) return;
+    if (!dir)
+        return;
 
     uint32_t va = (uint32_t)virt_addr;
     uint32_t pde_idx = va / (1024 * 4096);
     uint32_t pte_idx = (va % (1024 * 4096)) / 4096;
 
     uint32_t pde = dir[pde_idx];
-    if (!(pde & PTE_PRESENT)) return;
+    if (!(pde & PTE_PRESENT))
+        return;
 
     uint32_t* table = (uint32_t*)(pde & ~0xFFF);
     uint32_t pte = table[pte_idx];
-    if (!(pte & PTE_PRESENT)) return;
+    if (!(pte & PTE_PRESENT))
+        return;
 
     table[pte_idx] = pte & ~PTE_READ_WRITE;
     __asm__ volatile("invlpg (%0)" :: "r" (virt_addr) : "memory");
@@ -199,21 +219,23 @@ void vmm_set_page_readonly_ex(uint32_t* dir, void* virt_addr)
 
 uint32_t* vmm_clone_kernel_directory(void)
 {
-    if (!kernel_directory) return NULL;
+    if (!kernel_directory)
+        return NULL;
     uint32_t* new_dir = (uint32_t*)pmm_alloc_page();
-    if (!new_dir) return NULL;
+    if (!new_dir)
+        return NULL;
     memset(new_dir, 0, 4096);
 
-    for (int i = 0; i < 1024; i++) {
+    for (int i = 0; i < 1024; i++)
         new_dir[i] = kernel_directory[i];
-    }
 
     return new_dir;
 }
 
 void vmm_switch_directory(uint32_t* dir)
 {
-    if (!dir) return;
+    if (!dir)
+        return;
     page_directory = dir;
     __asm__ volatile("mov %0, %%cr3" :: "r"(dir));
 }
@@ -230,16 +252,19 @@ uint32_t* vmm_get_kernel_directory(void)
 
 static int vmm_get_pte_ex(uint32_t* dir, uint32_t va, uint32_t* out_pde, uint32_t* out_pte)
 {
-    if (!dir) return 0;
+    if (!dir)
+        return 0;
 
     uint32_t pde_idx = va / (1024 * 4096);
     uint32_t pte_idx = (va % (1024 * 4096)) / 4096;
     uint32_t pde = dir[pde_idx];
-    if (!(pde & PTE_PRESENT)) return 0;
+    if (!(pde & PTE_PRESENT))
+        return 0;
 
     uint32_t* table = (uint32_t*)(pde & ~0xFFF);
     uint32_t pte = table[pte_idx];
-    if (!(pte & PTE_PRESENT)) return 0;
+    if (!(pte & PTE_PRESENT))
+        return 0;
 
     if (out_pde) *out_pde = pde;
     if (out_pte) *out_pte = pte;
@@ -248,28 +273,39 @@ static int vmm_get_pte_ex(uint32_t* dir, uint32_t va, uint32_t* out_pde, uint32_
 
 int vmm_user_accessible(uint32_t* dir, void* addr, uint32_t len, int write)
 {
-    if (!dir) return 0;
-    if (len == 0) return 1;
+    if (!dir)
+        return 0;
+    if (len == 0)
+        return 1;
 
     uint32_t start = (uint32_t)addr;
     uint32_t end = start + len - 1;
 
-    if (start < 0x1000) return 0;
-    if (end < start) return 0;
-    if (end >= 0xC0000000) return 0;
+    if (start < 0x1000)
+        return 0;
+    if (end < start)
+        return 0;
+    if (end >= 0xC0000000)
+        return 0;
 
     uint32_t page = start & ~0xFFF;
     uint32_t last = end & ~0xFFF;
     while (1) {
         uint32_t pde, pte;
-        if (!vmm_get_pte_ex(dir, page, &pde, &pte)) return 0;
-        if (!(pde & PTE_USER)) return 0;
-        if (!(pte & PTE_USER)) return 0;
+        if (!vmm_get_pte_ex(dir, page, &pde, &pte))
+            return 0;
+        if (!(pde & PTE_USER))
+            return 0;
+        if (!(pte & PTE_USER))
+            return 0;
         if (write) {
-            if (!(pde & PTE_READ_WRITE)) return 0;
-            if (!(pte & PTE_READ_WRITE) && !(pte & PTE_COW)) return 0;
+            if (!(pde & PTE_READ_WRITE))
+                return 0;
+            if (!(pte & PTE_READ_WRITE) && !(pte & PTE_COW))
+                return 0;
         }
-        if (page == last) break;
+        if (page == last)
+            break;
         page += 4096;
     }
 
@@ -279,7 +315,8 @@ int vmm_user_accessible(uint32_t* dir, void* addr, uint32_t len, int write)
 static int vmm_resolve_cow(uint32_t page_base)
 {
     uint32_t pte = vmm_get_pte_flags_ex(page_directory, (void*)page_base);
-    if (!(pte & PTE_COW)) return 0;
+    if (!(pte & PTE_COW))
+        return 0;
     uint32_t phys = pte & ~0xFFF;
     uint32_t rc = pmm_get_refcount((void*)phys);
     cow_faults++;
@@ -290,7 +327,8 @@ static int vmm_resolve_cow(uint32_t page_base)
         return 1;
     }
     void *new_phys = pmm_alloc_page();
-    if (!new_phys) return -1;
+    if (!new_phys)
+        return -1;
     uint8_t *tmp = (uint8_t*)kmalloc(4096);
     if (!tmp) {
         pmm_free_page(new_phys);
@@ -307,18 +345,24 @@ static int vmm_resolve_cow(uint32_t page_base)
 
 int vmm_copyin(void* dst, const void* src_user, uint32_t len)
 {
-    if (!dst && len) return -1;
-    if (!src_user && len) return -1;
-    if (!vmm_user_accessible(vmm_get_current_directory(), (void*)src_user, len, 0)) return -1;
+    if (!dst && len)
+        return -1;
+    if (!src_user && len)
+        return -1;
+    if (!vmm_user_accessible(vmm_get_current_directory(), (void*)src_user, len, 0))
+        return -1;
     memcpy(dst, src_user, len);
     return 0;
 }
 
 int vmm_copyout(void* dst_user, const void* src, uint32_t len)
 {
-    if (!dst_user && len) return -1;
-    if (!src && len) return -1;
-    if (!vmm_user_accessible(vmm_get_current_directory(), (void*)dst_user, len, 1)) return -1;
+    if (!dst_user && len)
+        return -1;
+    if (!src && len)
+        return -1;
+    if (!vmm_user_accessible(vmm_get_current_directory(), (void*)dst_user, len, 1))
+        return -1;
 
     if (len) {
         uint32_t start = (uint32_t)dst_user;
@@ -327,8 +371,10 @@ int vmm_copyout(void* dst_user, const void* src, uint32_t len)
         uint32_t last = end & ~0xFFF;
         while (1) {
             int res = vmm_resolve_cow(page);
-            if (res < 0) return -1;
-            if (page == last) break;
+            if (res < 0)
+                return -1;
+            if (page == last)
+                break;
             page += 4096;
         }
     }

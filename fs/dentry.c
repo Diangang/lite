@@ -7,7 +7,8 @@ struct dentry *vfs_root_dentry = NULL;
 struct dentry *d_alloc(struct dentry *parent, const char *name)
 {
     struct dentry *d = (struct dentry*)kmalloc(sizeof(struct dentry));
-    if (!d) return NULL;
+    if (!d)
+        return NULL;
     memset(d, 0, sizeof(*d));
     d->name = name ? strdup(name) : NULL;
     d->parent = parent;
@@ -21,10 +22,12 @@ struct dentry *d_alloc(struct dentry *parent, const char *name)
 
 struct dentry *d_lookup(struct dentry *parent, const char *name)
 {
-    if (!parent || !name) return NULL;
+    if (!parent || !name)
+        return NULL;
     struct dentry *c = parent->children;
     while (c) {
-        if (c->name && strcmp(c->name, name) == 0) return c;
+        if (c->name && strcmp(c->name, name) == 0)
+            return c;
         c = c->sibling;
     }
     return NULL;
@@ -41,7 +44,8 @@ struct dentry *vfs_dentry_get(struct inode *node, const char *name)
 
 void vfs_dentry_put(struct dentry *d)
 {
-    if (!d) return;
+    if (!d)
+        return;
     if (d->refcount > 0) d->refcount--;
     // Simple dcache: we never actually free them to keep tree intact,
     // unless system is out of memory.

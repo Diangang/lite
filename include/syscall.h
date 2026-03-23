@@ -16,7 +16,7 @@ enum {
     SYS_BRK = 9,
     SYS_CHDIR = 10,
     SYS_GETCWD = 11,
-    SYS_GETDENT = 12,
+    SYS_UNLINK = 12,
     SYS_MKDIR = 13,
     SYS_EXECVE = 14,
     SYS_WAITPID = 15,

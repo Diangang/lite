@@ -13,7 +13,7 @@
 #define SYS_CLOSE 8
 #define SYS_CHDIR 10
 #define SYS_GETCWD 11
-#define SYS_GETDENT 12
+#define SYS_UNLINK 12
 #define SYS_MKDIR 13
 #define SYS_EXECVE 14
 #define SYS_WAITPID 15
@@ -37,6 +37,7 @@ int waitpid(int pid, int *status, int options);
 int execve(const char *path);
 int open(const char *path, int flags);
 int close(int fd);
+int unlink(const char *pathname);
 void *mmap(void *addr, int length, int prot, int flags, int fd, int offset);
 int munmap(void *addr, int length);
 

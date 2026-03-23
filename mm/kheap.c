@@ -98,7 +98,8 @@ void *kmalloc(size_t size) {
 }
 
 void kfree(void *ptr) {
-    if (!ptr) return;
+    if (!ptr)
+        return;
 
     /* Get the header */
     struct header *header = (struct header*)((uint32_t)ptr - sizeof(struct header));

@@ -18,13 +18,19 @@ void close_fs(struct inode *node)
 
 int vfs_chdir(const char *path)
 {
-    if (!path || !*path) return -1;
+    if (!path || !*path)
+        return -1;
     struct dentry *d = path_walk(path);
-    if (!d) return -1;
+    if (!d)
+        return -1;
     struct inode *node = d->inode;
-    if (!node) return -1;
-    if ((node->flags & 0x7) != FS_DIRECTORY) return -1;
-    if (!vfs_check_access(node, 0, 0, 1)) return -1;
-    if (task_set_cwd_dentry(d) == 0) return 0;
+    if (!node)
+        return -1;
+    if ((node->flags & 0x7) != FS_DIRECTORY)
+        return -1;
+    if (!vfs_check_access(node, 0, 0, 1))
+        return -1;
+    if (task_set_cwd_dentry(d) == 0)
+        return 0;
     return -1;
 }

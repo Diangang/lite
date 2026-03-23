@@ -10,7 +10,8 @@
 static int x86_platform_devices_init(void)
 {
     struct bus_type *platform = device_model_platform_bus();
-    if (!platform) return -1;
+    if (!platform)
+        return -1;
 
     // Register static hardware devices that exist on this "board"
     device_register_simple("console", "console", platform, NULL);

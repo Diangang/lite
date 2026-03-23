@@ -45,7 +45,7 @@ Generic library functions (e.g., `libc.c` for `string.h` implementations) used i
 
 ### `usr/`
 Early user-space programs and the initramfs payload generator.
-- Contains the C/assembly source for `init.elf`, `shell.elf` (user shell), `unit_test.elf` (automated test suite), etc.
+- Contains the C/assembly source for `init.elf`, `shell.elf` (user shell), `smoke.elf` (automated test suite), etc.
 - Also contains the user-space runtime library (`ulib.c`, `ulib.h`) and entry point (`crt0.s`).
 - During the build process, these are compiled, packed into `initramfs.cpio`, and fed to the kernel, perfectly mirroring the concept of Linux's `usr/gen_init_cpio` and default early user-space.
 

@@ -119,14 +119,14 @@ static int tty_handle_ctrl_c(void)
 
 uint32_t tty_read_blocking(char *buf, uint32_t len)
 {
-    if (!buf || len == 0) return 0;
+    if (!buf || len == 0)
+        return 0;
     uint32_t read = 0;
     for (;;) {
         if (tty_flags & TTY_FLAG_CANON) {
             if (tty_line_pos < tty_line_len) {
-                while (read < len && tty_line_pos < tty_line_len) {
+                while (read < len && tty_line_pos < tty_line_len)
                     buf[read++] = tty_linebuf[tty_line_pos++];
-                }
                 if (tty_line_pos >= tty_line_len) {
                     tty_line_len = 0;
                     tty_line_pos = 0;
@@ -143,18 +143,16 @@ uint32_t tty_read_blocking(char *buf, uint32_t len)
                 }
                 if (c == '\r') c = '\n';
                 if (c == '\n') {
-                    if (tty_line_len + 1 < sizeof(tty_linebuf)) {
+                    if (tty_line_len + 1 < sizeof(tty_linebuf))
                         tty_linebuf[tty_line_len++] = c;
-                    }
                     if (tty_flags & TTY_FLAG_ECHO) printf("\n");
                     break;
                 }
                 if (c == '\b' || c == 0x7F) {
                     if (tty_line_len > 0) {
                         tty_line_len--;
-                        if (tty_flags & TTY_FLAG_ECHO) {
+                        if (tty_flags & TTY_FLAG_ECHO)
                             printf("\b \b");
-                        }
                     }
                     continue;
                 }
@@ -172,7 +170,8 @@ uint32_t tty_read_blocking(char *buf, uint32_t len)
             if (c == '\r') c = '\n';
             buf[read++] = c;
             if (tty_flags & TTY_FLAG_ECHO) printf("%c", c);
-            if (read > 0) return read;
+            if (read > 0)
+                return read;
         }
     }
 }

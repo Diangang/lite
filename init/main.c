@@ -11,9 +11,8 @@ extern initcall_t __initcall_end[];
 static void do_initcalls(void)
 {
     initcall_t *call;
-    for (call = __initcall_start; call < __initcall_end; call++) {
+    for (call = __initcall_start; call < __initcall_end; call++)
         (*call)();
-    }
 }
 #include "gdt.h"
 #include "idt.h"
@@ -25,7 +24,6 @@ static void do_initcalls(void)
 #include "devfs.h"
 #include "sysfs.h"
 #include "syscall.h"
-#include "keyboard.h"
 #include "timer.h"
 #include "task.h"
 #include "device_model.h"
@@ -41,7 +39,7 @@ static void kernel_init(void)
     /* Switch to user mode and start init process */
     /* We try standard Linux init paths in order */
     int init_pid;
-    
+
     init_pid = task_create_user("/sbin/init");
     if (init_pid > 0) goto init_started;
 
@@ -50,11 +48,10 @@ static void kernel_init(void)
 init_started:
     printf("init task created (pid %d).\n", init_pid);
 
-    /* The kernel_init thread has done its job. It can exit now, 
+    /* The kernel_init thread has done its job. It can exit now,
        or just wait/idle if we don't have thread exit fully working yet. */
-    while (1) {
+    while (1)
         task_sleep(100);
-    }
 }
 
 static void rest_init(void)
@@ -67,9 +64,8 @@ static void rest_init(void)
     __asm__ volatile ("sti");
 
     printf("rest_init: CPU entering idle loop (PID 0)\n");
-    while (1) {
+    while (1)
         __asm__ volatile ("hlt");
-    }
 }
 
 void start_kernel(struct multiboot_info* mbi, uint32_t magic)
@@ -94,7 +90,7 @@ void start_kernel(struct multiboot_info* mbi, uint32_t magic)
 
     /* Mount core filesystems */
     init_ramfs();
-    
+
     // Extract initramfs directly into the root ramfs
     populate_rootfs(mbi);
 
@@ -105,13 +101,10 @@ void start_kernel(struct multiboot_info* mbi, uint32_t magic)
     // Since initrd is gone, we don't pass its root to driver_init anymore.
     // The device model can just use the rootfs.
     driver_init();
-    
+
     /* Initialize System Calls */
     init_syscall();
     printf("Syscall handler installed.\n");
-
-    /* Initialize Keyboard Driver */
-    init_keyboard();
 
     /* Initialize PIT Timer (100 Hz = 10ms per tick) */
     init_timer(100);

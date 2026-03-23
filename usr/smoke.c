@@ -10,7 +10,7 @@ void test_fork() {
         print("Parent process waiting for child (PID: ");
         print_int(pid);
         print(")...\n");
-        
+
         int status[4] = {0};
         int ret = waitpid(pid, status, 16);
         print("Child exited with waitpid ret=");
@@ -34,7 +34,7 @@ void test_file_io() {
     write(fd, msg, 29);
     close(fd);
     print("Wrote to /test.txt successfully.\n");
-    
+
     fd = open("/test.txt", 0);
     if (fd < 0) {
         print("Failed to open file for reading\n");
@@ -50,6 +50,12 @@ void test_file_io() {
         print("Read failed!\n");
     }
     close(fd);
+
+    int ret = unlink("/test.txt");
+    if (ret == 0)
+        print("Deleted /test.txt successfully.\n");
+    else
+        print("FAIL: Could not delete /test.txt\n");
 }
 
 void test_pf() {
@@ -87,7 +93,7 @@ void test_mmap() {
     addr[3] = 'P';
     addr[4] = '\n';
     addr[5] = '\0';
-    
+
     print("Read from mmap memory: ");
     print(addr);
 
@@ -116,13 +122,13 @@ int main() {
     print("================================\n");
     print("  Lite OS Automated Test Suite  \n");
     print("================================\n");
-    
+
     test_fork();
     test_file_io();
     test_pf();
     test_mmap();
     test_bad_ptr();
-    
+
     print("\n================================\n");
     print("  All tests completed!          \n");
     print("================================\n");

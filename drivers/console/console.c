@@ -22,7 +22,8 @@ void console_put_char(char c)
 
 uint32_t console_write(const uint8_t *buf, uint32_t len)
 {
-    if (!buf || len == 0) return 0;
+    if (!buf || len == 0)
+        return 0;
     for (uint32_t i = 0; i < len; i++) console_put_char((char)buf[i]);
     return len;
 }

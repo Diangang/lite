@@ -54,6 +54,7 @@ uint32_t timer_get_ticks(void)
 
 uint32_t timer_get_uptime(void)
 {
-    if (current_frequency == 0) return 0;
+    if (current_frequency == 0)
+        return 0;
     return tick / current_frequency;
 }

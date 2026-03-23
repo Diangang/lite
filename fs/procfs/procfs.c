@@ -38,7 +38,8 @@ static int parse_u32(const char *s, uint32_t *out);
 
 static void buf_append(char *buf, uint32_t *off, uint32_t cap, const char *s)
 {
-    if (!buf || !off || cap == 0 || !s) return;
+    if (!buf || !off || cap == 0 || !s)
+        return;
     while (*s && *off + 1 < cap) {
         buf[*off] = *s;
         (*off)++;
@@ -58,7 +59,8 @@ static uint32_t proc_read_tasks(struct inode *node, uint32_t offset, uint32_t si
     (void)node;
     static char tmp[4096];
     uint32_t n = task_dump_tasks(tmp, sizeof(tmp));
-    if (offset >= n) return 0;
+    if (offset >= n)
+        return 0;
     uint32_t remain = n - offset;
     if (size > remain) size = remain;
     memcpy(buffer, tmp + offset, size);
@@ -80,7 +82,8 @@ static uint32_t proc_read_sched(struct inode *node, uint32_t offset, uint32_t si
     buf_append(tmp, &n, sizeof(tmp), "\ncurrent=");
     buf_append_u32(tmp, &n, sizeof(tmp), cur);
     buf_append(tmp, &n, sizeof(tmp), "\n");
-    if (offset >= n) return 0;
+    if (offset >= n)
+        return 0;
     uint32_t remain = n - offset;
     if (size > remain) size = remain;
     memcpy(buffer, tmp + offset, size);
@@ -101,7 +104,8 @@ static uint32_t proc_read_irq(struct inode *node, uint32_t offset, uint32_t size
     buf_append(tmp, &n, sizeof(tmp), "\nsyscall128=");
     buf_append_u32(tmp, &n, sizeof(tmp), isr_get_count(128));
     buf_append(tmp, &n, sizeof(tmp), "\n");
-    if (offset >= n) return 0;
+    if (offset >= n)
+        return 0;
     uint32_t remain = n - offset;
     if (size > remain) size = remain;
     memcpy(buffer, tmp + offset, size);
@@ -113,7 +117,8 @@ static uint32_t proc_read_maps(struct inode *node, uint32_t offset, uint32_t siz
     (void)node;
     static char tmp[2048];
     uint32_t n = task_dump_maps(tmp, sizeof(tmp));
-    if (offset >= n) return 0;
+    if (offset >= n)
+        return 0;
     uint32_t remain = n - offset;
     if (size > remain) size = remain;
     memcpy(buffer, tmp + offset, size);
@@ -133,7 +138,8 @@ static uint32_t proc_read_meminfo(struct inode *node, uint32_t offset, uint32_t 
     buf_append_u32(tmp, &off, sizeof(tmp), free_kb);
     buf_append(tmp, &off, sizeof(tmp), " kB\n");
     if (off < sizeof(tmp)) tmp[off] = 0;
-    if (offset >= off) return 0;
+    if (offset >= off)
+        return 0;
     uint32_t remain = off - offset;
     if (size > remain) size = remain;
     memcpy(buffer, tmp + offset, size);
@@ -154,7 +160,8 @@ static uint32_t proc_read_cow(struct inode *node, uint32_t offset, uint32_t size
     buf_append_u32(tmp, &off, sizeof(tmp), copies);
     buf_append(tmp, &off, sizeof(tmp), "\n");
     if (off < sizeof(tmp)) tmp[off] = 0;
-    if (offset >= off) return 0;
+    if (offset >= off)
+        return 0;
     uint32_t remain = off - offset;
     if (size > remain) size = remain;
     memcpy(buffer, tmp + offset, size);
@@ -163,12 +170,14 @@ static uint32_t proc_read_cow(struct inode *node, uint32_t offset, uint32_t size
 
 static uint32_t proc_read_pid_stat(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
-    if (!node) return 0;
+    if (!node)
+        return 0;
     static char tmp[256];
     uint32_t pid = node->impl;
     if (pid == 0xFFFFFFFF) pid = task_get_current_id();
     uint32_t n = task_dump_stat_pid(pid, tmp, sizeof(tmp));
-    if (offset >= n) return 0;
+    if (offset >= n)
+        return 0;
     uint32_t remain = n - offset;
     if (size > remain) size = remain;
     memcpy(buffer, tmp + offset, size);
@@ -177,11 +186,13 @@ static uint32_t proc_read_pid_stat(struct inode *node, uint32_t offset, uint32_t
 
 static uint32_t proc_read_pid_cmdline(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
-    if (!node) return 0;
+    if (!node)
+        return 0;
     static char tmp[256];
     uint32_t pid = node->impl;
     uint32_t n = task_dump_cmdline_pid(pid, tmp, sizeof(tmp));
-    if (offset >= n) return 0;
+    if (offset >= n)
+        return 0;
     uint32_t remain = n - offset;
     if (size > remain) size = remain;
     memcpy(buffer, tmp + offset, size);
@@ -190,11 +201,13 @@ static uint32_t proc_read_pid_cmdline(struct inode *node, uint32_t offset, uint3
 
 static uint32_t proc_read_pid_status(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
-    if (!node) return 0;
+    if (!node)
+        return 0;
     static char tmp[256];
     uint32_t pid = node->impl;
     uint32_t n = task_dump_status_pid(pid, tmp, sizeof(tmp));
-    if (offset >= n) return 0;
+    if (offset >= n)
+        return 0;
     uint32_t remain = n - offset;
     if (size > remain) size = remain;
     memcpy(buffer, tmp + offset, size);
@@ -203,11 +216,13 @@ static uint32_t proc_read_pid_status(struct inode *node, uint32_t offset, uint32
 
 static uint32_t proc_read_pid_cwd(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
-    if (!node) return 0;
+    if (!node)
+        return 0;
     static char tmp[256];
     uint32_t pid = node->impl;
     uint32_t n = task_dump_cwd_pid(pid, tmp, sizeof(tmp));
-    if (offset >= n) return 0;
+    if (offset >= n)
+        return 0;
     uint32_t remain = n - offset;
     if (size > remain) size = remain;
     memcpy(buffer, tmp + offset, size);
@@ -216,14 +231,17 @@ static uint32_t proc_read_pid_cwd(struct inode *node, uint32_t offset, uint32_t 
 
 static uint32_t proc_read_pid_fd(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
-    if (!node) return 0;
+    if (!node)
+        return 0;
     static char tmp[256];
     uint32_t slot = (node->impl >> 16) & 0xFFFF;
     uint32_t fd = node->impl & 0xFFFF;
-    if (slot >= PROC_PID_MAX) return 0;
+    if (slot >= PROC_PID_MAX)
+        return 0;
     uint32_t pid = proc_pids[slot].pid;
     uint32_t n = task_dump_fd_pid(pid, fd, tmp, sizeof(tmp));
-    if (offset >= n) return 0;
+    if (offset >= n)
+        return 0;
     uint32_t remain = n - offset;
     if (size > remain) size = remain;
     memcpy(buffer, tmp + offset, size);
@@ -232,12 +250,14 @@ static uint32_t proc_read_pid_fd(struct inode *node, uint32_t offset, uint32_t s
 
 static uint32_t proc_read_pid_maps(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
-    if (!node) return 0;
+    if (!node)
+        return 0;
     static char tmp[2048];
     uint32_t pid = node->impl;
     if (pid == 0xFFFFFFFF) pid = task_get_current_id();
     uint32_t n = task_dump_maps_pid(pid, tmp, sizeof(tmp));
-    if (offset >= n) return 0;
+    if (offset >= n)
+        return 0;
     uint32_t remain = n - offset;
     if (size > remain) size = remain;
     memcpy(buffer, tmp + offset, size);
@@ -247,17 +267,21 @@ static uint32_t proc_read_pid_maps(struct inode *node, uint32_t offset, uint32_t
 static struct dirent *proc_pid_fd_readdir(struct file *file, uint32_t index)
 {
     struct inode *node = file->dentry->inode;
-    if (!node) return NULL;
+    if (!node)
+        return NULL;
     uint32_t slot = node->impl;
-    if (slot >= PROC_PID_MAX) return NULL;
+    if (slot >= PROC_PID_MAX)
+        return NULL;
     proc_pid_entry_t *e = &proc_pids[slot];
-    if (!e->used) return NULL;
+    if (!e->used)
+        return NULL;
 
     uint32_t pid = e->pid;
     static char tmp[64];
     for (uint32_t fd = 0; fd < TASK_FD_MAX; fd++) {
         uint32_t n = task_dump_fd_pid(pid, fd, tmp, sizeof(tmp));
-        if (n == 0) continue;
+        if (n == 0)
+            continue;
         if (index == 0) {
                 itoa((int)fd, 10, e->dirent.name);
                 e->dirent.ino = e->fd_files[fd].i_ino;
@@ -270,28 +294,37 @@ static struct dirent *proc_pid_fd_readdir(struct file *file, uint32_t index)
 
 static struct inode *proc_pid_fd_finddir(struct inode *node, const char *name)
 {
-    if (!node || !name) return NULL;
+    if (!node || !name)
+        return NULL;
     uint32_t slot = node->impl;
-    if (slot >= PROC_PID_MAX) return NULL;
+    if (slot >= PROC_PID_MAX)
+        return NULL;
     proc_pid_entry_t *e = &proc_pids[slot];
-    if (!e->used) return NULL;
+    if (!e->used)
+        return NULL;
 
     uint32_t fd = 0;
-    if (parse_u32(name, &fd) != 0) return NULL;
-    if (fd >= TASK_FD_MAX) return NULL;
+    if (parse_u32(name, &fd) != 0)
+        return NULL;
+    if (fd >= TASK_FD_MAX)
+        return NULL;
     char tmp[64];
-    if (task_dump_fd_pid(e->pid, fd, tmp, sizeof(tmp)) == 0) return NULL;
+    if (task_dump_fd_pid(e->pid, fd, tmp, sizeof(tmp)) == 0)
+        return NULL;
     return &e->fd_files[fd];
 }
 
 static struct dirent *proc_pid_readdir(struct file *file, uint32_t index)
 {
     struct inode *node = file->dentry->inode;
-    if (!node) return NULL;
+    if (!node)
+        return NULL;
     uint32_t slot = node->impl;
-    if (slot >= PROC_PID_MAX) return NULL;
+    if (slot >= PROC_PID_MAX)
+        return NULL;
     proc_pid_entry_t *e = &proc_pids[slot];
-    if (!e->used) return NULL;
+    if (!e->used)
+        return NULL;
     if (index == 0) {
         strcpy(e->dirent.name, "maps");
         e->dirent.ino = e->maps.i_ino;
@@ -327,30 +360,43 @@ static struct dirent *proc_pid_readdir(struct file *file, uint32_t index)
 
 static struct inode *proc_pid_finddir(struct inode *node, const char *name)
 {
-    if (!node || !name) return NULL;
+    if (!node || !name)
+        return NULL;
     uint32_t slot = node->impl;
-    if (slot >= PROC_PID_MAX) return NULL;
+    if (slot >= PROC_PID_MAX)
+        return NULL;
     proc_pid_entry_t *e = &proc_pids[slot];
-    if (!e->used) return NULL;
-    if (!strcmp(name, "maps")) return &e->maps;
-    if (!strcmp(name, "stat")) return &e->stat;
-    if (!strcmp(name, "cmdline")) return &e->cmdline;
-    if (!strcmp(name, "status")) return &e->status;
-    if (!strcmp(name, "cwd")) return &e->cwd;
-    if (!strcmp(name, "fd")) return &e->fd_dir;
+    if (!e->used)
+        return NULL;
+    if (!strcmp(name, "maps"))
+        return &e->maps;
+    if (!strcmp(name, "stat"))
+        return &e->stat;
+    if (!strcmp(name, "cmdline"))
+        return &e->cmdline;
+    if (!strcmp(name, "status"))
+        return &e->status;
+    if (!strcmp(name, "cwd"))
+        return &e->cwd;
+    if (!strcmp(name, "fd"))
+        return &e->fd_dir;
     return NULL;
 }
 
 static int parse_u32(const char *s, uint32_t *out)
 {
-    if (!s || !out) return -1;
-    if (*s == 0) return -1;
+    if (!s || !out)
+        return -1;
+    if (*s == 0)
+        return -1;
     uint32_t v = 0;
     for (const char *p = s; *p; p++) {
-        if (*p < '0' || *p > '9') return -1;
+        if (*p < '0' || *p > '9')
+            return -1;
         uint32_t d = (uint32_t)(*p - '0');
         uint32_t nv = v * 10 + d;
-        if (nv < v) return -1;
+        if (nv < v)
+            return -1;
         v = nv;
     }
     *out = v;
@@ -440,7 +486,8 @@ static struct file_operations proc_pid_fd_ops = {
 struct inode *proc_get_pid_dir(uint32_t pid)
 {
     for (uint32_t i = 0; i < PROC_PID_MAX; i++) {
-        if (proc_pids[i].used && proc_pids[i].pid == pid) return &proc_pids[i].dir;
+        if (proc_pids[i].used && proc_pids[i].pid == pid)
+            return &proc_pids[i].dir;
     }
     for (uint32_t i = 0; i < PROC_PID_MAX; i++) {
         if (!proc_pids[i].used) {
@@ -580,18 +627,25 @@ static struct dirent *proc_readdir(struct file *file, uint32_t index)
 static struct inode *proc_finddir(struct inode *node, const char *name)
 {
     (void)node;
-    if (!name) return NULL;
-    if (!strcmp(name, "tasks")) return &proc_tasks;
-    if (!strcmp(name, "sched")) return &proc_sched;
-    if (!strcmp(name, "irq")) return &proc_irq;
-    if (!strcmp(name, "maps")) return &proc_maps;
-    if (!strcmp(name, "meminfo")) return &proc_meminfo;
-    if (!strcmp(name, "cow")) return &proc_cow;
-    if (!strcmp(name, "self")) return proc_get_pid_dir(0xFFFFFFFF);
+    if (!name)
+        return NULL;
+    if (!strcmp(name, "tasks"))
+        return &proc_tasks;
+    if (!strcmp(name, "sched"))
+        return &proc_sched;
+    if (!strcmp(name, "irq"))
+        return &proc_irq;
+    if (!strcmp(name, "maps"))
+        return &proc_maps;
+    if (!strcmp(name, "meminfo"))
+        return &proc_meminfo;
+    if (!strcmp(name, "cow"))
+        return &proc_cow;
+    if (!strcmp(name, "self"))
+        return proc_get_pid_dir(0xFFFFFFFF);
     uint32_t pid = 0;
-    if (parse_u32(name, &pid) == 0) {
+    if (parse_u32(name, &pid) == 0)
         return proc_get_pid_dir(pid);
-    }
     return NULL;
 }
 
@@ -671,7 +725,8 @@ void init_procfs(void)
     proc_get_pid_dir(0xFFFFFFFF);
 
     struct inode *proc_root = (struct inode *)kmalloc(sizeof(struct inode));
-    if (!proc_root) return;
+    if (!proc_root)
+        return;
 
     memset(proc_root, 0, sizeof(struct inode));
     proc_root->flags = FS_DIRECTORY;

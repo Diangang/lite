@@ -185,3 +185,20 @@
   1. 修正 `usr/ushprog.s` 中的硬编码系统调用号，将 `SYS_FORK` 修正为 20，`SYS_WAITPID` 修正为 15。
   2. 优化 `kernel/task.c` 中的 `task_yield()` 实现：若任务处于 `TASK_BLOCKED` 状态则安全使用 `sti; hlt` 等待中断；若处于 `TASK_RUNNABLE` 状态则通过触发软中断 `int $0x80` (SYS_YIELD) 安全、强制地触发上下文切换。
   3. 优化 `vmm.c`，隐藏用户栈动态分配和写时复制(COW)产生的常规缺页异常打印，仅打印真正的非法越权访问错误。
+
+## 16. initramfs 不支持多级目录的问题
+- **现象**：`initramfs.cpio` 中如果有 `usr/bin/` 这样的多级目录，在加载时会报错 `Failed to create initramfs dentry`。
+- **原因**：我们在 `initramfs.c` 中的解析逻辑只能在根目录下创建单层文件，不支持递归创建父目录。
+- **解决**：在打包 `cpio` 时，使用平铺的目录结构，或者我们在根文件系统（ramfs）挂载后，通过 `sys_mkdir` 或者内部 API 先创建好 `/bin`、`/sbin` 等目录，然后再将文件解压进去。
+- **结论**：目前我们在 `Makefile` 中创建了 `rootfs/sbin` 和 `rootfs/bin` 并在打包前将执行文件放进去。为了配合这一改动，我们在 VFS 中实现了更健壮的路径解析（`path_walk`）和目录创建功能，允许 `initramfs` 解析带有路径的文件名。
+
+## 17. 文件删除 (`unlink`) 失败：VFS dentry 传递问题
+- **现象**：在实现了 `SYS_UNLINK` 系统调用和 `ramfs_unlink` 后，执行 `unlink("/test.txt")` 总是返回失败（`-1`），文件依然残留在系统中。
+- **原因**：
+  1. **路径解析缺陷**：最初 `vfs_unlink` 在拆分父目录和文件名时，当遇到纯根目录下的文件（如 `/test.txt`，最后一个 `/` 索引为 0）时，逻辑分支处理错误，导致解析失败。
+  2. **VFS 接口设计缺陷**：在修复了路径解析后，底层 `ramfs_unlink(struct inode *dir, const char *name)` 依然失败。原因在于 `ramfs` 的目录树强依赖 VFS 的 `dcache`（即 `dentry` 树）来存储层级关系。而 `vfs_unlink` 之前只传递了父目录的 `inode`，`ramfs` 试图通过 `vfs_dentry_get(dir, NULL)` 获取父目录的 `dentry` 时，该函数为了兼容老代码，实际上**分配了一个全新的、空的 dummy dentry**。因此，它的 `children` 链表为空，永远找不到目标子文件。
+- **解决**：
+  1. 修复 `vfs_unlink` 中关于 `slash == 0` 的边界条件，正确将 `/test.txt` 拆分为 parent `/` 和 name `test.txt`。
+  2. 重构了 `fs.h` 中的文件操作接口：将 `int (*unlink)(struct inode*, const char *name)` 修改为 `int (*unlink)(struct dentry *dir_dentry, const char *name)`。
+  3. 在 `vfs_unlink` 中，直接将 `path_walk` 获取到的真实父级 `pdentry` 传递给底层，使得 `ramfs` 能够正确遍历真实的 `children` 链表并摘除节点。
+- **结论**：当底层文件系统（如内存文件系统）复用 VFS 的目录缓存结构时，VFS 层必须传递完整的树节点上下文（`dentry`），而不能仅仅传递孤立的 `inode`。

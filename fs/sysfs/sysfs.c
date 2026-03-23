@@ -26,7 +26,8 @@ static uint32_t sys_read_kernel_version(struct inode *node, uint32_t offset, uin
     (void)node;
     static const char *text = "lite-os 0.2\n";
     uint32_t n = (uint32_t)strlen(text);
-    if (offset >= n) return 0;
+    if (offset >= n)
+        return 0;
     uint32_t remain = n - offset;
     if (size > remain) size = remain;
     memcpy(buffer, text + offset, size);
@@ -45,7 +46,8 @@ static uint32_t sys_read_kernel_uptime(struct inode *node, uint32_t offset, uint
         tmp[off++] = '\n';
         tmp[off] = 0;
     }
-    if (offset >= off) return 0;
+    if (offset >= off)
+        return 0;
     uint32_t remain = off - offset;
     if (size > remain) size = remain;
     memcpy(buffer, tmp + offset, size);
@@ -54,7 +56,8 @@ static uint32_t sys_read_kernel_uptime(struct inode *node, uint32_t offset, uint
 
 static uint32_t sys_read_device_type(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
-    if (!node || !buffer) return 0;
+    if (!node || !buffer)
+        return 0;
     struct device *dev = (struct device*)(uintptr_t)node->impl;
     const char *text = (dev && dev->type) ? dev->type : "unknown";
     char tmp[64];
@@ -63,7 +66,8 @@ static uint32_t sys_read_device_type(struct inode *node, uint32_t offset, uint32
     memcpy(tmp, text, n);
     tmp[n++] = '\n';
     tmp[n] = 0;
-    if (offset >= n) return 0;
+    if (offset >= n)
+        return 0;
     uint32_t remain = n - offset;
     if (size > remain) size = remain;
     memcpy(buffer, tmp + offset, size);
@@ -72,7 +76,8 @@ static uint32_t sys_read_device_type(struct inode *node, uint32_t offset, uint32
 
 static uint32_t sys_read_device_bus(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
-    if (!node || !buffer) return 0;
+    if (!node || !buffer)
+        return 0;
     struct device *dev = (struct device*)(uintptr_t)node->impl;
     const char *text = (dev && dev->bus) ? dev->bus->kobj.name : "none";
     char tmp[64];
@@ -81,7 +86,8 @@ static uint32_t sys_read_device_bus(struct inode *node, uint32_t offset, uint32_
     memcpy(tmp, text, n);
     tmp[n++] = '\n';
     tmp[n] = 0;
-    if (offset >= n) return 0;
+    if (offset >= n)
+        return 0;
     uint32_t remain = n - offset;
     if (size > remain) size = remain;
     memcpy(buffer, tmp + offset, size);
@@ -90,7 +96,8 @@ static uint32_t sys_read_device_bus(struct inode *node, uint32_t offset, uint32_
 
 static uint32_t sys_read_device_driver(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
-    if (!node || !buffer) return 0;
+    if (!node || !buffer)
+        return 0;
     struct device *dev = (struct device*)(uintptr_t)node->impl;
     const char *text = (dev && dev->driver) ? dev->driver->kobj.name : "unbound";
     char tmp[64];
@@ -99,7 +106,8 @@ static uint32_t sys_read_device_driver(struct inode *node, uint32_t offset, uint
     memcpy(tmp, text, n);
     tmp[n++] = '\n';
     tmp[n] = 0;
-    if (offset >= n) return 0;
+    if (offset >= n)
+        return 0;
     uint32_t remain = n - offset;
     if (size > remain) size = remain;
     memcpy(buffer, tmp + offset, size);
@@ -151,9 +159,11 @@ static struct file_operations sys_read_device_driver_ops = {
 
 static sysfs_dev_entry_t *sysfs_get_device_entry(struct device *dev)
 {
-    if (!dev) return NULL;
+    if (!dev)
+        return NULL;
     for (uint32_t i = 0; i < (sizeof(sys_dev_entries) / sizeof(sys_dev_entries[0])); i++) {
-        if (sys_dev_entries[i].used && sys_dev_entries[i].dev == dev) return &sys_dev_entries[i];
+        if (sys_dev_entries[i].used && sys_dev_entries[i].dev == dev)
+            return &sys_dev_entries[i];
     }
     for (uint32_t i = 0; i < (sizeof(sys_dev_entries) / sizeof(sys_dev_entries[0])); i++) {
         if (!sys_dev_entries[i].used) {
@@ -210,9 +220,11 @@ static sysfs_dev_entry_t *sysfs_get_device_entry(struct device *dev)
 static struct dirent *sys_devdir_readdir(struct file *file, uint32_t index)
 {
     struct inode *node = file->dentry->inode;
-    if (!node) return NULL;
+    if (!node)
+        return NULL;
     sysfs_dev_entry_t *e = (sysfs_dev_entry_t*)(uintptr_t)node->impl;
-    if (!e || !e->used) return NULL;
+    if (!e || !e->used)
+        return NULL;
     if (index == 0) {
         strcpy(sys_dirent.name, "type");
         sys_dirent.ino = e->f_type.i_ino;
@@ -233,12 +245,17 @@ static struct dirent *sys_devdir_readdir(struct file *file, uint32_t index)
 
 static struct inode *sys_devdir_finddir(struct inode *node, const char *name)
 {
-    if (!node || !name) return NULL;
+    if (!node || !name)
+        return NULL;
     sysfs_dev_entry_t *e = (sysfs_dev_entry_t*)(uintptr_t)node->impl;
-    if (!e || !e->used) return NULL;
-    if (!strcmp(name, "type")) return &e->f_type;
-    if (!strcmp(name, "bus")) return &e->f_bus;
-    if (!strcmp(name, "driver")) return &e->f_driver;
+    if (!e || !e->used)
+        return NULL;
+    if (!strcmp(name, "type"))
+        return &e->f_type;
+    if (!strcmp(name, "bus"))
+        return &e->f_bus;
+    if (!strcmp(name, "driver"))
+        return &e->f_driver;
     return NULL;
 }
 
@@ -262,9 +279,12 @@ static struct dirent *sys_kernel_readdir(struct file *file, uint32_t index)
 static struct inode *sys_kernel_finddir(struct inode *node, const char *name)
 {
     (void)node;
-    if (!name) return NULL;
-    if (!strcmp(name, "version")) return &sys_kernel_version;
-    if (!strcmp(name, "uptime")) return &sys_kernel_uptime;
+    if (!name)
+        return NULL;
+    if (!strcmp(name, "version"))
+        return &sys_kernel_version;
+    if (!strcmp(name, "uptime"))
+        return &sys_kernel_uptime;
     return NULL;
 }
 
@@ -273,7 +293,8 @@ static struct dirent *sys_devices_readdir(struct file *file, uint32_t index)
     struct inode *node = file->dentry->inode;
     (void)node;
     struct device *dev = device_model_device_at(index);
-    if (!dev) return NULL;
+    if (!dev)
+        return NULL;
     strcpy(sys_dirent.name, dev->kobj.name);
     sys_dirent.ino = 0x6000 + index;
     return &sys_dirent;
@@ -282,11 +303,14 @@ static struct dirent *sys_devices_readdir(struct file *file, uint32_t index)
 static struct inode *sys_devices_finddir(struct inode *node, const char *name)
 {
     (void)node;
-    if (!name) return NULL;
+    if (!name)
+        return NULL;
     struct device *dev = device_model_find_device(name);
-    if (!dev) return NULL;
+    if (!dev)
+        return NULL;
     sysfs_dev_entry_t *e = sysfs_get_device_entry(dev);
-    if (!e) return NULL;
+    if (!e)
+        return NULL;
     return &e->dir;
 }
 
@@ -310,9 +334,12 @@ static struct dirent *sys_readdir(struct file *file, uint32_t index)
 static struct inode *sys_finddir(struct inode *node, const char *name)
 {
     (void)node;
-    if (!name) return NULL;
-    if (!strcmp(name, "kernel")) return &sys_kernel;
-    if (!strcmp(name, "devices")) return &sys_devices;
+    if (!name)
+        return NULL;
+    if (!strcmp(name, "kernel"))
+        return &sys_kernel;
+    if (!strcmp(name, "devices"))
+        return &sys_devices;
     return NULL;
 }
 
@@ -369,7 +396,8 @@ static struct file_operations sys_read_kernel_uptime_ops = {
 void init_sysfs(void)
 {
     struct inode *sys_root = (struct inode *)kmalloc(sizeof(struct inode));
-    if (!sys_root) return;
+    if (!sys_root)
+        return;
 
     memset(sys_dev_entries, 0, sizeof(sys_dev_entries));
     memset(sys_root, 0, sizeof(struct inode));

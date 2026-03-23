@@ -27,5 +27,11 @@ uint32_t isr_get_count(uint8_t vector);
 
 #define IRQ0 32
 #define IRQ1 33
+#define IRQ2 34
+#define IRQ3 35
+#define IRQ4 36
+#define IRQ5 37
+#define IRQ6 38
+#define IRQ7 39
 
 #endif

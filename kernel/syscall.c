@@ -24,13 +24,17 @@ static inline void irq_restore(uint32_t flags)
 
 static int copyin_cstr(char *dst, uint32_t dst_len, const char *src_user)
 {
-    if (!dst || dst_len == 0) return -1;
-    if (!src_user) return -1;
+    if (!dst || dst_len == 0)
+        return -1;
+    if (!src_user)
+        return -1;
     for (uint32_t i = 0; i + 1 < dst_len; i++) {
         char c = 0;
-        if (vmm_copyin(&c, src_user + i, 1) != 0) return -1;
+        if (vmm_copyin(&c, src_user + i, 1) != 0)
+            return -1;
         dst[i] = c;
-        if (c == 0) return 0;
+        if (c == 0)
+            return 0;
     }
     dst[dst_len - 1] = 0;
     return 0;
@@ -90,13 +94,6 @@ struct registers *syscall_handler(struct registers *regs)
                 SYSCALL_RETURN();
             }
         }
-    } else if (regs->eax == SYS_GETDENT) {
-        if (from_user) {
-            if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ecx, regs->edx, 1)) {
-                regs->eax = (uint32_t)-1;
-                SYSCALL_RETURN();
-            }
-        }
     } else if (regs->eax == SYS_GETDENTS) {
         if (from_user) {
             if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ecx, regs->edx, 1)) {
@@ -105,6 +102,13 @@ struct registers *syscall_handler(struct registers *regs)
             }
         }
     } else if (regs->eax == SYS_CHDIR) {
+        if (from_user) {
+            if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ebx, 1, 0)) {
+                regs->eax = (uint32_t)-1;
+                SYSCALL_RETURN();
+            }
+        }
+    } else if (regs->eax == SYS_UNLINK) {
         if (from_user) {
             if (!vmm_user_accessible(vmm_get_current_directory(), (void*)regs->ebx, 1, 0)) {
                 regs->eax = (uint32_t)-1;
@@ -179,9 +183,11 @@ struct registers *syscall_handler(struct registers *regs)
                 }
 
                 uint32_t n = file_write(d->file, (uint8_t*)tmp, chunk);
-                if (n == 0) break;
+                if (n == 0)
+                    break;
                 off += n;
-                if (n < chunk) break;
+                if (n < chunk)
+                    break;
             }
             regs->eax = off;
             break;
@@ -225,7 +231,8 @@ struct registers *syscall_handler(struct registers *regs)
                 if (chunk > sizeof(tmp)) chunk = sizeof(tmp);
 
                 uint32_t n = file_read(d->file, (uint8_t*)tmp, chunk);
-                if (n == 0) break;
+                if (n == 0)
+                    break;
 
                 if (from_user) {
                     if (vmm_copyout((void*)(regs->ecx + off), tmp, n) != 0) {
@@ -237,7 +244,8 @@ struct registers *syscall_handler(struct registers *regs)
                 }
 
                 off += n;
-                if (n < chunk) break;
+                if (n < chunk)
+                    break;
             }
             regs->eax = off;
             break;
@@ -318,6 +326,20 @@ struct registers *syscall_handler(struct registers *regs)
             regs->eax = n;
             break;
         }
+        case SYS_UNLINK: {
+            char path[128];
+            if (from_user) {
+                if (copyin_cstr(path, sizeof(path), (const char*)regs->ebx) != 0) {
+                    regs->eax = (uint32_t)-1;
+                    break;
+                }
+            } else {
+                strcpy(path, (const char*)regs->ebx);
+            }
+            int ret = vfs_unlink(path);
+            regs->eax = (uint32_t)ret;
+            break;
+        }
         case SYS_MKDIR: {
             char path[128];
             if (from_user) {
@@ -329,47 +351,6 @@ struct registers *syscall_handler(struct registers *regs)
                 strcpy(path, (const char*)regs->ebx);
             }
             regs->eax = (uint32_t)(vfs_mkdir(path) == 0 ? 0 : (uint32_t)-1);
-            break;
-        }
-        case SYS_GETDENT: {
-            int fd = (int)regs->ebx;
-            task_fd_t *d = task_fd_get(fd);
-            if (!d || !d->file || !d->file->dentry || !d->file->dentry->inode) {
-                regs->eax = (uint32_t)-1;
-                break;
-            }
-            if ((d->file->dentry->inode->flags & 0x7) != FS_DIRECTORY) {
-                /* Not a directory */
-                regs->eax = (uint32_t)-1;
-                break;
-            }
-            if (!vfs_check_access(d->file->dentry->inode, 1, 0, 1)) {
-                printf("DEBUG: sys_getdents fd %d access denied\n", fd);
-                regs->eax = (uint32_t)-1;
-                break;
-            }
-
-            struct dirent *de = readdir_fs(d->file, d->file->pos);
-            if (!de) {
-                regs->eax = 0;
-                break;
-            }
-            d->file->pos++;
-
-            uint32_t out_cap = regs->edx;
-            if (out_cap < sizeof(struct dirent)) {
-                regs->eax = (uint32_t)-1;
-                break;
-            }
-            if (from_user) {
-                if (vmm_copyout((void*)regs->ecx, de, sizeof(struct dirent)) != 0) {
-                    regs->eax = (uint32_t)-1;
-                    break;
-                }
-            } else {
-                memcpy((void*)regs->ecx, de, sizeof(struct dirent));
-            }
-            regs->eax = sizeof(struct dirent);
             break;
         }
         case SYS_GETDENTS: {
@@ -401,9 +382,8 @@ struct registers *syscall_handler(struct registers *regs)
             uint32_t off = 0;
             while (off + 12 <= out_cap) {
                 struct dirent *de = readdir_fs(d->file, d->file->pos);
-                if (!de) {
+                if (!de)
                     break;
-                }
                 uint32_t name_len = (uint32_t)strlen(de->name);
                 uint32_t reclen = 10 + name_len + 1;
                 reclen = (reclen + 3) & ~3;

@@ -59,15 +59,17 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
 - **sysfs（最小自描述接口）**：
   - `/sys/kernel/version`、`/sys/kernel/uptime`。
   - `/sys/devices/<dev>/{type,bus,driver}`：设备模型最小视图（目前默认注册 console/initrd/ramfs 并自动绑定同名 driver）。
-- **驱动模型与设备树**：引入类 Linux 2.6 的 `driver_init`、`.initcall.init` 段收集与 `module_init` 宏自动加载机制。
-- **用户态交互**：完全移除内核态 Shell，由 1号进程 (`init.elf`) 挂载文件系统并 fork 执行真正的用户态 Shell (`shell.elf`)，实现彻底的特权级分离。内置提供基于 C 语言编写的集成测试程序 `/bin/unit_test`。
+- **驱动模型与设备树**：
+  - 引入类 Linux 2.6 的 `driver_init`、`.initcall.init` 段收集与 `module_init` 宏自动加载机制。
+  - **初始化解耦**：将内核的“早期打印控制台（Early Console，无中断、轮询输出）”与“完整设备驱动（中断使能、队列管理）”彻底分离。核心初始化（CPU/内存/中断）在 `start_kernel` 中完成，而完整的驱动初始化被延迟到 `PID=1` 的内核 `init` 线程中，通过 `do_initcalls` 安全加载，完美符合 Linux 规范。
+- **用户态交互**：完全移除内核态 Shell，由 1号进程 (`/sbin/init`) 挂载文件系统并 fork 执行真正的用户态 Shell (`/sbin/sh`)，实现彻底的特权级分离。内置提供基于 C 语言编写的集成测试程序 `/bin/smoke`。
 - **文件系统 (VFS)**：结构体 (`i_ino`, `i_mode`, `i_size`) 和全局动态 inode 分配器 (`get_next_ino`) 完美对齐 Linux 2.6 标准，支持虚拟文件系统如 `ramfs`、`devfs`、`procfs`、`sysfs`。
 - **系统调用 (int 0x80)**：
   - 用户态 syscall 会进行用户指针校验，避免非法地址导致内核崩溃。
   - `SYS_WRITE/SYS_READ` 在内核侧通过 `copyin/copyout` 分段拷贝访问用户缓冲区。
   - `SYS_READ/SYS_WRITE` 提供最小 `read(fd,...)` / `write(fd,...)` 风格接口（fd=0/1/2 绑定 `/dev/console`），fdtable 为 per-task，fd 持有 file 对象与 offset。
-  - `SYS_OPEN/SYS_CLOSE` 提供最小路径打开与关闭能力（路径解析基于 VFS mount 表）。
-  - `SYS_CHDIR/SYS_GETCWD/SYS_GETDENT/SYS_GETDENTS/SYS_MKDIR` 支持用户态 shell 做路径切换、目录遍历与创建目录。
+  - `SYS_OPEN/SYS_CLOSE/SYS_UNLINK` 提供最小路径打开、关闭与删除文件能力（路径解析基于 VFS mount 表），支持内存物理页回收。
+  - `SYS_CHDIR/SYS_GETCWD/SYS_GETDENTS/SYS_MKDIR` 支持用户态 shell 做路径切换、目录遍历与创建目录。
   - `SYS_GETUID/SYS_GETGID/SYS_UMASK/SYS_CHMOD` 提供最小权限与掩码接口。
   - `SYS_EXECVE` 支持在用户态替换当前进程映像（最小 exec）。
   - `SYS_WAITPID` 支持用户态等待子进程退出并获取退出信息。
@@ -94,27 +96,22 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
 在终端中进入 `lite` 目录，执行以下命令：
 
 ```bash
-# 清理并编译内核二进制 (myos.bin)
+# 清理并编译内核二进制与 initramfs
 make clean && make
-
-# [推荐] 运行自动化 smoke 测试（编译 + QEMU 启动 + 串口交互断言）
-make smoke
 
 # 使用 QEMU 启动内核（图形界面模式）
 # 注意：此模式下 Shell 输入依赖 QEMU 窗口焦点
-qemu-system-i386 -kernel myos.bin -initrd initrd.img -m 512M
+qemu-system-i386 -kernel out/myos.bin -initrd out/initramfs.cpio -m 512M
 
-# [推荐] 使用调试脚本启动（无头模式 + 串口交互）
-# 适合在无图形界面的服务器或 SSH 环境下开发
-./debug.sh
+# [推荐] 使用无头模式 + 串口交互启动
+qemu-system-i386 -kernel out/myos.bin -initrd out/initramfs.cpio -m 512M -serial stdio -display none
 ```
 
-*提示：使用 `./debug.sh` 启动后，您可以在当前终端直接与 OS Shell 交互。按 `Ctrl+A` 然后按 `X` 退出 QEMU。*
+*提示：启动后，您可以在当前终端直接与 OS Shell 交互。支持直接输入路径（如 `/bin/smoke`）执行用户态程序。按 `Ctrl+A` 然后按 `X` 退出 QEMU。*
 
 ## 学习指南
-如果您想深入了解本项目每一行代码的运作原理，请阅读 [LEARNING.md](./LEARNING.md)。该文档详细拆解了引导流程、中断上下文切换、驱动编写等核心细节。
+如果您想深入了解本项目每一行代码的运作原理，请阅读 [Documentation/Annotation.md](./Documentation/Annotation.md)。该文档详细拆解了引导流程、中断上下文切换、驱动模型、VFS、系统调用等核心细节。
 
-此外，在 `docs/` 目录下还提供了以下参考资料：
-- [all_issues_summary.md](./docs/all_issues_summary.md)：项目开发过程中的疑难 Bug 及排查过程汇总（包含 InitRD 和串口交互等经典问题）。
-- [os_knowledge_qa.md](./docs/os_knowledge_qa.md)：操作系统底层核心概念（如 IDT、PIC、分页恒等映射等）的 Q&A 问答指南。
-- [roadmap_v4.md](./docs/roadmap_v4.md)：面向 Linux-like 内核的最新演进路线图（v4）。
+此外，在 `Documentation/` 目录下还提供了以下参考资料：
+- [Issues.md](./Documentation/Issues.md)：项目开发过程中的疑难 Bug 及排查过程汇总（包含 InitRD 和串口交互等经典问题）。
+- [Directory-Structure.md](./Documentation/Directory-Structure.md)：详细的目录结构与模块职责说明。

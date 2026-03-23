@@ -16,7 +16,8 @@ int strncmp(const char *s1, const char *s2, int n) {
         s2++;
         n--;
     }
-    if (n == 0) return 0;
+    if (n == 0)
+        return 0;
     return *(const unsigned char*)s1 - *(const unsigned char*)s2;
 }
 
@@ -37,12 +38,12 @@ void skip_spaces(char **p) {
 char* split_token(char **p) {
     skip_spaces(p);
     char *token = *p;
-    if (*token == '\0') return 0;
-    
-    while (**p && **p != ' ') {
+    if (*token == '\0')
+        return 0;
+
+    while (**p && **p != ' ')
         (*p)++;
-    }
-    
+
     if (**p == ' ') {
         **p = '\0';
         (*p)++;
@@ -59,18 +60,19 @@ struct linux_dirent {
 
 void do_ls(char *path) {
     if (!path || *path == '\0') path = ".";
-    
+
     int fd = open(path, 0);
     if (fd < 0) {
         print("ls: open failed\n");
         return;
     }
-    
+
     char buf[256];
     while (1) {
         int nread = syscall3(21, fd, (int)buf, sizeof(buf)); // SYS_GETDENTS = 21
-        if (nread <= 0) break;
-        
+        if (nread <= 0)
+            break;
+
         int bpos = 0;
         while (bpos < nread) {
             struct linux_dirent *d = (struct linux_dirent *)(buf + bpos);
@@ -87,17 +89,18 @@ void do_cat(char *path) {
         print("cat: missing path\n");
         return;
     }
-    
+
     int fd = open(path, 0);
     if (fd < 0) {
         print("cat: open failed\n");
         return;
     }
-    
+
     char buf[256];
     while (1) {
         int nread = read(fd, buf, sizeof(buf));
-        if (nread <= 0) break;
+        if (nread <= 0)
+            break;
         write(1, buf, nread);
     }
     close(fd);
@@ -108,13 +111,13 @@ void do_writefile(char *path, char *content) {
         print("writefile: missing args\n");
         return;
     }
-    
+
     int fd = open(path, O_CREAT | O_TRUNC);
     if (fd < 0) {
         print("writefile: open failed\n");
         return;
     }
-    
+
     write(fd, content, strlen(content));
     write(fd, "\n", 1);
     close(fd);
@@ -125,7 +128,7 @@ void do_run(char *path) {
         print("run: missing path\n");
         return;
     }
-    
+
     int pid = fork();
     if (pid == 0) {
         execve(path);
@@ -139,19 +142,31 @@ void do_run(char *path) {
     }
 }
 
+void do_rm(char *path) {
+    if (!path || *path == '\0') {
+        print("rm: missing path\n");
+        return;
+    }
+
+    int ret = unlink(path);
+    if (ret < 0)
+        print("rm: failed to remove file\n");
+}
+
 int main() {
     print("ush: user shell\n");
     char linebuf[256];
-    
+
     while (1) {
         print("ush$ ");
         int pos = 0;
         char c;
-        
+
         while (1) {
             int n = read(0, &c, 1);
-            if (n <= 0) continue;
-            
+            if (n <= 0)
+                continue;
+
             if (c == '\r' || c == '\n') {
                 linebuf[pos] = '\0';
                 // TTY driver already echoes '\n', we don't need to print it again here
@@ -169,11 +184,12 @@ int main() {
                 // print_char(c);
             }
         }
-        
+
         char *p = linebuf;
         char *cmd = split_token(&p);
-        if (!cmd) continue;
-        
+        if (!cmd)
+            continue;
+
         if (strcmp(cmd, "pwd") == 0) {
             char cwd[128];
             int ret = syscall2(11, (int)cwd, sizeof(cwd)); // SYS_GETCWD
@@ -192,6 +208,8 @@ int main() {
         } else if (strcmp(cmd, "mkdir") == 0) {
             char *dir = split_token(&p);
             if (dir) syscall1(13, (int)dir); // SYS_MKDIR
+        } else if (strcmp(cmd, "rm") == 0) {
+            do_rm(split_token(&p));
         } else if (strcmp(cmd, "writefile") == 0) {
             char *file = split_token(&p);
             skip_spaces(&p); // The rest is content
@@ -201,9 +219,10 @@ int main() {
         } else if (strcmp(cmd, "exit") == 0) {
             exit(0);
         } else {
-            print("unknown\n");
+            // If it's not a built-in command, try to execute it as a program
+            do_run(cmd);
         }
     }
-    
+
     return 0;
 }

@@ -18,23 +18,29 @@ static uint32_t ramfs_apply_umask(uint32_t mode)
 
 static int ramfs_valid_name(const char *name)
 {
-    if (!name || !*name) return 0;
+    if (!name || !*name)
+        return 0;
     for (const char *p = name; *p; p++) {
-        if (*p == '/') return 0;
+        if (*p == '/')
+            return 0;
     }
     return 1;
 }
 
 struct inode *ramfs_create_child(struct inode *dir, const char *name, uint32_t type)
 {
-    if (!dir || !name) return NULL;
-    if (!ramfs_valid_name(name)) return NULL;
-    if ((dir->flags & 0x7) != FS_DIRECTORY) return NULL;
+    if (!dir || !name)
+        return NULL;
+    if (!ramfs_valid_name(name))
+        return NULL;
+    if ((dir->flags & 0x7) != FS_DIRECTORY)
+        return NULL;
     // Actually, `ramfs_create_child` is called by `vfs_open` and `vfs_mkdir` when it wants to create a file.
     // They already handle the dcache! So `ramfs_create_child` just needs to return a new bare inode!
 
     struct inode *inode = (struct inode*)kmalloc(sizeof(struct inode));
-    if (!inode) return NULL;
+    if (!inode)
+        return NULL;
     memset(inode, 0, sizeof(*inode));
 
     inode->i_ino = get_next_ino();
@@ -59,6 +65,60 @@ struct inode *ramfs_create_child(struct inode *dir, const char *name, uint32_t t
     return inode;
 }
 
+static int ramfs_unlink(struct dentry *dir_dentry, const char *name)
+{
+    if (!dir_dentry || !name)
+        return -1;
+    struct inode *dir = dir_dentry->inode;
+    if (!dir || (dir->flags & 0x7) != FS_DIRECTORY)
+        return -1;
+
+    struct dentry *child = dir_dentry->children;
+    struct dentry *found = NULL;
+    while (child) {
+        if (strcmp(child->name, name) == 0) {
+            found = child;
+            break;
+        }
+        child = child->sibling;
+    }
+
+    if (!found)
+        return -1; // File not found
+
+    struct inode *target = found->inode;
+    if (!target)
+        return -1;
+
+    if ((target->flags & 0x7) == FS_DIRECTORY) {
+        // Simple protection: don't unlink directories, use rmdir
+        return -1;
+    }
+
+    // Truncate the file mapping to free physical pages
+    if (target->i_mapping)
+        truncate_inode_pages(target->i_mapping, 0);
+
+    target->flags = 0; // Mark as deleted/invalid
+    target->i_size = 0;
+
+    // Explicitly detach from parent dcache to ensure it disappears
+    if (found->parent) {
+        if (found->parent->children == found) {
+            found->parent->children = found->sibling;
+        } else {
+            struct dentry *curr = found->parent->children;
+            while (curr && curr->sibling != found)
+                curr = curr->sibling;
+
+            if (curr)
+                curr->sibling = found->sibling;
+        }
+    }
+
+    return 0;
+}
+
 static struct file_operations ramfs_dir_ops = {
     .read = NULL,
     .write = NULL,
@@ -66,7 +126,8 @@ static struct file_operations ramfs_dir_ops = {
     .close = NULL,
     .readdir = generic_readdir,
     .finddir = NULL,
-    .ioctl = NULL
+    .ioctl = NULL,
+    .unlink = ramfs_unlink
 };
 
 static struct file_operations ramfs_file_ops = {

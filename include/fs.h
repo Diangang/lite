@@ -28,6 +28,7 @@ struct file_operations {
     struct dirent * (*readdir)(struct file*, uint32_t);
     struct inode * (*finddir)(struct inode*, const char *name);
     int (*ioctl)(struct inode*, uint32_t, uint32_t);
+    int (*unlink)(struct dentry *dir_dentry, const char *name);
 };
 
 /* VFS Inode - Represents a file entity */
@@ -103,6 +104,7 @@ const char *task_get_cwd(void);
 int vfs_mount_root(const char *path, struct inode *root_node);
 int vfs_chdir(const char *path);
 int vfs_mkdir(const char *path);
+int vfs_unlink(const char *path);
 struct inode *vfs_resolve(const char *path);
 int vfs_chmod(const char *path, uint32_t mode);
 int vfs_check_access(struct inode *node, int want_read, int want_write, int want_exec);

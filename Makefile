@@ -28,8 +28,8 @@ USH_ELF = $(OUT_DIR)/shell.elf
 USH_OBJS = usr/crt0.o usr/ulib.o usr/shell.o
 INIT_ELF = $(OUT_DIR)/init.elf
 INIT_OBJS = usr/crt0.o usr/ulib.o usr/init.o
-UNIT_TEST_ELF = $(OUT_DIR)/unit_test.elf
-UNIT_TEST_OBJS = usr/crt0.o usr/ulib.o usr/unit_test.o
+UNIT_TEST_ELF = $(OUT_DIR)/smoke.elf
+UNIT_TEST_OBJS = usr/crt0.o usr/ulib.o usr/smoke.o
 USER_ELFS = $(USH_ELF) $(INIT_ELF) $(UNIT_TEST_ELF)
 
 all: $(OUT_DIR) $(KERNEL) $(INITRAMFS)
@@ -65,7 +65,7 @@ $(INITRAMFS): $(USER_ELFS)
 	cp $(INIT_ELF) rootfs/sbin/init
 	cp $(USH_ELF) rootfs/sbin/sh
 	# Copy other tools to /bin (dropping .elf extension for aesthetics)
-	cp $(UNIT_TEST_ELF) rootfs/bin/unit_test
+	cp $(UNIT_TEST_ELF) rootfs/bin/smoke
 	cd rootfs && find . | cpio -o -H newc > ../$(INITRAMFS)
 	rm -rf rootfs
 
