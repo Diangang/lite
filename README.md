@@ -60,7 +60,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `/sys/kernel/version`、`/sys/kernel/uptime`。
   - `/sys/devices/<dev>/{type,bus,driver}`：设备模型最小视图（目前默认注册 console/initrd/ramfs 并自动绑定同名 driver）。
 - **驱动模型与设备树**：引入类 Linux 2.6 的 `driver_init`、`.initcall.init` 段收集与 `module_init` 宏自动加载机制。
-- **用户态交互**：完全移除内核态 Shell，由 1号进程 (`init.elf`) 挂载文件系统并 fork 执行真正的用户态 Shell (`ush.elf`)，实现彻底的特权级分离。内置提供 `/ktest.elf` 等独立测试程序。
+- **用户态交互**：完全移除内核态 Shell，由 1号进程 (`init.elf`) 挂载文件系统并 fork 执行真正的用户态 Shell (`shell.elf`)，实现彻底的特权级分离。内置提供基于 C 语言编写的集成测试程序 `/bin/unit_test`。
 - **文件系统 (VFS)**：结构体 (`i_ino`, `i_mode`, `i_size`) 和全局动态 inode 分配器 (`get_next_ino`) 完美对齐 Linux 2.6 标准，支持虚拟文件系统如 `ramfs`、`devfs`、`procfs`、`sysfs`。
 - **系统调用 (int 0x80)**：
   - 用户态 syscall 会进行用户指针校验，避免非法地址导致内核崩溃。

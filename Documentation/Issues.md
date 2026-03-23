@@ -111,7 +111,7 @@
 - **解决**：仅当 syscall 来自 Ring3 时启用用户指针校验；内核态触发的 `int 0x80` 允许使用内核指针用于演示。
 
 ### 6.5 用户态 shell 进入即 Page Fault（栈页基址设置错误）
-- **现象**：执行 `run ush.elf` 后立刻触发 `Page Fault! ( not-present write user ) at 0xbffffffc`，并显示 `User Page Fault: out of range.`，用户任务被终止。
+- **现象**：执行 `run shell.elf` 后立刻触发 `Page Fault! ( not-present write user ) at 0xbffffffc`，并显示 `User Page Fault: out of range.`，用户任务被终止。
 - **定位**：该地址位于用户栈顶页（`0xBFFFF000` - `0xBFFFFFFF`）。但加载器在建立用户 VMA/映射时，把 `user_stack_base` 误写成 `0xBFF000`，导致：
   - VMA 仅覆盖低地址的“栈页”，不包含 `0xBFFFF000`；
   - `enter_user_mode()` 传入的用户栈顶固定为 `0xC0000000`，首次压栈必然写到 `0xBFFFFFFC`，触发缺页；
@@ -139,12 +139,12 @@
   3. 为虚拟根目录、`initrd` 和 `ramfs` 的 `readdir` 补充硬编码的 `.` 和 `..` 目录项返回逻辑，以符合 POSIX 预期。
 
 ### 6.9 用户态 execve 退出后父进程触发 Page Fault (EIP 0x400037)
-- **现象**：在用户态 shell (`ush.elf`) 中执行 `run cat.elf` 后，`cat.elf` 正常输出内容并退出。但当控制权交还给父进程继续执行 `SYS_WAITPID` 之后的指令（EIP: 0x400037）时，触发了 `Page Fault`（试图读取地址 `0x0`，导致 unhandled 崩溃）。
+- **现象**：在用户态 shell (`shell.elf`) 中执行 `run cat.elf` 后，`cat.elf` 正常输出内容并退出。但当控制权交还给父进程继续执行 `SYS_WAITPID` 之后的指令（EIP: 0x400037）时，触发了 `Page Fault`（试图读取地址 `0x0`，导致 unhandled 崩溃）。
 - **定位**：
   1. **内核页表共享冲突**：在 `init_vmm` 中，内核将物理内存的前 `128MB` 进行了恒等映射（Identity Mapping）。
-  2. **加载基址冲突**：用户程序的链接脚本 `userprog.ld` 之前的加载基址为 `0x400000`（4MB），恰好落在内核恒等映射的范围内。
-  3. **相互破坏**：由于落在同一范围内，`init.elf`、`ush.elf` 和 `cat.elf` 实际上共享了同一块内核页表结构。当 `ush.elf` 调用 `SYS_EXECVE` 加载新程序时，会调用 `mm_destroy` 销毁旧空间，这直接清空了共享页表中的映射条目。`cat.elf` 退出后切回父进程，由于 4MB 处的映射已被破坏，CPU 读到全零数据，引发了缺页异常。
-- **解决**：修改 `usr/userprog.ld`，将用户程序的链接基址从 `0x400000` (4MB) 提升到 `0x40000000` (1GB)。1GB 远超内核恒等映射范围，使得每个用户进程都有自己完全独立的页表区域，销毁和修改不再相互干扰。
+  2. **加载基址冲突**：用户程序的链接脚本 `ulinker.ld` 之前的加载基址为 `0x400000`（4MB），恰好落在内核恒等映射的范围内。
+  3. **相互破坏**：由于落在同一范围内，`init.elf`、`shell.elf` 和 `cat.elf` 实际上共享了同一块内核页表结构。当 `shell.elf` 调用 `SYS_EXECVE` 加载新程序时，会调用 `mm_destroy` 销毁旧空间，这直接清空了共享页表中的映射条目。`cat.elf` 退出后切回父进程，由于 4MB 处的映射已被破坏，CPU 读到全零数据，引发了缺页异常。
+- **解决**：修改 `usr/ulinker.ld`，将用户程序的链接基址从 `0x400000` (4MB) 提升到 `0x40000000` (1GB)。1GB 远超内核恒等映射范围，使得每个用户进程都有自己完全独立的页表区域，销毁和修改不再相互干扰。
 
 ---
 

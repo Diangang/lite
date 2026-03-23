@@ -12,29 +12,30 @@ SOURCES_S = arch/x86/boot/boot.s arch/x86/kernel/interrupt.s
 SOURCES_C = init/main.c kernel/syscall.c kernel/task.c \
 	arch/x86/kernel/gdt.c arch/x86/kernel/idt.c arch/x86/kernel/isr.c arch/x86/kernel/setup.c \
 	mm/mm.c mm/pmm.c mm/vmm.c mm/kheap.c mm/filemap.c lib/libc.c \
-        fs/file.c fs/inode.c fs/dentry.c fs/namei.c fs/read_write.c fs/open.c fs/readdir.c fs/ioctl.c fs/namespace.c fs/ramfs/ramfs.c fs/ramfs/ramfs_driver.c fs/procfs/procfs.c fs/devfs/devfs.c \
+	fs/file.c fs/inode.c fs/dentry.c fs/namei.c fs/read_write.c fs/open.c fs/readdir.c fs/ioctl.c fs/namespace.c fs/ramfs/ramfs.c fs/ramfs/ramfs_driver.c fs/procfs/procfs.c fs/devfs/devfs.c \
 	fs/sysfs/sysfs.c init/initramfs.c \
 	drivers/base/device_model.c drivers/input/keyboard.c \
 	drivers/clocksource/timer.c drivers/tty/tty.c drivers/tty/serial.c \
 	drivers/video/vga.c drivers/console/console.c drivers/console/console_driver.c
 OBJECTS = $(SOURCES_S:.s=.o) $(SOURCES_C:.c=.o)
 
-KERNEL = myos.bin
-ISO = myos.iso
-INITRD = initrd.img
-USER_ELF = user.elf
-USER_OBJ = usr/userprog.o
-CAT_ELF = cat.elf
-CAT_OBJ = usr/catprog.o
-USH_ELF = ush.elf
-USH_OBJ = usr/ushprog.o
-INIT_ELF = init.elf
-INIT_OBJ = usr/initprog.o
-KTEST_ELF = ktest.elf
-KTEST_OBJ = usr/ktestprog.o
-USER_ELFS = $(USER_ELF) $(CAT_ELF) $(USH_ELF) $(INIT_ELF) $(KTEST_ELF)
+OUT_DIR = out
+KERNEL = $(OUT_DIR)/myos.bin
+ISO = $(OUT_DIR)/myos.iso
+INITRAMFS = $(OUT_DIR)/initramfs.cpio
 
-all: $(KERNEL) initramfs.cpio
+USH_ELF = $(OUT_DIR)/shell.elf
+USH_OBJS = usr/crt0.o usr/ulib.o usr/shell.o
+INIT_ELF = $(OUT_DIR)/init.elf
+INIT_OBJS = usr/crt0.o usr/ulib.o usr/init.o
+UNIT_TEST_ELF = $(OUT_DIR)/unit_test.elf
+UNIT_TEST_OBJS = usr/crt0.o usr/ulib.o usr/unit_test.o
+USER_ELFS = $(USH_ELF) $(INIT_ELF) $(UNIT_TEST_ELF)
+
+all: $(OUT_DIR) $(KERNEL) $(INITRAMFS)
+
+$(OUT_DIR):
+	mkdir -p $(OUT_DIR)
 
 $(KERNEL): $(OBJECTS) arch/x86/kernel/linker.ld
 	$(LD) $(LDFLAGS) -o $@ $(OBJECTS)
@@ -57,64 +58,34 @@ iso: $(KERNEL)
 	@echo "To run the ISO with QEMU, execute manually:"
 	@echo "qemu-system-i386 -cdrom $(ISO) -curses"
 
-# Create a simple initrd creator tool
-mkinitrd:
-	@echo "mkinitrd is deprecated, using cpio instead"
-
-initramfs.cpio: $(USER_ELFS)
+$(INITRAMFS): $(USER_ELFS)
 	mkdir -p rootfs/sbin
 	mkdir -p rootfs/bin
-	# Copy init to /sbin/init
-	cp init.elf rootfs/sbin/init
+	# Copy init and shell to /sbin
+	cp $(INIT_ELF) rootfs/sbin/init
+	cp $(USH_ELF) rootfs/sbin/sh
 	# Copy other tools to /bin (dropping .elf extension for aesthetics)
-	cp ush.elf rootfs/bin/sh
-	cp cat.elf rootfs/bin/cat
-	cp ktest.elf rootfs/bin/ktest
-	cp user.elf rootfs/bin/user
-	cd rootfs && find . | cpio -o -H newc > ../initramfs.cpio
+	cp $(UNIT_TEST_ELF) rootfs/bin/unit_test
+	cd rootfs && find . | cpio -o -H newc > ../$(INITRAMFS)
 	rm -rf rootfs
 
-$(USER_OBJ): usr/userprog.s
-	$(AS) --32 $< -o $@
+$(USH_ELF): $(USH_OBJS) usr/ulinker.ld
+	$(LD) -m elf_i386 -T usr/ulinker.ld -o $@ $(USH_OBJS)
 
-$(USER_ELF): $(USER_OBJ) usr/userprog.ld
-	$(LD) -m elf_i386 -T usr/userprog.ld -o $@ $<
+$(INIT_ELF): $(INIT_OBJS) usr/ulinker.ld
+	$(LD) -m elf_i386 -T usr/ulinker.ld -o $@ $(INIT_OBJS)
 
-$(CAT_OBJ): usr/catprog.s
-	$(AS) --32 $< -o $@
+$(UNIT_TEST_ELF): $(UNIT_TEST_OBJS) usr/ulinker.ld
+	$(LD) -m elf_i386 -T usr/ulinker.ld -o $@ $(UNIT_TEST_OBJS)
 
-$(CAT_ELF): $(CAT_OBJ) usr/userprog.ld
-	$(LD) -m elf_i386 -T usr/userprog.ld -o $@ $<
+run: $(KERNEL) $(INITRAMFS)
+	qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -serial stdio
 
-$(USH_OBJ): usr/ushprog.s
-	$(AS) --32 $< -o $@
-
-$(USH_ELF): $(USH_OBJ) usr/userprog.ld
-	$(LD) -m elf_i386 -T usr/userprog.ld -o $@ $<
-
-$(INIT_OBJ): usr/initprog.s
-	$(AS) --32 $< -o $@
-
-$(INIT_ELF): $(INIT_OBJ) usr/userprog.ld
-	$(LD) -m elf_i386 -T usr/userprog.ld -o $@ $<
-
-$(KTEST_OBJ): usr/ktestprog.s
-	$(AS) --32 $< -o $@
-
-$(KTEST_ELF): $(KTEST_OBJ) usr/userprog.ld
-	$(LD) -m elf_i386 -T usr/userprog.ld -o $@ $<
-
-run: $(KERNEL) initramfs.cpio
-	qemu-system-i386 -kernel $(KERNEL) -initrd initramfs.cpio -m 512M -serial stdio
-
-debug: $(KERNEL) initramfs.cpio
-	qemu-system-i386 -kernel $(KERNEL) -initrd initramfs.cpio -m 512M -s -S -serial stdio
-
-smoke:
-	bash ./smoke_test.sh
+debug: $(KERNEL) $(INITRAMFS)
+	qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -s -S -serial stdio
 
 clean:
-	rm -f $(OBJECTS) $(KERNEL) $(ISO) initramfs.cpio $(USER_ELFS) $(USER_OBJ) $(CAT_OBJ) $(USH_OBJ) $(INIT_OBJ) $(KTEST_OBJ)
-	rm -rf isodir
+	rm -f $(OBJECTS) $(USH_OBJS) $(INIT_OBJS) $(UNIT_TEST_OBJS)
+	rm -rf $(OUT_DIR) isodir rootfs
 
 .PHONY: all iso run run-iso clean

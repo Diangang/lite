@@ -45,8 +45,13 @@ Generic library functions (e.g., `libc.c` for `string.h` implementations) used i
 
 ### `usr/`
 Early user-space programs and the initramfs payload generator.
-- Contains the assembly source for `init.elf`, `ush.elf` (user shell), `cat.elf`, etc.
+- Contains the C/assembly source for `init.elf`, `shell.elf` (user shell), `unit_test.elf` (automated test suite), etc.
+- Also contains the user-space runtime library (`ulib.c`, `ulib.h`) and entry point (`crt0.s`).
 - During the build process, these are compiled, packed into `initramfs.cpio`, and fed to the kernel, perfectly mirroring the concept of Linux's `usr/gen_init_cpio` and default early user-space.
+
+### `out/`
+Build output directory.
+- All compiled artifacts (`.o`, `.elf`, `.bin`, `.iso`, `.cpio`) are generated here to keep the source tree clean. This directory is automatically removed during `make clean`.
 
 ### `Documentation/`
 (Formerly `docs/`) Contains all architectural design documents, issue trackers, and Q&A logs.

@@ -18,7 +18,7 @@ v4 说明：在 v3 基线之上，结合最新实现（ramfs 根、用户态 she
   - 路径归一化支持 `.`/`..` 与多重 `/`；cwd 用于 shell 演示。
 - **fd 风格 syscall**：`open/read/write/close` + per-task fdtable，stdin/stdout/stderr 默认绑定 `/dev/console`。
 - **procfs/sysfs 可观测性**：`/proc/tasks /proc/sched /proc/irq /proc/maps /proc/meminfo`，以及 `/proc/<pid>/{maps,stat,cmdline,status,fd/*}`；sysfs 提供 kernel/version/uptime 与 devices 基础节点。
-- **用户态最小闭环**：`ush.elf` 用户态 shell 原型（依赖 `open/read/write/close + chdir/getcwd/getdent/mkdir`）。
+- **用户态最小闭环**：`shell.elf` 用户态 shell 原型（依赖 `open/read/write/close + chdir/getcwd/getdent/mkdir`）。
 
 已知结构性欠账（会阻塞后续阶段）：
 
@@ -68,7 +68,7 @@ v4 说明：在 v3 基线之上，结合最新实现（ramfs 根、用户态 she
 
 - 目标：提供最小 `execve`（替换当前映像）与 `waitpid`（用户态回收）。
 - 验收：
-  - 用户态 init 能 `execve("/initrd/ush.elf")` 并作为交互入口。
+  - 用户态 init 能 `execve("/initrd/shell.elf")` 并作为交互入口。
   - `waitpid` 能回收子进程并返回退出码/原因。
 
 ### A4 PID1/init 语义
