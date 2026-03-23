@@ -598,9 +598,8 @@ const char *task_get_cwd(void)
         d = d->parent;
     }
 
-    if (pos == 255) {
-        strcpy(buf, "/");
-    } else {
+    if (pos == 255)
+        strcpy(buf, "/"); else {
         // Fix double slashes if any mount root accidentally had "/" as name
         int final_pos = pos;
         if (tmp[final_pos] == '/' && tmp[final_pos + 1] == '/') final_pos++;
@@ -1991,13 +1990,10 @@ void task_list(void)
     task_t *task = task_head;
     do {
         const char *state = "RUNNABLE";
-        if (task->state == TASK_SLEEPING) {
-            state = "SLEEPING";
-        } else if (task->state == TASK_BLOCKED) {
-            state = "BLOCKED";
-        } else if (task->state == TASK_ZOMBIE) {
-            state = "ZOMBIE";
-        }
+        if (task->state == TASK_SLEEPING)
+        state = "SLEEPING"; else if (task->state == TASK_BLOCKED)
+        state = "BLOCKED"; else if (task->state == TASK_ZOMBIE)
+        state = "ZOMBIE";
         printf("%d    %s  %d    %s\n",
                task->id,
                state,

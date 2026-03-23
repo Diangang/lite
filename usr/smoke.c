@@ -98,9 +98,8 @@ void test_mmap() {
     print(addr);
 
     int ret = munmap(addr, 0x2000);
-    if (ret == 0) {
-        print("munmap succeeded.\n");
-    } else {
+    if (ret == 0)
+        print("munmap succeeded.\n"); else {
         print("munmap failed!\n");
     }
 }
@@ -109,9 +108,8 @@ void test_bad_ptr() {
     print("\n--- Test 5: Bad Pointer in Syscall ---\n");
     print("Passing invalid pointer (0x08000000) to write()...\n");
     int ret = write(1, (void*)0x08000000, 4);
-    if (ret == -1) {
-        print("Kernel correctly rejected bad pointer (returned -1).\n");
-    } else {
+    if (ret == -1)
+        print("Kernel correctly rejected bad pointer (returned -1).\n"); else {
         print("FAIL: Kernel did not reject bad pointer! Returned: ");
         print_int(ret);
         print("\n");

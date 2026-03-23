@@ -1,6 +1,7 @@
 #include "file.h"
 #include "devfs.h"
 #include "libc.h"
+#include "init.h"
 #include "tty.h"
 #include "console.h"
 #include "kheap.h"
@@ -157,5 +158,28 @@ void init_devfs(void)
     dev_tty.gid = 0;
     dev_tty.i_mode = 0666;
 
-    vfs_mount_root("/dev", dev_root);
+    struct dentry *dev_dentry = d_alloc(NULL, "/dev");
+    dev_dentry->inode = dev_root;
+    vfs_mount_root("/dev", dev_dentry);
 }
+
+struct super_block *devfs_get_sb(struct file_system_type *fs_type, int flags, const char *dev_name, void *data)
+{
+    (void)fs_type; (void)flags; (void)dev_name; (void)data;
+    return NULL;
+}
+
+static struct file_system_type devfs_fs_type = {
+    .name = "devfs",
+    .get_sb = devfs_get_sb,
+    .kill_sb = NULL,
+    .next = NULL,
+};
+
+static int init_devfs_fs(void)
+{
+    register_filesystem(&devfs_fs_type);
+    printf("devfs filesystem registered.\n");
+    return 0;
+}
+module_init(init_devfs_fs);

@@ -1,6 +1,7 @@
 #include "file.h"
 #include "procfs.h"
 #include "libc.h"
+#include "init.h"
 #include "task.h"
 #include "timer.h"
 #include "isr.h"
@@ -789,5 +790,28 @@ void init_procfs(void)
     proc_cow.gid = 0;
     proc_cow.i_mode = 0444;
 
-    vfs_mount_root("/proc", proc_root);
+    struct dentry *proc_dentry = d_alloc(NULL, "/proc");
+    proc_dentry->inode = proc_root;
+    vfs_mount_root("/proc", proc_dentry);
 }
+
+struct super_block *proc_get_sb(struct file_system_type *fs_type, int flags, const char *dev_name, void *data)
+{
+    (void)fs_type; (void)flags; (void)dev_name; (void)data;
+    return NULL;
+}
+
+static struct file_system_type proc_fs_type = {
+    .name = "proc",
+    .get_sb = proc_get_sb,
+    .kill_sb = NULL,
+    .next = NULL,
+};
+
+static int init_proc_fs(void)
+{
+    register_filesystem(&proc_fs_type);
+    printf("proc filesystem registered.\n");
+    return 0;
+}
+module_init(init_proc_fs);

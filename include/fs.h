@@ -15,7 +15,7 @@
 struct inode;
 struct dentry;
 struct file;
-struct vfs_super_block;
+struct super_block;
 
 #include "pagemap.h"
 
@@ -64,24 +64,31 @@ struct dentry {
     struct dentry *children;
     struct dentry *sibling;
     struct inode *inode;
-    struct vfs_mount *mount;
+    struct vfsmount *mount;
     uint32_t refcount;
     void *cache;
 };
 
 /* File - Represents an open file descriptor */
 
+struct file_system_type {
+    const char *name;
+    struct super_block *(*get_sb)(struct file_system_type *fs_type, int flags, const char *dev_name, void *data);
+    void (*kill_sb)(struct super_block *sb);
+    struct file_system_type *next;
+};
+
 /* VFS Superblock - Represents a mounted filesystem */
-struct vfs_super_block {
+struct super_block {
     const char *name;
     struct inode *root;
     void *fs_private;
     uint32_t refcount;
 };
 
-struct vfs_mount {
+struct vfsmount {
     const char *path;
-    struct vfs_super_block *sb;
+    struct super_block *sb;
     struct dentry *root;
 };
 
@@ -96,12 +103,19 @@ enum {
 /* Forward declaration for multiboot info */
 struct multiboot_info;
 
+/* VFS Initialization */
+void vfs_init(void);
+
 /* Standard VFS API */
+int register_filesystem(struct file_system_type *fs);
+int unregister_filesystem(struct file_system_type *fs);
+
 int vfs_path_is_prefix(const char *path, const char *prefix, uint32_t *out_tail_off);
 int vfs_normalize_path(const char *path, char *out, uint32_t cap);
 const char *task_get_cwd(void);
 
-int vfs_mount_root(const char *path, struct inode *root_node);
+int vfs_mount_root_fs(const char *fs_name);
+int vfs_mount_root(const char *path, struct dentry *mount_root);
 int vfs_chdir(const char *path);
 int vfs_mkdir(const char *path);
 int vfs_unlink(const char *path);

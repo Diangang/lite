@@ -140,16 +140,18 @@ static struct file_operations ramfs_file_ops = {
     .ioctl = NULL
 };
 
-void init_ramfs(void)
+struct super_block *ramfs_get_sb(struct file_system_type *fs_type, int flags, const char *dev_name, void *data)
 {
+    (void)fs_type; (void)flags; (void)dev_name; (void)data;
+
     struct inode *inode = (struct inode*)kmalloc(sizeof(struct inode));
     if (!inode)
-        panic("Failed to alloc ramfs inode.");
+        panic("Failed to alloc ramfs root inode.");
 
     memset(inode, 0, sizeof(*inode));
 
     inode->flags = FS_DIRECTORY;
-    inode->i_ino = 1; // The root of the whole filesystem is typically 1 or 2
+    inode->i_ino = 1;
     inode->f_ops = &ramfs_dir_ops;
     inode->uid = 0;
     inode->gid = 0;
@@ -159,5 +161,38 @@ void init_ramfs(void)
     address_space_init(mapping, inode);
     inode->i_mapping = mapping;
 
-    vfs_mount_root("/", inode);
+    struct dentry *ramfs_dentry = d_alloc(NULL, "/");
+    ramfs_dentry->inode = inode;
+
+    // Create a generic super_block for the VFS
+    struct super_block *sb = (struct super_block*)kmalloc(sizeof(struct super_block));
+    sb->name = "ramfs";
+    sb->root = inode;
+    sb->fs_private = NULL;
+    sb->refcount = 1;
+
+    // To preserve existing behavior, we set the global vfs_root_dentry here if it's not set
+    if (!vfs_root_dentry)
+        vfs_root_dentry = ramfs_dentry;
+
+    return sb;
+}
+
+static struct file_system_type ramfs_fs_type = {
+    .name = "ramfs",
+    .get_sb = ramfs_get_sb,
+    .kill_sb = NULL,
+    .next = NULL,
+};
+
+int init_ramfs_fs(void)
+{
+    static int initialized = 0;
+    if (initialized)
+        return 0;
+    initialized = 1;
+
+    register_filesystem(&ramfs_fs_type);
+    printf("ramfs filesystem registered.\n");
+    return 0;
 }

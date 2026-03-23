@@ -88,8 +88,8 @@ void start_kernel(struct multiboot_info* mbi, uint32_t magic)
     /* Initialize the entire Memory Management subsystem (PMM, VMM, KHEAP) */
     init_mm(mbi);
 
-    /* Mount core filesystems */
-    init_ramfs();
+    /* Initialize the Virtual File System (VFS) and mount rootfs */
+    vfs_init();
 
     // Extract initramfs directly into the root ramfs
     populate_rootfs(mbi);

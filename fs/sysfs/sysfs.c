@@ -1,6 +1,7 @@
 #include "file.h"
 #include "sysfs.h"
 #include "libc.h"
+#include "init.h"
 #include "timer.h"
 #include "kheap.h"
 #include "device_model.h"
@@ -441,5 +442,28 @@ void init_sysfs(void)
     sys_kernel_uptime.gid = 0;
     sys_kernel_uptime.i_mode = 0444;
 
-    vfs_mount_root("/sys", sys_root);
+    struct dentry *sys_dentry = d_alloc(NULL, "/sys");
+    sys_dentry->inode = sys_root;
+    vfs_mount_root("/sys", sys_dentry);
 }
+
+struct super_block *sysfs_get_sb(struct file_system_type *fs_type, int flags, const char *dev_name, void *data)
+{
+    (void)fs_type; (void)flags; (void)dev_name; (void)data;
+    return NULL;
+}
+
+static struct file_system_type sysfs_fs_type = {
+    .name = "sysfs",
+    .get_sb = sysfs_get_sb,
+    .kill_sb = NULL,
+    .next = NULL,
+};
+
+static int init_sysfs_fs(void)
+{
+    register_filesystem(&sysfs_fs_type);
+    printf("sysfs filesystem registered.\n");
+    return 0;
+}
+module_init(init_sysfs_fs);

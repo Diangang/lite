@@ -106,9 +106,8 @@ void print_int(int val) {
         is_neg = 1;
         val = -val;
     }
-    if (val == 0) {
-        buf[i++] = '0';
-    } else {
+    if (val == 0)
+        buf[i++] = '0'; else {
         while (val > 0) {
             buf[i++] = (val % 10) + '0';
             val /= 10;
