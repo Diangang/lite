@@ -17,7 +17,7 @@ struct file *vfs_open(const char *path, uint32_t flags)
 
         uint32_t slash = len;
         while (slash > 0 && tmp[slash - 1] != '/') slash--;
-        
+
         char parent[256];
         if (slash == 0) {
             strcpy(parent, ".");
@@ -32,10 +32,10 @@ struct file *vfs_open(const char *path, uint32_t flags)
 
         struct dentry *pdentry = path_walk(parent);
         if (!pdentry || !pdentry->inode || (pdentry->inode->flags & 0x7) != FS_DIRECTORY) return NULL;
-        
+
         struct inode *created = ramfs_create_child(pdentry->inode, name, FS_FILE);
         if (!created) return NULL;
-        
+
         struct dentry *new_d = d_alloc(pdentry, name);
         if (!new_d) return NULL;
         new_d->inode = created;

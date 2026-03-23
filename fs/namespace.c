@@ -38,9 +38,9 @@ int vfs_mount_root(const char *path, struct inode *root_node)
     m->sb->root = root_node;
     m->sb->fs_private = NULL;
 
-    struct dentry *mount_root = d_alloc(NULL, d->name); 
+    struct dentry *mount_root = d_alloc(NULL, d->name);
     // We manually set the parent to allow "cd .." to escape the mount point,
-    // BUT we intentionally DO NOT use d_alloc(d->parent) because that would 
+    // BUT we intentionally DO NOT use d_alloc(d->parent) because that would
     // inject this new root into the parent's children list, causing duplicate ls entries!
     mount_root->parent = d->parent;
     mount_root->inode = root_node;

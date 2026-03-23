@@ -32,7 +32,7 @@ struct inode *ramfs_create_child(struct inode *dir, const char *name, uint32_t t
     if ((dir->flags & 0x7) != FS_DIRECTORY) return NULL;
     // Actually, `ramfs_create_child` is called by `vfs_open` and `vfs_mkdir` when it wants to create a file.
     // They already handle the dcache! So `ramfs_create_child` just needs to return a new bare inode!
-    
+
     struct inode *inode = (struct inode*)kmalloc(sizeof(struct inode));
     if (!inode) return NULL;
     memset(inode, 0, sizeof(*inode));
@@ -55,7 +55,7 @@ struct inode *ramfs_create_child(struct inode *dir, const char *name, uint32_t t
         inode->i_size = 0;
         inode->i_mode = ramfs_apply_umask(0666);
     }
-    
+
     return inode;
 }
 
@@ -93,7 +93,7 @@ void init_ramfs(void)
     inode->uid = 0;
     inode->gid = 0;
     inode->i_mode = 0755;
-    
+
     struct address_space *mapping = (struct address_space*)kmalloc(sizeof(struct address_space));
     address_space_init(mapping, inode);
     inode->i_mapping = mapping;

@@ -33,11 +33,11 @@ static struct page_cache_entry *add_to_page_cache(struct address_space *mapping,
         kfree(p);
         return NULL;
     }
-    
-    // We need to map it temporarily to zero it. 
+
+    // We need to map it temporarily to zero it.
     // In our kernel, identity mapping 0-4MB might not cover high memory.
     // Assuming simple identity map for now if phys < 4MB, otherwise we need a temp mapping.
-    // For simplicity in Lite OS, we just use phys_addr directly if identity mapped, 
+    // For simplicity in Lite OS, we just use phys_addr directly if identity mapped,
     // or use a temporary window. Let's use physical address directly assuming it's accessible.
     // If not, you need to map it. Here we assume phys_addr is directly accessible (like < 4MB or direct mapped area).
     memset((void*)p->phys_addr, 0, 4096);
@@ -92,7 +92,7 @@ uint32_t generic_file_write(struct inode *node, uint32_t offset, uint32_t size, 
     if (!mapping) return 0;
 
     uint32_t bytes_written = 0;
-    
+
     while (size > 0) {
         uint32_t index = offset / 4096;
         uint32_t page_offset = offset % 4096;

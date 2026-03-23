@@ -88,7 +88,7 @@ struct dentry *path_walk(const char *path)
         curr = task_get_cwd_dentry();
         if (!curr) curr = vfs_root_dentry;
     }
-    
+
     if (!curr) return NULL;
 
     const char *p = path;
@@ -145,7 +145,7 @@ struct inode *vfs_resolve(const char *path)
 int vfs_mkdir(const char *path)
 {
     if (!path || !*path) return -1;
-    
+
     char tmp[256];
     uint32_t len = (uint32_t)strlen(path);
     if (len >= sizeof(tmp)) return -1;
@@ -154,7 +154,7 @@ int vfs_mkdir(const char *path)
     // simple dirname/basename split
     uint32_t slash = len;
     while (slash > 0 && tmp[slash - 1] != '/') slash--;
-    
+
     char parent[256];
     if (slash == 0) {
         strcpy(parent, ".");
@@ -180,10 +180,10 @@ int vfs_mkdir(const char *path)
     // We need to attach it to a dentry.
     struct dentry *pdentry = path_walk(parent);
     if (!pdentry) return -1;
-    
+
     struct inode *created = ramfs_create_child(pnode, name, FS_DIRECTORY);
     if (!created) return -1;
-    
+
     struct dentry *d = d_alloc(pdentry, name);
     if (!d) return -1;
     d->inode = created;

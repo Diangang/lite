@@ -321,9 +321,34 @@ do_run:
     mov %eax, %ebx
     cmpb $0, (%ebx)
     je main_loop
+
+    # call SYS_FORK
+    mov $20, %eax   # SYS_FORK = 20
+    int $0x80
+
+    cmp $0, %eax
+    je child_exec
+
+    # parent wait
+wait_loop:
+    # We must provide a valid buffer for the status pointer!
+    mov %eax, %ebx # pid
+    mov $status_buf, %ecx   # status ptr
+    mov $16, %edx   # options / buffer size (sys_waitpid requires out_cap >= 16)
+    mov $15, %eax   # SYS_WAITPID = 15
+    int $0x80
+
+    # Waitpid is blocking. Once it returns, it either succeeded (0) or failed (-1).
+    # Regardless, the child is done, so we return to main loop!
+    jmp main_loop
+
+child_exec:
     mov $SYS_EXECVE, %eax
     int $0x80
-    jmp main_loop
+    # if exec fails, exit child
+    mov $1, %ebx
+    mov $SYS_EXIT, %eax
+    int $0x80
 
 do_exit:
     xor %ebx, %ebx
@@ -436,3 +461,5 @@ dirbuf:
     .space 256
 iobuf:
     .space 256
+status_buf:
+    .space 16

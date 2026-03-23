@@ -107,25 +107,26 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
 {
     struct inode *node = vfs_resolve(name);
     if (!node) {
+        // Since we moved programs to /bin, we should try resolving there.
+        // Also fallback to absolute path parsing directly from the VFS root.
         char try_path[128];
-        strcpy(try_path, "/initrd/");
+        strcpy(try_path, "/bin/");
         const char *basename = name;
         const char *p = name;
         while (*p) {
             if (*p == '/') basename = p + 1;
             p++;
         }
-        strcpy(try_path + 8, basename);
+        strcpy(try_path + 5, basename);
         node = vfs_resolve(try_path);
         if (!node) {
             // Check absolute mount path as well
             node = vfs_resolve(basename);
             if (!node) {
-                // Manually try to find in initrd for extreme fallback
-                struct inode *initrd_node = vfs_resolve("/initrd");
-                if (initrd_node) {
-                    node = finddir_fs(initrd_node, basename);
-                }
+                // Check original /initrd just in case
+                strcpy(try_path, "/initrd/");
+                strcpy(try_path + 8, basename);
+                node = vfs_resolve(try_path);
                 if (!node) {
                     return printf("User program not found: %s\n", name), -1;
                 }
@@ -577,12 +578,12 @@ const char *task_get_cwd(void)
     if (!task_current || !task_current->cwd) return "/";
     struct dentry *d = task_current->cwd;
     if (!d->parent) return "/"; // root
-    
+
     // Reverse path build
     char tmp[256];
     int pos = 255;
     tmp[pos] = 0;
-    
+
     while (d && d->parent) {
         int n = strlen(d->name);
         if (pos - n - 1 < 0) break; // Path too long
@@ -592,7 +593,7 @@ const char *task_get_cwd(void)
         tmp[pos] = '/';
         d = d->parent;
     }
-    
+
     if (pos == 255) {
         strcpy(buf, "/");
     } else {
@@ -1259,7 +1260,19 @@ void task_sleep(uint32_t ticks)
 void task_yield(void)
 {
     need_resched = 1;
-    __asm__ volatile ("int $0x20");
+    if (task_current && task_current->state != TASK_RUNNABLE) {
+        while (task_current->state != TASK_RUNNABLE) {
+            __asm__ volatile("sti; hlt");
+        }
+    } else {
+        // We MUST force a schedule! If we don't, we just return to caller.
+        // If caller loops (like waitpid might), it just spins!
+        // waitpid does a for(;;) loop and calls wait_queue_block_locked -> task_yield.
+        // Wait, waitpid changes state to BLOCKED, so it enters the first branch.
+        // But what if it's already RUNNABLE for some reason?
+        // Let's just use hlt to wait for next tick.
+        __asm__ volatile("sti; hlt");
+    }
 }
 
 void task_set_demo_enabled(int enabled)
@@ -1354,8 +1367,21 @@ void task_exit_with_reason(int code, int reason, uint32_t info0, uint32_t info1)
     task_current->exit_info1 = info1;
     task_current->state = TASK_ZOMBIE;
     wait_queue_wake_all(&exit_waitq);
-    task_yield();
-    panic(NULL);
+    need_resched = 1;
+
+    // We are exiting, we MUST never return to user space!
+    // Just loop here waiting for the timer tick to kill us.
+    // If we return to an ISR, the ISR will handle scheduling.
+    // If we return to syscall, the syscall handler will handle scheduling.
+    // Wait, if we return from page_fault_handler, it calls task_schedule() but doesn't loop!
+    // Actually page_fault_handler DOES return to assembly, which pops registers.
+    // If we don't block here, we return to the dead task!
+    // But page_fault_handler calls `return task_schedule(regs);`
+    // So it WILL schedule a new task.
+    // What if we are called from sys_exit?
+    // sys_exit is just a normal syscall. If we return, syscall handler calls task_schedule(regs) and returns to the NEW task!
+    // So returning is perfectly safe and correct!
+    return;
 }
 
 int task_wait(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0, uint32_t *out_info1)
@@ -1390,6 +1416,11 @@ int task_wait(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0, 
         }
         wait_queue_block_locked(&exit_waitq);
         irq_restore(flags);
+
+        // Use soft interrupt to yield immediately! Wait, we just removed int 0x80 from task_yield.
+        // If we call task_yield, it will loop in sti; hlt until RUNNABLE.
+        // This is perfectly correct!
+        void task_yield(void);
         task_yield();
     }
 }

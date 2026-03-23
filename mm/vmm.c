@@ -354,25 +354,20 @@ struct registers *page_fault_handler(struct registers *regs)
     int is_reserved = regs->err_code & 0x8;
     int is_instr_fetch = regs->err_code & 0x10;
 
-    printf("Page Fault! ( ");
-    if (!is_present) printf("not-present ");
-    if (is_write) printf("write ");
-    else printf("read ");
-    if (is_user) printf("user ");
-    else printf("kernel ");
-    if (is_reserved) printf("reserved ");
-    if (is_instr_fetch) printf("instruction-fetch ");
-    printf(") at 0x%x - EIP: 0x%x\n", faulting_address, regs->eip);
     uint32_t page_base = faulting_address & 0xFFFFF000;
 
     /* Guard clause: Reserved bit violation is a fatal kernel bug */
-    if (is_reserved)
+    if (is_reserved) {
+        printf("Page Fault! ( reserved ) at 0x%x - EIP: 0x%x\n", faulting_address, regs->eip);
         panic("KERNEL PANIC: Page Fault caused by reserved bit violation!");
+    }
 
     if (is_present) {
         /* Guard clause: Unhandled kernel page fault */
-        if (!is_user)
+        if (!is_user) {
+            printf("Page Fault! ( present, kernel ) at 0x%x - EIP: 0x%x\n", faulting_address, regs->eip);
             panic("KERNEL PANIC: Unhandled Kernel Page Fault.");
+        }
 
         /* Handle User Protection Faults (Present, but permission denied) */
         /* Try to resolve Copy-On-Write first */
@@ -394,7 +389,6 @@ struct registers *page_fault_handler(struct registers *regs)
                     flags |= PTE_READ_WRITE;
                 vmm_map_page_ex(page_directory, phys, (void*)page_base, flags);
                 memset((void*)page_base, 0, 4096);
-                printf("Page Fault handled: remapped 0x%x -> 0x%x\n", page_base, (uint32_t)phys);
                 return regs;
             }
         }
@@ -402,7 +396,8 @@ struct registers *page_fault_handler(struct registers *regs)
         /* If we reach here, it's a genuine protection fault we can't handle */
         printf("User Page Fault: unhandled protection fault.\n");
         task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
-        return regs;
+        struct registers *task_schedule(struct registers *r);
+        return task_schedule(regs);
     }
 
     /* Handle Demand Paging (Not Present) */
@@ -410,19 +405,22 @@ struct registers *page_fault_handler(struct registers *regs)
         if (is_user) {
             printf("User Page Fault: null access.\n");
             task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
-            return regs;
+            struct registers *task_schedule(struct registers *r);
+            return task_schedule(regs);
         }
         panic("KERNEL PANIC: Null pointer access.");
     }
     if (is_user && faulting_address >= 0xC0000000) {
         printf("User Page Fault: kernel address.\n");
         task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
-        return regs;
+        struct registers *task_schedule(struct registers *r);
+        return task_schedule(regs);
     }
     if (is_user && !task_user_vma_allows(page_base, is_write, is_instr_fetch)) {
         printf("User Page Fault: out of range.\n");
         task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
-        return regs;
+        struct registers *task_schedule(struct registers *r);
+        return task_schedule(regs);
     }
 
     void *phys = pmm_alloc_page();
@@ -440,7 +438,6 @@ struct registers *page_fault_handler(struct registers *regs)
     vmm_map_page_ex(page_directory, phys, (void*)page_base, flags);
 
     memset((void*)page_base, 0, 4096);
-    printf("Page Fault handled: mapped 0x%x -> 0x%x\n", page_base, (uint32_t)phys);
     return regs;
 }
 

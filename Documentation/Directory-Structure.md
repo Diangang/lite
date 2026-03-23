@@ -37,7 +37,7 @@ Device drivers categorized by subsystem, mirroring the Linux `drivers/` tree.
 - **`drivers/console/`**: High-level console routing.
 
 ### `include/`
-Header files. 
+Header files.
 *(Note: To keep include paths simple in this micro-macrokernel, we keep headers flat here rather than strictly dividing into `include/linux/` and `include/asm/`, though logically they map to those boundaries).*
 
 ### `lib/`
@@ -45,7 +45,7 @@ Generic library functions (e.g., `libc.c` for `string.h` implementations) used i
 
 ### `usr/`
 Early user-space programs and the initramfs payload generator.
-- Contains the assembly source for `init.elf`, `ush.elf` (user shell), `cat.elf`, etc. 
+- Contains the assembly source for `init.elf`, `ush.elf` (user shell), `cat.elf`, etc.
 - During the build process, these are compiled, packed into `initramfs.cpio`, and fed to the kernel, perfectly mirroring the concept of Linux's `usr/gen_init_cpio` and default early user-space.
 
 ### `Documentation/`

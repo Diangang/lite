@@ -46,13 +46,13 @@ child:
 
 .section .rodata
 banner:
-    .ascii "init: fork+exec /ush.elf\n"
+    .ascii "init: fork+exec /bin/sh\n"
 banner_len = . - banner
 fail:
-    .ascii "init: exec failed\n"
+    .ascii "init: waitpid failed!\n"
 fail_len = . - fail
 ush_path:
-    .ascii "/ush.elf\0"
+    .ascii "/bin/sh\0"
 
 .section .bss
 waitbuf:

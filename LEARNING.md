@@ -37,3 +37,16 @@
 - **用户态 `ush.elf`**：通过 1 号进程 `init.elf` 在用户态挂载文件系统后，`fork + exec` 启动真正的用户态 Shell。所有的交互均通过标准系统调用 (`SYS_READ`, `SYS_WRITE`, `SYS_GETDENTS`) 完成。
 - **内核测试下放**：原内核 Shell 中的破坏性测试（如触发 `#PF` 缺页异常）被移植到用户态独立程序 `/ktest.elf` 中，真实模拟用户态非法访问引发内核自我保护的场景。
 
+
+## 4. 任务调度与系统调用 (Task & Syscalls)
+
+### ZOMBIE 状态与 Wait 语义
+- **ZOMBIE 状态**：当子进程调用 `SYS_EXIT` 或被异常（如 unhandled page fault）杀死时，它不会立刻被完全销毁，而是进入 `TASK_ZOMBIE` 状态，并保留其退出码和退出原因，等待父进程回收。
+- **资源清理**：在变为 ZOMBIE 时，进程的页表（`mm`）、打开的文件描述符（`fd`）等大块资源会被提前释放（`task_exit_with_reason`），仅保留 `task_t` 结构体本身以供父进程查询状态。
+- **Wait 语义**：父进程通过 `SYS_WAITPID` (对应 `task_wait`) 阻塞等待。若子进程尚未退出，父进程会通过 `wait_queue_block_locked` 进入 `TASK_BLOCKED` 状态，并主动放弃 CPU。
+
+### 内核态主动放弃 CPU (Yield) 机制
+- **调度陷阱**：在内核态的循环（如 `waitpid` 的轮询）中，如果任务不放弃 CPU，会导致死锁或极高的 CPU 占用。
+- **安全让权**：
+  - 若任务已处于 `TASK_BLOCKED`（等待某事件），只需通过 `sti; hlt` 安全地进入低功耗状态，等待下一次时钟或硬件中断唤醒。
+  - 若任务处于 `TASK_RUNNABLE`，则需通过软中断（如 `int $0x80` 传递 `SYS_YIELD`）强制触发内核堆栈的上下文保存和调度，防止在原调用栈上无限递归。

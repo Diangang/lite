@@ -62,10 +62,15 @@ mkinitrd:
 	@echo "mkinitrd is deprecated, using cpio instead"
 
 initramfs.cpio: $(USER_ELFS)
-	mkdir -p rootfs
-	echo "Hello, Lite OS!" > rootfs/test.txt
-	echo "This is another file." > rootfs/readme.txt
-	cp $(USER_ELFS) rootfs/
+	mkdir -p rootfs/sbin
+	mkdir -p rootfs/bin
+	# Copy init to /sbin/init
+	cp init.elf rootfs/sbin/init
+	# Copy other tools to /bin (dropping .elf extension for aesthetics)
+	cp ush.elf rootfs/bin/sh
+	cp cat.elf rootfs/bin/cat
+	cp ktest.elf rootfs/bin/ktest
+	cp user.elf rootfs/bin/user
 	cd rootfs && find . | cpio -o -H newc > ../initramfs.cpio
 	rm -rf rootfs
 

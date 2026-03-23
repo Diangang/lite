@@ -33,7 +33,46 @@ static void do_initcalls(void)
 
 void populate_rootfs(struct multiboot_info *mbi);
 
-void kernel_main(struct multiboot_info* mbi, uint32_t magic)
+static void kernel_init(void)
+{
+    /* Execute all registered module init functions (driver core, device tree, etc.) */
+    do_initcalls();
+
+    /* Switch to user mode and start init process */
+    /* We try standard Linux init paths in order */
+    int init_pid;
+    
+    init_pid = task_create_user("/sbin/init");
+    if (init_pid > 0) goto init_started;
+
+    panic("No init found. Try passing init= option to kernel.");
+
+init_started:
+    printf("init task created (pid %d).\n", init_pid);
+
+    /* The kernel_init thread has done its job. It can exit now, 
+       or just wait/idle if we don't have thread exit fully working yet. */
+    while (1) {
+        task_sleep(100);
+    }
+}
+
+static void rest_init(void)
+{
+    /* 1. Create the kernel_init thread. It will become PID 1. */
+    task_create(kernel_init);
+
+    /* 2. The current thread (PID 0) becomes the idle thread. */
+    /* Enable Interrupts to start scheduling */
+    __asm__ volatile ("sti");
+
+    printf("rest_init: CPU entering idle loop (PID 0)\n");
+    while (1) {
+        __asm__ volatile ("hlt");
+    }
+}
+
+void start_kernel(struct multiboot_info* mbi, uint32_t magic)
 {
     /* Initialize serial port FIRST so we can debug without VGA */
     init_serial();
@@ -67,9 +106,6 @@ void kernel_main(struct multiboot_info* mbi, uint32_t magic)
     // The device model can just use the rootfs.
     driver_init();
     
-    /* Execute all registered module init functions */
-    do_initcalls();
-
     /* Initialize System Calls */
     init_syscall();
     printf("Syscall handler installed.\n");
@@ -83,34 +119,19 @@ void kernel_main(struct multiboot_info* mbi, uint32_t magic)
     /* Initialize basic tasking */
     init_task();
 
-    /* Enable Interrupts */
-    __asm__ volatile ("sti");
+    printf("Hello, Kernel World!\n");
+    printf("This is a minimal kernel running on QEMU.\n");
+    printf("Memory address 0xB8000 is directly manipulated.\n");
+    printf("Enjoy your OS development journey!\n");
 
-	/* Newline support is rudimentary in this example */
-	printf("Hello, Kernel World!\n");
-	printf("This is a minimal kernel running on QEMU.\n");
-	printf("Memory address 0xB8000 is directly manipulated.\n");
-	printf("Enjoy your OS development journey!\n");
-
-    /* Switch to user mode and start init process */
-    int init_pid = task_create_user("/init.elf");
-    if (init_pid < 0) {
-        printf("Panic: init.elf not found!\n");
-        while (1) asm volatile("hlt");
-    } else {
-        printf("init task created (pid %d).\n", init_pid);
-    }
-
-    /* Infinite loop to keep the kernel running and responsive to interrupts */
-    while (1) {
-        __asm__ volatile ("hlt");
-    }
+    /* Transition to rest_init and spawn PID 1 */
+    rest_init();
 }
 
 __attribute__((section(".text.entry")))
 void kernel_entry(uint32_t magic, struct multiboot_info* mbi)
 {
     outb(0xE9, 'K');
-    kernel_main(mbi, magic);
+    start_kernel(mbi, magic);
     panic(NULL);
 }

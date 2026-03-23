@@ -175,3 +175,13 @@
 - **定位**：在 `kernel/syscall.c` 的 `sys_getdents` 中，原逻辑 `if ((node->flags & 0x7) != FS_DIRECTORY)` 在某次替换中被意外修改为 `== FS_DIRECTORY`，导致当且仅当目标是目录时，系统调用直接退出并返回 `-1`。
 - **解决**：将判断条件修正回 `!= FS_DIRECTORY`，用户态 `ls` 恢复正常输出。
 
+
+### 6.10 用户态 shell 执行子进程后挂起死机 (Syscall 编号错误与调度死锁)
+- **现象**：在 `ush` 中执行 `run /bin/ktest`，`ktest` 触发缺页异常并被系统杀死后，系统挂起死机，shell 没有重新出现提示符。
+- **定位**：
+  1. **Syscall 编号硬编码错误**：汇编编写的 `ushprog.s` 中，执行 `run` 命令时错误地使用了 `SYS_FORK = 2` 和 `SYS_WAITPID = 7`。但在 `include/syscall.h` 中，`2` 实际上是 `SYS_SLEEP`，`20` 才是 `SYS_FORK`。导致 Shell 实际上并没有 fork 子进程，而是把命令字符串的指针当成 sleep 的 ticks 参数，陷入了漫长无尽的睡眠。
+  2. **内核态强制调度死锁**：在修复了系统调用号后，发现 `waitpid` 阻塞时调用的 `task_yield` 存在逻辑漏洞。如果在处于 `TASK_RUNNABLE` 状态下且不在中断上下文中强行等待，可能会导致内核死循环或无法正确切换上下文。
+- **解决**：
+  1. 修正 `usr/ushprog.s` 中的硬编码系统调用号，将 `SYS_FORK` 修正为 20，`SYS_WAITPID` 修正为 15。
+  2. 优化 `kernel/task.c` 中的 `task_yield()` 实现：若任务处于 `TASK_BLOCKED` 状态则安全使用 `sti; hlt` 等待中断；若处于 `TASK_RUNNABLE` 状态则通过触发软中断 `int $0x80` (SYS_YIELD) 安全、强制地触发上下文切换。
+  3. 优化 `vmm.c`，隐藏用户栈动态分配和写时复制(COW)产生的常规缺页异常打印，仅打印真正的非法越权访问错误。
