@@ -41,15 +41,11 @@ static uint32_t parse_hex(const char *str, int len) {
 #define ALIGN4(val) (((val) + 3) & ~3)
 
 void populate_rootfs(struct multiboot_info *mbi) {
-    if (!(mbi->flags & 0x00000008)) {
-        printf("No modules provided by bootloader. Skipping initramfs.\n");
-        return;
-    }
+    if (!(mbi->flags & 0x00000008))
+        panic("No modules provided by bootloader. Skipping initramfs");
 
-    if (mbi->mods_count == 0) {
-        printf("Module count is zero. Skipping initramfs.\n");
-        return;
-    }
+    if (mbi->mods_count == 0)
+        panic("Module count is zero. Skipping initramfs");
 
     struct multiboot_module *mod = (struct multiboot_module *)mbi->mods_addr;
     uint32_t location = mod->mod_start;
@@ -58,7 +54,6 @@ void populate_rootfs(struct multiboot_info *mbi) {
     printf("Extracting initramfs from 0x%x to 0x%x...\n", location, end_location);
 
     uint8_t *ptr = (uint8_t *)location;
-
     while (ptr < (uint8_t *)end_location) {
         struct cpio_newc_header *hdr = (struct cpio_newc_header *)ptr;
 

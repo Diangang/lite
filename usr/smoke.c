@@ -116,6 +116,64 @@ void test_bad_ptr() {
     }
 }
 
+static int contains(const char *hay, int hay_len, const char *needle)
+{
+    if (!hay || !needle)
+        return 0;
+    int nlen = 0;
+    while (needle[nlen])
+        nlen++;
+    if (nlen == 0)
+        return 1;
+    for (int i = 0; i + nlen <= hay_len; i++) {
+        int ok = 1;
+        for (int j = 0; j < nlen; j++) {
+            if (hay[i + j] != needle[j]) {
+                ok = 0;
+                break;
+            }
+        }
+        if (ok)
+            return 1;
+    }
+    return 0;
+}
+
+void test_mounts() {
+    print("\n--- Test 6: /proc/mounts ---\n");
+    int fd = open("/proc/mounts", 0);
+    if (fd < 0) {
+        print("FAIL: Could not open /proc/mounts\n");
+        return;
+    }
+
+    char buf[512];
+    int n = read(fd, buf, 511);
+    close(fd);
+    if (n <= 0) {
+        print("FAIL: Could not read /proc/mounts\n");
+        return;
+    }
+    buf[n] = 0;
+    print("mounts:\n");
+    print(buf);
+
+    int ok = 1;
+    if (!contains(buf, n, "ramfs /"))
+        ok = 0;
+    if (!contains(buf, n, "proc /proc"))
+        ok = 0;
+    if (!contains(buf, n, "devfs /dev"))
+        ok = 0;
+    if (!contains(buf, n, "sysfs /sys"))
+        ok = 0;
+
+    if (ok)
+        print("Mount table looks OK.\n");
+    else
+        print("FAIL: Mount table missing entries.\n");
+}
+
 int main() {
     print("================================\n");
     print("  Lite OS Automated Test Suite  \n");
@@ -126,6 +184,7 @@ int main() {
     test_pf();
     test_mmap();
     test_bad_ptr();
+    test_mounts();
 
     print("\n================================\n");
     print("  All tests completed!          \n");

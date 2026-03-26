@@ -35,10 +35,9 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
     - 采用 **First-Fit** 策略与空闲块 **合并 (Coalescing)** 算法。
     - 初始化时会映射 1MB 堆空间并建立空闲链表，`kmalloc` 失败时会按需扩展堆空间。
   - **极简标准 C 库**（实现了 `printf`, `memset`, `memcpy`, `itoa` 等核心函数）。
-  - **InitRD (Initial Ramdisk)**：
-    - 支持通过 Multiboot 协议加载外部文件系统镜像。
-    - 实现了简单的只读文件系统解析，支持读取文件内容。
-    - 支持从 InitRD 加载用户态程序（ELF32，含 BSS 段加载），并按段权限设置只读/可写页。
+- **Initramfs (CPIO newc)**：
+  - 通过 Multiboot module 加载 cpio 归档，并在内核早期解包到 rootfs（ramfs）。
+  - 支持目录与常规文件的创建，形成 `/sbin/init`、`/bin/smoke` 等用户态镜像。
 - **procfs（最小可观测接口）**：
   - `/proc/tasks`：任务列表与状态（`cat proc/tasks`）。
   - `/proc/sched`：tick 与上下文切换统计（`cat proc/sched`）。
@@ -48,6 +47,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `/proc/<pid>/maps`：指定 pid 的 VMA（例如 `cat proc/1/maps`）。
   - `/proc/meminfo`：物理内存总量与空闲量（`cat proc/meminfo`）。
   - `/proc/cow`：COW 缺页次数与复制次数统计（`cat proc/cow`）。
+  - `/proc/mounts`：当前挂载表（`cat proc/mounts`）。
   - `/proc/<pid>/stat`：任务基础状态（`cat proc/1/stat`）。
   - `/proc/<pid>/cmdline`：任务名（`cat proc/1/cmdline`）。
   - `/proc/<pid>/status`：任务可读状态（含 Type/Cwd，`cat proc/1/status`）。

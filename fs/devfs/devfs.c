@@ -129,12 +129,21 @@ struct inode *devfs_get_console(void)
 
 void init_devfs(void)
 {
+    vfs_mount_fs("/dev", "devfs");
+}
+
+static int devfs_fill_super(struct super_block *sb, void *data, int silent)
+{
+    (void)data;
+    (void)silent;
+
     struct inode *dev_root = (struct inode *)kmalloc(sizeof(struct inode));
     if (!dev_root)
-        return;
+        return -1;
 
     memset(dev_root, 0, sizeof(struct inode));
     dev_root->flags = FS_DIRECTORY;
+    dev_root->i_ino = 1;
     dev_root->f_ops = &devfs_dir_ops;
     dev_root->uid = 0;
     dev_root->gid = 0;
@@ -142,7 +151,7 @@ void init_devfs(void)
 
     memset(&dev_console, 0, sizeof(dev_console));
     dev_console.flags = FS_CHARDEVICE;
-    dev_console.i_ino = 1;
+    dev_console.i_ino = 2;
     dev_console.i_size = 0;
     dev_console.f_ops = &dev_console_ops;
     dev_console.uid = 0;
@@ -151,27 +160,25 @@ void init_devfs(void)
 
     memset(&dev_tty, 0, sizeof(dev_tty));
     dev_tty.flags = FS_CHARDEVICE;
-    dev_tty.i_ino = 2;
+    dev_tty.i_ino = 3;
     dev_tty.i_size = 0;
     dev_tty.f_ops = &dev_tty_ops;
     dev_tty.uid = 0;
     dev_tty.gid = 0;
     dev_tty.i_mode = 0666;
 
-    struct dentry *dev_dentry = d_alloc(NULL, "/dev");
-    dev_dentry->inode = dev_root;
-    vfs_mount_root("/dev", dev_dentry);
-}
+    sb->s_root = d_alloc(NULL, "/");
+    if (!sb->s_root)
+        return -1;
+    sb->s_root->inode = dev_root;
 
-struct super_block *devfs_get_sb(struct file_system_type *fs_type, int flags, const char *dev_name, void *data)
-{
-    (void)fs_type; (void)flags; (void)dev_name; (void)data;
-    return NULL;
+    return 0;
 }
 
 static struct file_system_type devfs_fs_type = {
     .name = "devfs",
-    .get_sb = devfs_get_sb,
+    .get_sb = vfs_get_sb_single,
+    .fill_super = devfs_fill_super,
     .kill_sb = NULL,
     .next = NULL,
 };

@@ -13,7 +13,7 @@
 ### 2. 进程管理 (Task)
 - 简单的内核线程和用户进程隔离。
 - 支持 `fork`, `execve`, `exit`, `waitpid` 语义。
-- 引入了基于 Dcache 的当前工作目录隔离，即 `task_t` 中维护 `struct vfs_dentry *cwd` 和 `root`，取代了老旧的字符串路径记录。
+- 引入了基于 Dcache 的当前工作目录隔离，即 `struct task_struct` 中维护 `struct vfs_dentry *cwd` 和 `root`，取代了老旧的字符串路径记录。
 
 ### 3. 虚拟文件系统 (VFS)
 目前 VFS 已经经历了彻底的现代化重构：

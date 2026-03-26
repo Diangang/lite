@@ -76,6 +76,8 @@ int task_fd_close(int fd);
 void task_install_stdio(struct inode *console);
 
 void init_task(void);
+void sched_init(void);
+void fork_init(void);
 int task_create(void (*entry)(void));
 int task_create_user(const char *program);
 struct registers *task_schedule(struct registers *regs);

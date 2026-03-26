@@ -288,7 +288,7 @@ void user_task(void)
     panic("Returned from user mode?!");
 }
 
-typedef struct task {
+struct task_struct {
     uint32_t id;
     uint32_t parent_id;
     struct registers *regs;
@@ -309,12 +309,12 @@ typedef struct task {
     uint32_t umask;
     task_fd_t fds[TASK_FD_MAX];
     void *waitq;
-    struct task *wait_next;
-    struct task *next;
-} task_t;
+    struct task_struct *wait_next;
+    struct task_struct *next;
+};
 
-static task_t *task_head = NULL;
-static task_t *task_current = NULL;
+static struct task_struct *task_head = NULL;
+static struct task_struct *task_current = NULL;
 static uint32_t next_task_id = 1;
 static int demo_enabled = 0;
 static wait_queue_t exit_waitq = {0};
@@ -331,7 +331,7 @@ enum {
 };
 
 static int task_free_user_page_mapped(uint32_t *dir, uint32_t va_page);
-static task_t *task_find_by_pid(uint32_t pid);
+static struct task_struct *task_find_by_pid(uint32_t pid);
 static void vma_add(mm_t *mm, uint32_t start, uint32_t end, uint32_t flags);
 static int vma_range_free(mm_t *mm, uint32_t start, uint32_t end);
 static uint32_t vma_find_gap(mm_t *mm, uint32_t size, uint32_t limit);
@@ -393,7 +393,7 @@ static void vma_list_free(mm_t *mm)
     mm->vma_list = NULL;
 }
 
-static void task_fdtable_init(task_t *task)
+static void task_fdtable_init(struct task_struct *task)
 {
     if (!task)
         return;
@@ -403,7 +403,7 @@ static void task_fdtable_init(task_t *task)
     }
 }
 
-static void task_fdtable_close_all(task_t *task)
+static void task_fdtable_close_all(struct task_struct *task)
 {
     if (!task)
         return;
@@ -417,7 +417,7 @@ static void task_fdtable_close_all(task_t *task)
     }
 }
 
-static void task_fdtable_clone(task_t *dst, task_t *src)
+static void task_fdtable_clone(struct task_struct *dst, struct task_struct *src)
 {
     if (!dst || !src)
         return;
@@ -439,7 +439,7 @@ static mm_t *mm_create(void)
     return mm;
 }
 
-static void task_set_program_name(task_t *task, const char *program);
+static void task_set_program_name(struct task_struct *task, const char *program);
 
 static vma_t *vma_clone_list(vma_t *src)
 {
@@ -804,7 +804,7 @@ int task_fork(struct registers *regs)
 {
     if (!task_current || !task_current->mm || !regs)
         return -1;
-    task_t *task = (task_t*)kmalloc(sizeof(task_t));
+    struct task_struct *task = (struct task_struct*)kmalloc(sizeof(struct task_struct));
     uint32_t *stack = (uint32_t*)kmalloc(4096);
     if (!task || !stack) {
         if (task) kfree(task);
@@ -1018,7 +1018,7 @@ static void task_demo_b(void)
 
 void init_task(void)
 {
-    task_t *task = (task_t*)kmalloc(sizeof(task_t));
+    struct task_struct *task = (struct task_struct*)kmalloc(sizeof(struct task_struct));
     uint32_t *stack = (uint32_t*)kmalloc(4096);
 
     if (!task || !stack)
@@ -1058,7 +1058,18 @@ void init_task(void)
     task_create(task_demo_b);
 }
 
-static void task_set_program_name(task_t *task, const char *program)
+void sched_init(void)
+{
+    init_task();
+}
+
+void fork_init(void)
+{
+    if (!task_head || !task_current)
+        panic("fork_init before sched_init.");
+}
+
+static void task_set_program_name(struct task_struct *task, const char *program)
 {
     if (!task)
         return;
@@ -1075,7 +1086,7 @@ static void task_set_program_name(task_t *task, const char *program)
 
 static int task_create_internal(void (*entry)(void), const char *program)
 {
-    task_t *task = (task_t*)kmalloc(sizeof(task_t));
+    struct task_struct *task = (struct task_struct*)kmalloc(sizeof(struct task_struct));
     uint32_t *stack = (uint32_t*)kmalloc(4096);
 
     if (!task || !stack)
@@ -1118,7 +1129,7 @@ static int task_create_internal(void (*entry)(void), const char *program)
     }
     task_fdtable_init(task);
     if (program) {
-        task_t *prev = task_current;
+        struct task_struct *prev = task_current;
         task_current = task;
         task_install_stdio(devfs_get_console());
         task_current = prev;
@@ -1145,7 +1156,7 @@ int task_create_user(const char *program)
     return task_create_internal(user_task, program);
 }
 
-static void task_free_user_memory(task_t *task)
+static void task_free_user_memory(struct task_struct *task)
 {
     if (!task)
         return;
@@ -1155,7 +1166,7 @@ static void task_free_user_memory(task_t *task)
     task->mm = NULL;
 }
 
-static void task_destroy(task_t *prev, task_t *task)
+static void task_destroy(struct task_struct *prev, struct task_struct *task)
 {
     if (!prev || !task)
         return;
@@ -1165,7 +1176,7 @@ static void task_destroy(task_t *prev, task_t *task)
         return;
 
     uint32_t flags = irq_save();
-    task_t *next = task->next;
+    struct task_struct *next = task->next;
     if (task == task_head)
         task_head = next;
     prev->next = next;
@@ -1207,7 +1218,7 @@ void wait_queue_block_locked(wait_queue_t *q)
         return;
 
     task_current->waitq = q;
-    task_current->wait_next = (task_t*)q->head;
+    task_current->wait_next = (struct task_struct*)q->head;
     q->head = task_current;
     task_current->state = TASK_BLOCKED;
 }
@@ -1218,10 +1229,10 @@ void wait_queue_wake_all(wait_queue_t *q)
         return;
 
     uint32_t flags = irq_save();
-    task_t *t = (task_t*)q->head;
+    struct task_struct *t = (struct task_struct*)q->head;
     q->head = NULL;
     while (t) {
-        task_t *next = t->wait_next;
+        struct task_struct *next = t->wait_next;
         t->wait_next = NULL;
         t->waitq = NULL;
         if (t->state == TASK_BLOCKED)
@@ -1234,7 +1245,7 @@ void wait_queue_wake_all(wait_queue_t *q)
 void task_tick(void)
 {
     uint32_t now = timer_get_ticks();
-    task_t *t = task_head;
+    struct task_struct *t = task_head;
     if (!t)
         return;
 
@@ -1270,7 +1281,7 @@ struct registers *task_schedule(struct registers *regs)
     need_resched = 0;
     task_current->timeslice = TASK_TIMESLICE_TICKS;
 
-    task_t *candidate = task_current->next;
+    struct task_struct *candidate = task_current->next;
     while (candidate) {
         if (candidate->state == TASK_RUNNABLE) {
             if (candidate != task_current)
@@ -1457,8 +1468,8 @@ int task_wait(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0, 
 
     for (;;) {
         uint32_t flags = irq_save();
-        task_t *prev = task_head;
-        task_t *t = task_head->next;
+        struct task_struct *prev = task_head;
+        struct task_struct *t = task_head->next;
         while (t && t != task_head) {
             if (t->id == id) {
                 if (t->state == TASK_ZOMBIE) {
@@ -1497,7 +1508,7 @@ int task_kill(uint32_t id, int sig)
     if (!task_head)
         return -1;
     uint32_t flags = irq_save();
-    task_t *t = task_find_by_pid(id);
+    struct task_struct *t = task_find_by_pid(id);
     if (!t || t->id == 0) {
         irq_restore(flags);
         return -1;
@@ -1657,7 +1668,7 @@ uint32_t task_dump_tasks(char *buf, uint32_t len)
 
     uint32_t off = 0;
     buf_append(buf, &off, len, "ID   STATE     WAKE    CURRENT  NAME\n");
-    task_t *task = task_head;
+    struct task_struct *task = task_head;
     do {
         const char *state = "RUNNABLE";
         if (task->state == TASK_SLEEPING) state = "SLEEPING";
@@ -1717,7 +1728,7 @@ uint32_t task_dump_maps_pid(uint32_t pid, char *buf, uint32_t len)
         return 0;
 
     uint32_t flags = irq_save();
-    task_t *t = task_head;
+    struct task_struct *t = task_head;
     int found = 0;
     do {
         if (t->id == pid) {
@@ -1763,7 +1774,7 @@ uint32_t task_dump_stat_pid(uint32_t pid, char *buf, uint32_t len)
         return 0;
 
     uint32_t flags = irq_save();
-    task_t *t = task_head;
+    struct task_struct *t = task_head;
     int found = 0;
     do {
         if (t->id == pid) {
@@ -1798,11 +1809,11 @@ uint32_t task_dump_stat_pid(uint32_t pid, char *buf, uint32_t len)
     return off;
 }
 
-static task_t *task_find_by_pid(uint32_t pid)
+static struct task_struct *task_find_by_pid(uint32_t pid)
 {
     if (!task_head)
         return NULL;
-    task_t *t = task_head;
+    struct task_struct *t = task_head;
     do {
         if (t->id == pid)
             return t;
@@ -1820,7 +1831,7 @@ uint32_t task_dump_cmdline_pid(uint32_t pid, char *buf, uint32_t len)
     if (pid == 0xFFFFFFFF) pid = task_get_current_id();
 
     uint32_t flags = irq_save();
-    task_t *t = task_find_by_pid(pid);
+    struct task_struct *t = task_find_by_pid(pid);
     if (!t) {
         irq_restore(flags);
         return 0;
@@ -1843,7 +1854,7 @@ uint32_t task_dump_status_pid(uint32_t pid, char *buf, uint32_t len)
     if (pid == 0xFFFFFFFF) pid = task_get_current_id();
 
     uint32_t flags = irq_save();
-    task_t *t = task_find_by_pid(pid);
+    struct task_struct *t = task_find_by_pid(pid);
     if (!t) {
         irq_restore(flags);
         return 0;
@@ -1882,7 +1893,7 @@ uint32_t task_dump_cwd_pid(uint32_t pid, char *buf, uint32_t len)
     if (pid == 0xFFFFFFFF) pid = task_get_current_id();
 
     uint32_t flags = irq_save();
-    task_t *t = task_find_by_pid(pid);
+    struct task_struct *t = task_find_by_pid(pid);
     if (!t) {
         irq_restore(flags);
         return 0;
@@ -1906,7 +1917,7 @@ uint32_t task_dump_fd_pid(uint32_t pid, uint32_t fd, char *buf, uint32_t len)
         return 0;
 
     uint32_t flags = irq_save();
-    task_t *t = task_find_by_pid(pid);
+    struct task_struct *t = task_find_by_pid(pid);
     if (!t) {
         irq_restore(flags);
         return 0;
@@ -1987,7 +1998,7 @@ void task_list(void)
         return (void)printf("No tasks.\n");
 
     printf("ID   STATE     WAKE    CURRENT\n");
-    task_t *task = task_head;
+    struct task_struct *task = task_head;
     do {
         const char *state = "RUNNABLE";
         if (task->state == TASK_SLEEPING)

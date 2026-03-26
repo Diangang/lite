@@ -396,13 +396,22 @@ static struct file_operations sys_read_kernel_uptime_ops = {
 
 void init_sysfs(void)
 {
+    vfs_mount_fs("/sys", "sysfs");
+}
+
+static int sysfs_fill_super(struct super_block *sb, void *data, int silent)
+{
+    (void)data;
+    (void)silent;
+
     struct inode *sys_root = (struct inode *)kmalloc(sizeof(struct inode));
     if (!sys_root)
-        return;
+        return -1;
 
     memset(sys_dev_entries, 0, sizeof(sys_dev_entries));
     memset(sys_root, 0, sizeof(struct inode));
     sys_root->flags = FS_DIRECTORY;
+    sys_root->i_ino = 1;
     sys_root->f_ops = &sys_dir_ops;
     sys_root->uid = 0;
     sys_root->gid = 0;
@@ -410,7 +419,7 @@ void init_sysfs(void)
 
     memset(&sys_kernel, 0, sizeof(sys_kernel));
     sys_kernel.flags = FS_DIRECTORY;
-    sys_kernel.i_ino = 1;
+    sys_kernel.i_ino = 2;
     sys_kernel.f_ops = &sys_kernel_dir_ops;
     sys_kernel.uid = 0;
     sys_kernel.gid = 0;
@@ -418,7 +427,7 @@ void init_sysfs(void)
 
     memset(&sys_devices, 0, sizeof(sys_devices));
     sys_devices.flags = FS_DIRECTORY;
-    sys_devices.i_ino = 2;
+    sys_devices.i_ino = 3;
     sys_devices.f_ops = &sys_devices_dir_ops;
     sys_devices.uid = 0;
     sys_devices.gid = 0;
@@ -426,7 +435,7 @@ void init_sysfs(void)
 
     memset(&sys_kernel_version, 0, sizeof(sys_kernel_version));
     sys_kernel_version.flags = FS_FILE;
-    sys_kernel_version.i_ino = 3;
+    sys_kernel_version.i_ino = 4;
     sys_kernel_version.i_size = 64;
     sys_kernel_version.f_ops = &sys_read_kernel_version_ops;
     sys_kernel_version.uid = 0;
@@ -435,27 +444,25 @@ void init_sysfs(void)
 
     memset(&sys_kernel_uptime, 0, sizeof(sys_kernel_uptime));
     sys_kernel_uptime.flags = FS_FILE;
-    sys_kernel_uptime.i_ino = 4;
+    sys_kernel_uptime.i_ino = 5;
     sys_kernel_uptime.i_size = 64;
     sys_kernel_uptime.f_ops = &sys_read_kernel_uptime_ops;
     sys_kernel_uptime.uid = 0;
     sys_kernel_uptime.gid = 0;
     sys_kernel_uptime.i_mode = 0444;
 
-    struct dentry *sys_dentry = d_alloc(NULL, "/sys");
-    sys_dentry->inode = sys_root;
-    vfs_mount_root("/sys", sys_dentry);
-}
+    sb->s_root = d_alloc(NULL, "/");
+    if (!sb->s_root)
+        return -1;
+    sb->s_root->inode = sys_root;
 
-struct super_block *sysfs_get_sb(struct file_system_type *fs_type, int flags, const char *dev_name, void *data)
-{
-    (void)fs_type; (void)flags; (void)dev_name; (void)data;
-    return NULL;
+    return 0;
 }
 
 static struct file_system_type sysfs_fs_type = {
     .name = "sysfs",
-    .get_sb = sysfs_get_sb,
+    .get_sb = vfs_get_sb_single,
+    .fill_super = sysfs_fill_super,
     .kill_sb = NULL,
     .next = NULL,
 };

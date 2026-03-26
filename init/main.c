@@ -36,6 +36,10 @@ static void kernel_init(void)
     /* Execute all registered module init functions (driver core, device tree, etc.) */
     do_initcalls();
 
+    vfs_mount_fs("/proc", "proc");
+    vfs_mount_fs("/dev", "devfs");
+    vfs_mount_fs("/sys", "sysfs");
+
     /* Switch to user mode and start init process */
     /* We try standard Linux init paths in order */
     int init_pid;
@@ -91,12 +95,11 @@ void start_kernel(struct multiboot_info* mbi, uint32_t magic)
     /* Initialize the Virtual File System (VFS) and mount rootfs */
     vfs_init();
 
+    sched_init();
+    fork_init();
+
     // Extract initramfs directly into the root ramfs
     populate_rootfs(mbi);
-
-    init_procfs();
-    init_devfs();
-    init_sysfs();
 
     // Since initrd is gone, we don't pass its root to driver_init anymore.
     // The device model can just use the rootfs.
@@ -108,9 +111,6 @@ void start_kernel(struct multiboot_info* mbi, uint32_t magic)
 
     /* Initialize PIT Timer (100 Hz = 10ms per tick) */
     init_timer(100);
-
-    /* Initialize basic tasking */
-    init_task();
 
     printf("Hello, Kernel World!\n");
     printf("This is a minimal kernel running on QEMU.\n");

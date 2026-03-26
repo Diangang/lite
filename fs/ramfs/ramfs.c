@@ -140,13 +140,14 @@ static struct file_operations ramfs_file_ops = {
     .ioctl = NULL
 };
 
-struct super_block *ramfs_get_sb(struct file_system_type *fs_type, int flags, const char *dev_name, void *data)
+static int ramfs_fill_super(struct super_block *sb, void *data, int silent)
 {
-    (void)fs_type; (void)flags; (void)dev_name; (void)data;
+    (void)data;
+    (void)silent;
 
     struct inode *inode = (struct inode*)kmalloc(sizeof(struct inode));
     if (!inode)
-        panic("Failed to alloc ramfs root inode.");
+        return -1;
 
     memset(inode, 0, sizeof(*inode));
 
@@ -158,40 +159,29 @@ struct super_block *ramfs_get_sb(struct file_system_type *fs_type, int flags, co
     inode->i_mode = 0755;
 
     struct address_space *mapping = (struct address_space*)kmalloc(sizeof(struct address_space));
+    if (!mapping)
+        return -1;
     address_space_init(mapping, inode);
     inode->i_mapping = mapping;
 
-    struct dentry *ramfs_dentry = d_alloc(NULL, "/");
-    ramfs_dentry->inode = inode;
+    sb->s_root = d_alloc(NULL, "/");
+    if (!sb->s_root)
+        return -1;
+    sb->s_root->inode = inode;
 
-    // Create a generic super_block for the VFS
-    struct super_block *sb = (struct super_block*)kmalloc(sizeof(struct super_block));
-    sb->name = "ramfs";
-    sb->root = inode;
-    sb->fs_private = NULL;
-    sb->refcount = 1;
-
-    // To preserve existing behavior, we set the global vfs_root_dentry here if it's not set
-    if (!vfs_root_dentry)
-        vfs_root_dentry = ramfs_dentry;
-
-    return sb;
+    return 0;
 }
 
 static struct file_system_type ramfs_fs_type = {
     .name = "ramfs",
-    .get_sb = ramfs_get_sb,
+    .get_sb = vfs_get_sb_single,
+    .fill_super = ramfs_fill_super,
     .kill_sb = NULL,
     .next = NULL,
 };
 
 int init_ramfs_fs(void)
 {
-    static int initialized = 0;
-    if (initialized)
-        return 0;
-    initialized = 1;
-
     register_filesystem(&ramfs_fs_type);
     printf("ramfs filesystem registered.\n");
     return 0;

@@ -5,6 +5,51 @@
 #include "console.h"
 
 static struct file_system_type *file_systems;
+static struct vfsmount *vfs_mounts;
+
+struct vfsmount *vfs_get_mounts(void)
+{
+    return vfs_mounts;
+}
+
+static struct file_system_type *get_filesystem(const char *name)
+{
+    if (!name)
+        return NULL;
+    for (struct file_system_type *fs = file_systems; fs; fs = fs->next) {
+        if (strcmp(fs->name, name) == 0)
+            return fs;
+    }
+    return NULL;
+}
+
+struct super_block *vfs_get_sb_single(struct file_system_type *fs_type, int flags, const char *dev_name, void *data)
+{
+    (void)flags;
+    (void)dev_name;
+
+    if (!fs_type)
+        panic("vfs_get_sb_single: fs_type null.");
+    if (!fs_type->fill_super)
+        panic("vfs_get_sb_single: fill_super missing.");
+
+    struct super_block *sb = (struct super_block*)kmalloc(sizeof(struct super_block));
+    if (!sb)
+        panic("vfs_get_sb_single: alloc sb failed.");
+    memset(sb, 0, sizeof(*sb));
+
+    sb->name = fs_type->name;
+    sb->refcount = 1;
+
+    int ret = fs_type->fill_super(sb, data, 0);
+    if (ret != 0)
+        panic("vfs_get_sb_single: fill_super failed.");
+
+    if (!sb->s_root || !sb->s_root->inode)
+        panic("vfs_get_sb_single: root dentry missing.");
+
+    return sb;
+}
 
 int register_filesystem(struct file_system_type *fs)
 {
@@ -37,13 +82,9 @@ int unregister_filesystem(struct file_system_type *fs)
     return -1;
 }
 
-int vfs_mount_root_fs(const char *fs_name)
+static int vfs_mount_rootfs(const char *fs_name)
 {
-    struct file_system_type *fs;
-    for (fs = file_systems; fs; fs = fs->next) {
-        if (strcmp(fs->name, fs_name) == 0)
-            break;
-    }
+    struct file_system_type *fs = get_filesystem(fs_name);
 
     if (!fs)
         panic("Root filesystem type not found.");
@@ -52,72 +93,72 @@ int vfs_mount_root_fs(const char *fs_name)
     if (!sb)
         panic("Failed to get root super_block.");
 
-    struct dentry *root_dentry = d_alloc(NULL, "/");
-    root_dentry->inode = sb->root;
+    if (!sb->s_root || !sb->s_root->inode)
+        panic("Root super_block has no root dentry.");
 
-    vfs_root_dentry = root_dentry;
+    vfs_root_dentry = sb->s_root;
 
     struct vfsmount *m = (struct vfsmount*)kmalloc(sizeof(struct vfsmount));
     m->path = "/";
     m->sb = sb;
-    m->root = root_dentry;
+    m->root = sb->s_root;
+    m->next = vfs_mounts;
+    vfs_mounts = m;
 
-    root_dentry->mount = m;
+    sb->s_root->mount = m;
 
     printf("mount / (%s) success.\n", fs_name);
     return 0;
 }
 
-int vfs_mount_root(const char *path, struct dentry *mount_root)
+int vfs_mount(const char *path, struct super_block *sb)
 {
-    if (!path || !mount_root || !mount_root->inode)
-        panic("mount path or root dentry null.");
+    if (!path || !sb || !sb->s_root || !sb->s_root->inode)
+        panic("mount path or super_block null.");
 
-    struct dentry *d = NULL;
-
-    if (strcmp(path, "/") == 0) {
-        d = mount_root;
-    } else {
+    struct dentry *mount_root = sb->s_root;
+    struct dentry *d = path_walk(path);
+    if (!d) {
+        if (vfs_mkdir(path) != 0)
+            panic("mount path missing and could not be created.");
         d = path_walk(path);
-        if (!d) {
-            if (vfs_mkdir(path) != 0)
-                panic("mount path missing and could not be created.");
-            d = path_walk(path);
-            if (!d)
-                panic("mount path still missing after creation.");
-        }
-
-        // Link the new file system root dentry into the namespace topology.
-        // We manually set the parent to allow "cd .." to escape the mount point.
-        // We intentionally DO NOT use d_alloc(d->parent) because that would
-        // inject this new root into the parent's children list, causing duplicate ls entries!
-        mount_root->parent = d->parent;
+        if (!d)
+            panic("mount path still missing after creation.");
     }
+
+    // Link the new file system root dentry into the namespace topology.
+    // We manually set the parent to allow "cd .." to escape the mount point.
+    // We intentionally DO NOT use d_alloc(d->parent) because that would
+    // inject this new root into the parent's children list, causing duplicate ls entries!
+    mount_root->parent = d->parent;
 
     struct vfsmount *m = (struct vfsmount*)kmalloc(sizeof(struct vfsmount));
     if (!m)
         panic("mount path failed for alloc.");
 
     m->path = strdup(path);
-    m->sb = (struct super_block*)kmalloc(sizeof(struct super_block));
-    if (!m->sb)
-        panic("mount path failed for alloc sb.");
-
-    m->sb->name = m->path;
-    m->sb->refcount = 1;
-    m->sb->root = mount_root->inode;
-    m->sb->fs_private = NULL;
+    m->sb = sb;
 
     m->root = mount_root;
+    m->next = vfs_mounts;
+    vfs_mounts = m;
     d->mount = m;
 
     printf("mount %s success.\n", path);
     return 0;
 }
 
-static void init_mount_tree(void)
+int vfs_mount_fs(const char *path, const char *fs_name)
 {
-    vfs_mount_root_fs("ramfs");
+    struct file_system_type *fs = get_filesystem(fs_name);
+    if (!fs)
+        panic("filesystem type not found.");
+
+    struct super_block *sb = fs->get_sb(fs, 0, NULL, NULL);
+    if (!sb)
+        panic("get_sb failed.");
+
+    return vfs_mount(path, sb);
 }
 
 void vfs_init(void)
@@ -129,5 +170,5 @@ void vfs_init(void)
     init_ramfs_fs();
 
     // 3. Mount the root filesystem
-    init_mount_tree();
+    vfs_mount_rootfs("ramfs");
 }

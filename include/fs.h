@@ -74,6 +74,7 @@ struct dentry {
 struct file_system_type {
     const char *name;
     struct super_block *(*get_sb)(struct file_system_type *fs_type, int flags, const char *dev_name, void *data);
+    int (*fill_super)(struct super_block *sb, void *data, int silent);
     void (*kill_sb)(struct super_block *sb);
     struct file_system_type *next;
 };
@@ -81,7 +82,7 @@ struct file_system_type {
 /* VFS Superblock - Represents a mounted filesystem */
 struct super_block {
     const char *name;
-    struct inode *root;
+    struct dentry *s_root;
     void *fs_private;
     uint32_t refcount;
 };
@@ -90,6 +91,7 @@ struct vfsmount {
     const char *path;
     struct super_block *sb;
     struct dentry *root;
+    struct vfsmount *next;
 };
 
 /* Internal VFS state */
@@ -106,6 +108,9 @@ struct multiboot_info;
 /* VFS Initialization */
 void vfs_init(void);
 
+struct super_block *vfs_get_sb_single(struct file_system_type *fs_type, int flags, const char *dev_name, void *data);
+struct vfsmount *vfs_get_mounts(void);
+
 /* Standard VFS API */
 int register_filesystem(struct file_system_type *fs);
 int unregister_filesystem(struct file_system_type *fs);
@@ -114,8 +119,8 @@ int vfs_path_is_prefix(const char *path, const char *prefix, uint32_t *out_tail_
 int vfs_normalize_path(const char *path, char *out, uint32_t cap);
 const char *task_get_cwd(void);
 
-int vfs_mount_root_fs(const char *fs_name);
-int vfs_mount_root(const char *path, struct dentry *mount_root);
+int vfs_mount(const char *path, struct super_block *sb);
+int vfs_mount_fs(const char *path, const char *fs_name);
 int vfs_chdir(const char *path);
 int vfs_mkdir(const char *path);
 int vfs_unlink(const char *path);
