@@ -10,11 +10,11 @@ v4 说明：在 v3 基线之上，结合最新实现（ramfs 根、用户态 she
 
 已具备（可用能力）：
 
-- **Trap/调度基础**：syscall trap gate；`tss.esp0` per-task 更新；tick 驱动时间片与抢占；waitqueue + `task_wait` 阻塞闭环。
+- **Trap/调度基础**：syscall trap gate；`tss.esp0` per-task 更新；tick 驱动时间片与抢占；waitqueue + `sys_waitpid` 阻塞闭环。
 - **MM（VMA 驱动）**：VMA 统一描述用户空间；缺页按 VMA 校验权限并按需分配；`brk` 最小版本；退出按 VMA 回收用户页与页表页。
 - **VFS（最小 mount tree）**：
-  - initrd/procfs/devfs/sysfs + mount 表。
-  - **`/` 为可写 ramfs**，initrd 挂到 `/initrd`；根目录可列出挂载点。
+  - rootfs(ramfs)/procfs/devfs/sysfs + mount 表。
+  - **`/` 为可写 ramfs**；initramfs 在启动早期解包填充 `/`；根目录可列出挂载点。
   - 路径归一化支持 `.`/`..` 与多重 `/`；cwd 用于 shell 演示。
 - **fd 风格 syscall**：`open/read/write/close` + per-task fdtable，stdin/stdout/stderr 默认绑定 `/dev/console`。
 - **procfs/sysfs 可观测性**：`/proc/tasks /proc/sched /proc/irq /proc/maps /proc/meminfo`，以及 `/proc/<pid>/{maps,stat,cmdline,status,fd/*}`；sysfs 提供 kernel/version/uptime 与 devices 基础节点。
@@ -68,7 +68,7 @@ v4 说明：在 v3 基线之上，结合最新实现（ramfs 根、用户态 she
 
 - 目标：提供最小 `execve`（替换当前映像）与 `waitpid`（用户态回收）。
 - 验收：
-  - 用户态 init 能 `execve("/initrd/shell.elf")` 并作为交互入口。
+  - 用户态 init 能 `execve("/sbin/sh")` 并作为交互入口。
   - `waitpid` 能回收子进程并返回退出码/原因。
 
 ### A4 PID1/init 语义
@@ -136,7 +136,7 @@ v4 说明：在 v3 基线之上，结合最新实现（ramfs 根、用户态 she
   - 目录遍历接口收敛（从 getdent 过渡到更通用的 getdents 语义）
   - 权限与身份（uid/gid/mode/umask）最小闭环
 - 验收：
-  - procfs/sysfs/ramfs/initrd/devfs 全部走统一 VFS 打开实例语义。
+  - procfs/sysfs/ramfs/devfs 全部走统一 VFS 打开实例语义。
   - 用户态 `ush` 的 `ls` 使用 `getdents` 批量遍历目录项并能正常输出。
   - 权限最小闭环：mkdir/open/read/write/chdir 会进行 uid/gid/mode/umask 权限判断；chmod 受 owner/root 限制。
   - 反复打开/遍历/关闭不会造成内核堆持续增长（可用 `/proc/meminfo` 观测）。

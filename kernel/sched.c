@@ -1,13 +1,30 @@
-#include "task_internal.h"
-#include "timer.h"
-#include "vmm.h"
-#include "gdt.h"
+#include "linux/sched.h"
+#include "linux/timer.h"
+#include "linux/vmm.h"
+#include "asm/gdt.h"
+#include "linux/kheap.h"
+#include "linux/libc.h"
+#include "linux/fs.h"
+#include "linux/irqflags.h"
+
+struct task_struct *task_head = NULL;
+struct task_struct *current = NULL;
+uint32_t next_task_id = 1;
+wait_queue_t exit_waitq = {0};
+int need_resched = 0;
+uint32_t sched_switch_count = 0;
 
 void wait_queue_init(wait_queue_t *q)
 {
     if (!q)
         return;
     q->head = NULL;
+}
+
+static void task_idle(void)
+{
+    for (;;)
+        __asm__ volatile ("hlt");
 }
 
 void wait_queue_block(wait_queue_t *q)
@@ -158,4 +175,95 @@ int task_should_resched(void)
 uint32_t task_get_switch_count(void)
 {
     return sched_switch_count;
+}
+
+const char *task_get_current_comm(void)
+{
+    if (!current)
+        return NULL;
+    if (!current->comm[0])
+        return NULL;
+    return current->comm;
+}
+
+uint32_t task_get_current_id(void)
+{
+    if (!current)
+        return 0;
+    return current->pid;
+}
+
+int task_current_is_user(void)
+{
+    if (!current)
+        return 0;
+    return current->mm != NULL;
+}
+
+void task_list(void)
+{
+    if (!task_head)
+        return (void)printf("No tasks.\n");
+
+    printf("PID   STATE     WAKE    CURRENT\n");
+    struct task_struct *task = task_head;
+    do {
+        const char *state = "RUNNABLE";
+        if (task->state == TASK_SLEEPING)
+        state = "SLEEPING"; else if (task->state == TASK_BLOCKED)
+        state = "BLOCKED"; else if (task->state == TASK_ZOMBIE)
+        state = "ZOMBIE";
+        printf("%d    %s  %d    %s\n",
+               task->pid,
+               state,
+               task->wake_jiffies,
+               task == current ? "yes" : "no");
+        task = task->next;
+    } while (task && task != task_head);
+}
+
+void init_task(void)
+{
+    struct task_struct *task = (struct task_struct*)kmalloc(sizeof(struct task_struct));
+    uint32_t *stack = (uint32_t*)kmalloc(THREAD_SIZE);
+
+    if (!task || !stack)
+        panic("TASK: Failed to initialize tasking.");
+
+    task->pid = 0;
+    task->parent = NULL;
+    task->thread.regs = copy_thread(stack, task_idle, NULL);
+    task->thread.sp0 = (uint32_t*)((uint32_t)stack + THREAD_SIZE);
+    task->wake_jiffies = 0;
+    task->state = TASK_RUNNABLE;
+    task->time_slice = TASK_TIMESLICE_TICKS;
+    task->mm = NULL;
+    task->exit_code = 0;
+    task->exit_state = 0;
+    task->exit_info0 = 0;
+    task->exit_info1 = 0;
+    task->comm[0] = 0;
+    task->fs.pwd = vfs_root_dentry;
+    if (task->fs.pwd)
+        task->fs.pwd->refcount++;
+    task->fs.root = vfs_root_dentry;
+    if (task->fs.root)
+        task->fs.root->refcount++;
+    task->uid = 0;
+    task->gid = 0;
+    task->umask = 022;
+    files_init(task);
+    task->waitq = NULL;
+    task->wait_next = NULL;
+    task->next = task;
+
+    task_head = task;
+    current = task;
+    wait_queue_init(&exit_waitq);
+    tss_set_kernel_stack((uint32_t)current->thread.sp0);
+}
+
+void sched_init(void)
+{
+    init_task();
 }

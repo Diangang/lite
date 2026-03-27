@@ -1,6 +1,6 @@
-#include "timer.h"
-#include "isr.h"
-#include "libc.h"
+#include "linux/timer.h"
+#include "linux/interrupt.h"
+#include "linux/libc.h"
 
 /*
  * The PIT (Programmable Interval Timer) has an internal clock running at 1193180 Hz.

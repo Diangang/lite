@@ -1,6 +1,6 @@
-#include "fs.h"
-#include "task.h"
-#include "libc.h"
+#include "linux/fs.h"
+#include "linux/sched.h"
+#include "linux/libc.h"
 
 void open_fs(struct inode *node, uint8_t read, uint8_t write)
 {
@@ -30,7 +30,11 @@ int vfs_chdir(const char *path)
         return -1;
     if (!vfs_check_access(node, 0, 0, 1))
         return -1;
-    if (task_set_cwd_dentry(d) == 0)
-        return 0;
-    return -1;
+    if (!current)
+        return -1;
+    if (current->fs.pwd)
+        vfs_dentry_put(current->fs.pwd);
+    d->refcount++;
+    current->fs.pwd = d;
+    return 0;
 }

@@ -1,6 +1,6 @@
-#include "fs.h"
-#include "task.h"
-#include "libc.h"
+#include "linux/fs.h"
+#include "linux/cred.h"
+#include "linux/libc.h"
 
 /* Global inode allocator for pseudo filesystems */
 static uint32_t last_ino = 100; // Start at 100 to avoid conflicts with special statically assigned ones like root(1) or proc entries

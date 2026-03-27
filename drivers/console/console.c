@@ -1,6 +1,6 @@
-#include "console.h"
-#include "serial.h"
-#include "vga.h"
+#include "linux/console.h"
+#include "linux/serial.h"
+#include "linux/vga.h"
 
 static uint32_t console_targets = 0;
 

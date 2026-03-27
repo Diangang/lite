@@ -1,7 +1,7 @@
-#include "libc.h"
-#include "pmm.h"
-#include "vmm.h"
-#include "kheap.h"
+#include "linux/libc.h"
+#include "linux/pmm.h"
+#include "linux/vmm.h"
+#include "linux/kheap.h"
 
 void init_mm(struct multiboot_info* mbi)
 {

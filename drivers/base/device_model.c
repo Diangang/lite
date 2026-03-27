@@ -1,7 +1,7 @@
-#include "device_model.h"
-#include "kheap.h"
-#include "libc.h"
-#include "fs.h"
+#include "linux/device_model.h"
+#include "linux/kheap.h"
+#include "linux/libc.h"
+#include "linux/fs.h"
 
 #define OFFSETOF(type, member) ((uint32_t)(&((type*)0)->member))
 #define CONTAINER_OF(ptr, type, member) ((type*)((uint8_t*)(ptr) - OFFSETOF(type, member)))

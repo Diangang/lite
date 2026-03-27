@@ -1,9 +1,10 @@
-#include "isr.h"
-#include "idt.h"
-#include "task.h"
-#include "libc.h"
-#include "serial.h"
-#include "console.h"
+#include "linux/interrupt.h"
+#include "asm/idt.h"
+#include "linux/sched.h"
+#include "linux/exit.h"
+#include "linux/libc.h"
+#include "linux/serial.h"
+#include "linux/console.h"
 
 isr_t interrupt_handlers[256];
 static uint32_t interrupt_count[256];
@@ -137,7 +138,7 @@ struct pt_regs *isr_handler(struct pt_regs *regs)
         printf("\nUser Exception: ");
         printf(exception_messages[regs->int_no]);
         printf("\n");
-        task_exit_with_reason(1, TASK_EXIT_EXCEPTION, regs->int_no, regs->eip);
+        do_exit_reason(1, TASK_EXIT_EXCEPTION, regs->int_no, regs->eip);
         struct pt_regs *task_schedule(struct pt_regs *r);
         regs = task_schedule(regs);
         return regs;

@@ -1,11 +1,15 @@
-#include "task_internal.h"
-#include "kheap.h"
-#include "libc.h"
-#include "vmm.h"
-#include "pmm.h"
-#include "devfs.h"
-#include "fs.h"
-#include "console.h"
+#include "linux/sched.h"
+#include "linux/fork.h"
+#include "linux/binfmts.h"
+#include "linux/pid.h"
+#include "linux/kheap.h"
+#include "linux/libc.h"
+#include "linux/vmm.h"
+#include "linux/pmm.h"
+#include "linux/devfs.h"
+#include "linux/fs.h"
+#include "linux/console.h"
+#include "linux/irqflags.h"
 
 static struct vm_area_struct *vma_clone_list(struct vm_area_struct *src)
 {
@@ -111,7 +115,7 @@ struct pt_regs *copy_thread(uint32_t *stack, void (*entry)(void), struct pt_regs
     return child_regs;
 }
 
-void task_set_comm(struct task_struct *task, const char *program)
+void set_task_comm(struct task_struct *task, const char *program)
 {
     if (!task)
         return;
@@ -126,7 +130,7 @@ void task_set_comm(struct task_struct *task, const char *program)
     task->comm[i] = 0;
 }
 
-int task_fork(struct pt_regs *regs)
+int sys_fork(struct pt_regs *regs)
 {
     if (!current || !current->mm || !regs)
         return -1;
@@ -163,7 +167,7 @@ int task_fork(struct pt_regs *regs)
     task->exit_state = 0;
     task->exit_info0 = 0;
     task->exit_info1 = 0;
-    task_set_comm(task, current->comm);
+    set_task_comm(task, current->comm);
     task->fs.pwd = current->fs.pwd;
     if (task->fs.pwd) task->fs.pwd->refcount++;
     task->fs.root = current->fs.root;
@@ -178,8 +182,8 @@ int task_fork(struct pt_regs *regs)
         task->gid = 0;
         task->umask = 022;
     }
-    task_fdtable_init(task);
-    task_fdtable_clone(task, current);
+    files_init(task);
+    files_clone(task, current);
     task->uid = current->uid;
     task->gid = current->gid;
     task->umask = current->umask;
@@ -225,7 +229,7 @@ static int task_create_internal(void (*entry)(void), const char *program)
     task->uid = current ? current->uid : 0;
     task->gid = current ? current->gid : 0;
     task->umask = current ? current->umask : 022;
-    task_set_comm(task, program);
+    set_task_comm(task, program);
     if (current) {
         task->fs.pwd = current->fs.pwd;
         task->fs.root = current->fs.root;
@@ -241,11 +245,11 @@ static int task_create_internal(void (*entry)(void), const char *program)
         if (task->fs.root)
             task->fs.root->refcount++;
     }
-    task_fdtable_init(task);
+    files_init(task);
     if (program) {
         struct task_struct *prev = current;
         current = task;
-        task_install_stdio(devfs_get_console());
+        install_stdio(devfs_get_console());
         current = prev;
     }
     task->waitq = NULL;
@@ -259,12 +263,18 @@ static int task_create_internal(void (*entry)(void), const char *program)
     return (int)task->pid;
 }
 
-int task_create(void (*entry)(void))
+int kernel_thread(void (*entry)(void))
 {
     return task_create_internal(entry, NULL);
 }
 
-int task_create_user(const char *program)
+int kernel_create_user(const char *program)
 {
     return task_create_internal(user_task, program);
+}
+
+void fork_init(void)
+{
+    if (!task_head || !current)
+        panic("fork_init before sched_init.");
 }

@@ -1,8 +1,8 @@
-#include "console.h"
-#include "libc.h"
-#include "tty.h"
-#include "init.h"
-#include "isr.h"
+#include "linux/console.h"
+#include "linux/libc.h"
+#include "linux/tty.h"
+#include "linux/init.h"
+#include "linux/interrupt.h"
 
 static int is_transmit_empty() {
    return inb(0x3f8 + 5) & 0x20;

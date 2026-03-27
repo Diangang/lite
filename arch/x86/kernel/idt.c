@@ -1,5 +1,5 @@
-#include "libc.h" /* For memset, printf */
-#include "isr.h"
+#include "linux/libc.h" /* For memset, printf */
+#include "linux/interrupt.h"
 
 /* IDT Entry Structure */
 struct idt_entry {

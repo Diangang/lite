@@ -1,5 +1,5 @@
-#include "pmm.h"
-#include "libc.h"
+#include "linux/pmm.h"
+#include "linux/libc.h"
 
 static struct multiboot_info* cached_mbi = NULL;
 static uint32_t total_memory_kb = 0;

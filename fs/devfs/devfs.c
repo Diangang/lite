@@ -1,11 +1,11 @@
-#include "file.h"
-#include "devfs.h"
-#include "libc.h"
-#include "init.h"
-#include "tty.h"
-#include "console.h"
-#include "kheap.h"
-#include "device_model.h"
+#include "linux/file.h"
+#include "linux/devfs.h"
+#include "linux/libc.h"
+#include "linux/init.h"
+#include "linux/tty.h"
+#include "linux/console.h"
+#include "linux/kheap.h"
+#include "linux/device_model.h"
 
 #define MAX_DEVICES 32
 

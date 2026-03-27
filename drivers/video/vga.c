@@ -1,5 +1,5 @@
-#include "console.h"
-#include "libc.h"
+#include "linux/console.h"
+#include "linux/libc.h"
 
 static const size_t VGA_WIDTH = 80;
 static const size_t VGA_HEIGHT = 25;

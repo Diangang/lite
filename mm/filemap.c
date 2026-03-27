@@ -1,9 +1,9 @@
-#include "fs.h"
-#include "pmm.h"
-#include "vmm.h"
-#include "kheap.h"
-#include "libc.h"
-#include "pagemap.h"
+#include "linux/fs.h"
+#include "linux/pmm.h"
+#include "linux/vmm.h"
+#include "linux/kheap.h"
+#include "linux/libc.h"
+#include "linux/pagemap.h"
 
 void address_space_init(struct address_space *mapping, struct inode *host)
 {

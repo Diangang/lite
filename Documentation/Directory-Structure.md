@@ -38,7 +38,8 @@ Device drivers categorized by subsystem, mirroring the Linux `drivers/` tree.
 
 ### `include/`
 Header files.
-*(Note: To keep include paths simple in this micro-macrokernel, we keep headers flat here rather than strictly dividing into `include/linux/` and `include/asm/`, though logically they map to those boundaries).*
+- `include/linux/`: kernel core headers (subsystem-scoped: `sched/mm/fs/file/syscall/...`).
+- `include/asm/`: x86-specific headers (`ptrace/processor/irqflags/unistd/multiboot/gdt/idt/...`).
 
 ### `lib/`
 Generic library functions (e.g., `libc.c` for `string.h` implementations) used internally by the kernel.

@@ -1,7 +1,11 @@
-#include "tty.h"
-#include "libc.h"
-#include "task.h"
-#include "console.h"
+#include "linux/tty.h"
+#include "linux/irqflags.h"
+#include "linux/libc.h"
+#include "linux/sched.h"
+#include "linux/wait.h"
+#include "linux/exit.h"
+#include "linux/signal.h"
+#include "linux/console.h"
 
 #define INPUT_BUF_SIZE 256
 
@@ -18,18 +22,6 @@ static uint32_t tty_line_pos = 0;
 
 static uint32_t foreground_pid = 0;
 static void (*user_exit_hook)(void) = NULL;
-
-static uint32_t irq_save(void)
-{
-    uint32_t flags;
-    __asm__ volatile("pushf; pop %0; cli" : "=r"(flags) :: "memory");
-    return flags;
-}
-
-static void irq_restore(uint32_t flags)
-{
-    __asm__ volatile("push %0; popf" :: "r"(flags) : "memory", "cc");
-}
 
 void tty_init(void)
 {
@@ -109,7 +101,7 @@ static int tty_handle_ctrl_c(void)
 {
     uint32_t pid = tty_get_foreground_pid();
     if (pid != 0) {
-        task_kill(pid, SIGINT);
+        sys_kill(pid, SIGINT);
         tty_set_foreground_pid(0);
         if (user_exit_hook) user_exit_hook();
     }

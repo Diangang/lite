@@ -1,7 +1,6 @@
-#include "file.h"
-#include "fs.h"
-#include "file.h"
-#include "libc.h"
+#include "linux/file.h"
+#include "linux/fs.h"
+#include "linux/libc.h"
 
 // Generic readdir based on dcache
 // Notice: dentry is not directly attached to inode for generic reverse mapping in simple design,

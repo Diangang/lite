@@ -9,10 +9,11 @@ CFLAGS = -m32 -ffreestanding -O2 -Wall -Wextra -fno-pie -fno-builtin \
 LDFLAGS = -m elf_i386 -T arch/x86/kernel/linker.ld -nostdlib
 
 SOURCES_S = arch/x86/boot/boot.s arch/x86/kernel/interrupt.s
-SOURCES_C = init/main.c kernel/syscall.c kernel/task.c kernel/fork.c kernel/sched.c kernel/exit.c kernel/exec.c kernel/proc_task.c \
+SOURCES_C = init/main.c kernel/syscall.c kernel/fork.c kernel/pid.c kernel/cred.c kernel/sched.c kernel/exit.c \
 	arch/x86/kernel/gdt.c arch/x86/kernel/idt.c arch/x86/kernel/isr.c arch/x86/kernel/setup.c \
-	mm/mm.c mm/pmm.c mm/vmm.c mm/kheap.c mm/filemap.c lib/libc.c \
-	fs/file.c fs/inode.c fs/dentry.c fs/namei.c fs/read_write.c fs/open.c fs/readdir.c fs/ioctl.c fs/namespace.c fs/ramfs/ramfs.c fs/ramfs/ramfs_driver.c fs/procfs/procfs.c fs/devfs/devfs.c \
+	arch/x86/kernel/irq.c \
+	mm/mm.c mm/mmap.c mm/pmm.c mm/vmm.c mm/kheap.c mm/filemap.c lib/libc.c \
+	fs/file.c fs/fdtable.c fs/exec.c fs/inode.c fs/dentry.c fs/namei.c fs/read_write.c fs/open.c fs/readdir.c fs/ioctl.c fs/namespace.c fs/ramfs/ramfs.c fs/ramfs/ramfs_driver.c fs/procfs/procfs.c fs/procfs/base.c fs/procfs/array.c fs/procfs/task_mmu.c fs/devfs/devfs.c \
 	fs/sysfs/sysfs.c init/initramfs.c \
 	drivers/base/device_model.c drivers/input/keyboard.c \
 	drivers/clocksource/timer.c drivers/tty/tty.c drivers/tty/serial.c \

@@ -1,7 +1,7 @@
-#include "fs.h"
-#include "libc.h"
-#include "task.h"
-#include "ramfs.h"
+#include "linux/fs.h"
+#include "linux/libc.h"
+#include "linux/sched.h"
+#include "linux/ramfs.h"
 
 // Keep vfs_build_abs to build absolute path strings for simplicity
 // Alternatively, we could do path_walk from task cwd dentry without strings, but this is simpler
@@ -92,11 +92,13 @@ struct dentry *path_walk(const char *path)
 
     struct dentry *curr;
     if (path[0] == '/') {
-        curr = task_get_root_dentry();
-        if (!curr) curr = vfs_root_dentry; // Fallback for very early boot
+        curr = current ? current->fs.root : NULL;
+        if (!curr)
+            curr = vfs_root_dentry;
     } else {
-        curr = task_get_cwd_dentry();
-        if (!curr) curr = vfs_root_dentry;
+        curr = current ? current->fs.pwd : NULL;
+        if (!curr)
+            curr = vfs_root_dentry;
     }
 
     if (!curr)
@@ -280,5 +282,3 @@ int vfs_unlink(const char *path)
 
     return -1;
 }
-
-

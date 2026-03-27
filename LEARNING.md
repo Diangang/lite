@@ -64,10 +64,19 @@
 
 ## 8. task 代码拆分
 
-- `task.c`：task 公共结构、mm/vma 管理、fd 管理等基础设施。
-- `fork.c`：任务创建与 fork 路径（`copy_thread`、`task_create/task_fork`）。
-- `sched.c`：调度与等待队列（`task_schedule/tick/sleep/yield`）。
+- `sched.c`：task 全局（`current/task_head` 等）与调度相关（`task_schedule/tick/sleep/yield`、`sched_init/init_task`）。
+- `fork.c`：任务创建与 fork 路径（`copy_thread`、`kernel_thread/sys_fork`）。
 - `exit.c`：任务退出与回收（`task_exit/wait/kill`）。
-- `exec.c`：用户程序加载与 `exec`/`enter_user_mode` 路径（ELF 装载、页表与 VMA 初始化）。
-- `proc_task.c`：`/proc` 相关导出（tasks/maps/stat/cmdline/status/fd/cwd）。
-- `task_internal.h`：task 内部结构与跨文件共享符号（对外 API 仍在 `task.h`）。
+- `fs/exec.c`：用户程序加载与 `exec`/`enter_user_mode` 路径（ELF 装载、页表与 VMA 初始化）。
+- `fs/procfs/base.c`：`/proc` 基础导出（cwd 相关、fd 相关、通用格式化）。
+- `fs/procfs/array.c`：`/proc` 基础信息导出（tasks/stat/cmdline/status）。
+- `fs/procfs/task_mmu.c`：`/proc` 与地址空间相关导出（maps）。
+- 头文件对齐 Linux 2.6：不再提供 `include/*.h` 的扁平聚合头，按职责拆到 `include/linux/{sched,mm,wait,fork,exit,binfmts,fdtable,cred,pid,syscall,fs,file,...}.h` 与 `include/asm/{processor,ptrace,irqflags,unistd,multiboot,gdt,idt}.h`。
+- `mm/mmap.c`：用户态地址空间管理相关（`mm_create/mm_destroy`、`sys_mmap/sys_munmap/sys_brk`、VMA/heap/brk 逻辑）。
+- `fs/fdtable.c`：文件描述符表管理（`get_unused_fd/fget/close_fd`、stdio 安装、clone/close_all）。
+- `arch/x86/kernel/irq.c`：中断开关封装（`irq_save/irq_restore`）。
+- `kernel/pid.c`：按 pid 查找 task（精简版）。
+- `kernel/cred.c`：uid/gid/umask 等“凭据/权限”相关接口（精简版）。
+- `include/linux/sched.h`：task 结构与调度相关常量/全局（对齐 Linux 习惯的头文件命名）。
+- `include/linux/mm.h`：`mm_struct`/`vm_area_struct` 与 VMA 标志位定义。
+- `include/linux/wait.h`：wait queue 类型与接口声明。

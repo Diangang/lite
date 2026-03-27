@@ -1,6 +1,6 @@
-#include "device_model.h"
-#include "init.h"
-#include "libc.h"
+#include "linux/device_model.h"
+#include "linux/init.h"
+#include "linux/libc.h"
 
 /*
  * In Linux, architecture-specific code (like arch/x86/kernel/setup.c or board-*.c)

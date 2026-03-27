@@ -1,7 +1,7 @@
-#include "kheap.h"
-#include "vmm.h"
-#include "pmm.h"
-#include "libc.h"
+#include "linux/kheap.h"
+#include "linux/vmm.h"
+#include "linux/pmm.h"
+#include "linux/libc.h"
 
 /* The start of the free list */
 static struct header *free_list = NULL;

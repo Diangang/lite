@@ -1,5 +1,5 @@
-#include "fs.h"
-#include "libc.h"
+#include "linux/fs.h"
+#include "linux/libc.h"
 
 int ioctl_fs(struct inode *node, uint32_t request, uint32_t arg)
 {

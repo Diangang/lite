@@ -1,4 +1,4 @@
-#include "fs.h"
+#include "linux/fs.h"
 
 uint32_t read_fs(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {

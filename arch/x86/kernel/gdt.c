@@ -1,4 +1,4 @@
-#include "libc.h"
+#include "linux/libc.h"
 
 /* GDT Entry Structure */
 struct gdt_entry {

@@ -1,7 +1,7 @@
-#include "ramfs.h"
-#include "kheap.h"
-#include "libc.h"
-#include "task.h"
+#include "linux/ramfs.h"
+#include "linux/kheap.h"
+#include "linux/libc.h"
+#include "linux/cred.h"
 
 // Ramfs relies entirely on generic_file_read/write and generic_readdir
 // We don't even need a private data struct anymore!

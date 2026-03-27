@@ -46,21 +46,16 @@
 
 ---
 
-## 4. 文件系统与 InitRD 阶段问题
+## 4. 文件系统与 initramfs 阶段问题
 
-### 4.1 InitRD 加载导致的 Triple Fault
-- **现象**：在使用 `qemu -initrd initrd.img` 启动后，系统在进入 `init_initrd` 函数前无限重启。
+### 4.1 initramfs 加载导致的 Triple Fault
+- **现象**：在使用 `qemu -initrd out/initramfs.cpio` 启动后，系统在解包 initramfs 之前无限重启。
 - **定位**：通过引入串口日志（`serial_put_str`），发现内核试图读取地址 `0xFFFFFFFF` 的数据。
 - **根因**：错误解引用了 Multiboot 结构体。`mbi->mods_addr` 是一个指向 `struct multiboot_module` 结构体数组的**指针**，而非文件数据的物理地址。
 - **解决**：
-  1. 修正指针算术：`uint32_t initrd_location = ((struct multiboot_module*)mbi->mods_addr)->mod_start;`
-  2. 在 `vmm.c` 中扩展恒等映射到 128MB，确保 InitRD 被加载的高端内存地址可以直接被内核访问。
-  3. 在 `pmm.c` 中保护 InitRD 所在的物理内存不被当作空闲内存分配。
-
-### 4.2 解析 InitRD 文件名乱码
-- **现象**：`ls` 命令输出的文件名包含乱码。
-- **定位**：`initrd_readdir` 复制字符串时没有正确添加 `\0` 终止符。
-- **解决**：在 `initrd_readdir` 中强制添加 `dirent.name[strlen(...)] = 0;`。
+  1. 修正指针算术：`uint32_t initramfs_location = ((struct multiboot_module*)mbi->mods_addr)->mod_start;`
+  2. 在 `vmm.c` 中扩展恒等映射到 128MB，确保 initramfs 被加载的高端内存地址可以直接被内核访问。
+  3. 在 `pmm.c` 中保护 Multiboot 模块所在的物理内存不被当作空闲内存分配。
 
 ---
 
@@ -179,11 +174,11 @@
 ### 6.10 用户态 shell 执行子进程后挂起死机 (Syscall 编号错误与调度死锁)
 - **现象**：在 `ush` 中执行 `run /bin/ktest`，`ktest` 触发缺页异常并被系统杀死后，系统挂起死机，shell 没有重新出现提示符。
 - **定位**：
-  1. **Syscall 编号硬编码错误**：汇编编写的 `ushprog.s` 中，执行 `run` 命令时错误地使用了 `SYS_FORK = 2` 和 `SYS_WAITPID = 7`。但在 `include/syscall.h` 中，`2` 实际上是 `SYS_SLEEP`，`20` 才是 `SYS_FORK`。导致 Shell 实际上并没有 fork 子进程，而是把命令字符串的指针当成 sleep 的 ticks 参数，陷入了漫长无尽的睡眠。
+  1. **Syscall 编号硬编码错误**：汇编编写的 `ushprog.s` 中，执行 `run` 命令时错误地使用了 `SYS_FORK = 2` 和 `SYS_WAITPID = 7`。但在 `include/asm/unistd.h` 中，`2` 实际上是 `SYS_SLEEP`，`20` 才是 `SYS_FORK`。导致 Shell 实际上并没有 fork 子进程，而是把命令字符串的指针当成 sleep 的 ticks 参数，陷入了漫长无尽的睡眠。
   2. **内核态强制调度死锁**：在修复了系统调用号后，发现 `waitpid` 阻塞时调用的 `task_yield` 存在逻辑漏洞。如果在处于 `TASK_RUNNABLE` 状态下且不在中断上下文中强行等待，可能会导致内核死循环或无法正确切换上下文。
 - **解决**：
   1. 修正 `usr/ushprog.s` 中的硬编码系统调用号，将 `SYS_FORK` 修正为 20，`SYS_WAITPID` 修正为 15。
-  2. 优化 `kernel/task.c` 中的 `task_yield()` 实现：若任务处于 `TASK_BLOCKED` 状态则安全使用 `sti; hlt` 等待中断；若处于 `TASK_RUNNABLE` 状态则通过触发软中断 `int $0x80` (SYS_YIELD) 安全、强制地触发上下文切换。
+  2. 优化 `kernel/sched.c` 中的 `task_yield()` 实现：若任务处于 `TASK_BLOCKED` 状态则安全使用 `sti; hlt` 等待中断；若处于 `TASK_RUNNABLE` 状态则通过触发软中断 `int $0x80` (SYS_YIELD) 安全、强制地触发上下文切换。
   3. 优化 `vmm.c`，隐藏用户栈动态分配和写时复制(COW)产生的常规缺页异常打印，仅打印真正的非法越权访问错误。
 
 ## 16. initramfs 不支持多级目录的问题

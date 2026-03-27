@@ -1,6 +1,9 @@
-#include "task_internal.h"
-#include "kheap.h"
-#include "libc.h"
+#include "linux/sched.h"
+#include "linux/exit.h"
+#include "linux/pid.h"
+#include "linux/kheap.h"
+#include "linux/libc.h"
+#include "linux/irqflags.h"
 
 static void task_free_user_memory(struct task_struct *task)
 {
@@ -28,28 +31,23 @@ static void task_destroy(struct task_struct *prev, struct task_struct *task)
     prev->next = next;
     irq_restore(flags);
 
-    task_fdtable_close_all(task);
+    files_close_all(task);
     task_free_user_memory(task);
     if (task->thread.sp0)
         kfree((void*)((uint32_t)task->thread.sp0 - THREAD_SIZE));
     kfree(task);
 }
 
-void task_exit(void)
+void do_exit(int code)
 {
     if (!current)
         return;
     if (current->pid == 0)
         return;
-    task_exit_with_status(0);
+    do_exit_reason(code, TASK_EXIT_NORMAL, 0, 0);
 }
 
-void task_exit_with_status(int code)
-{
-    task_exit_with_reason(code, TASK_EXIT_NORMAL, 0, 0);
-}
-
-void task_exit_with_reason(int code, int reason, uint32_t info0, uint32_t info1)
+void do_exit_reason(int code, int reason, uint32_t info0, uint32_t info1)
 {
     if (!current)
         return;
@@ -67,7 +65,12 @@ void task_exit_with_reason(int code, int reason, uint32_t info0, uint32_t info1)
     return;
 }
 
-int task_wait(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0, uint32_t *out_info1)
+void sys_exit(int code)
+{
+    do_exit(code);
+}
+
+int sys_waitpid(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0, uint32_t *out_info1)
 {
     if (id == 0)
         return -1;
@@ -106,14 +109,14 @@ int task_wait(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0, 
     }
 }
 
-int task_kill(uint32_t id, int sig)
+int sys_kill(uint32_t id, int sig)
 {
     if (id == 0)
         return -1;
     if (!task_head)
         return -1;
     uint32_t flags = irq_save();
-    struct task_struct *t = task_find_by_pid(id);
+    struct task_struct *t = find_task_by_pid(id);
     if (!t || t->pid == 0) {
         irq_restore(flags);
         return -1;
@@ -128,7 +131,7 @@ int task_kill(uint32_t id, int sig)
     }
     if (t == current) {
         irq_restore(flags);
-        task_exit_with_reason(128 + sig, TASK_EXIT_SIGNAL, (uint32_t)sig, 0);
+        do_exit_reason(128 + sig, TASK_EXIT_SIGNAL, (uint32_t)sig, 0);
         return 0;
     }
     t->exit_code = 128 + sig;

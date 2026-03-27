@@ -1,7 +1,7 @@
-#include "isr.h"
-#include "tty.h"
-#include "libc.h"
-#include "init.h"
+#include "linux/interrupt.h"
+#include "linux/tty.h"
+#include "linux/libc.h"
+#include "linux/init.h"
 
 /* US Keyboard Layout Scancode Table (Set 1) */
 unsigned char kbdus[256] =

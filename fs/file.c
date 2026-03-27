@@ -1,8 +1,8 @@
-#include "file.h"
-#include "kheap.h"
-#include "libc.h"
-#include "fs.h"
-#include "ramfs.h"
+#include "linux/file.h"
+#include "linux/kheap.h"
+#include "linux/libc.h"
+#include "linux/fs.h"
+#include "linux/ramfs.h"
 
 struct file *vfs_open(const char *path, uint32_t flags)
 {

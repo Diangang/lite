@@ -58,7 +58,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `/dev/tty`：当前前台终端的最小别名（当前等价于 `/dev/console`）。
 - **sysfs（最小自描述接口）**：
   - `/sys/kernel/version`、`/sys/kernel/uptime`。
-  - `/sys/devices/<dev>/{type,bus,driver}`：设备模型最小视图（目前默认注册 console/initrd/ramfs 并自动绑定同名 driver）。
+  - `/sys/devices/<dev>/{type,bus,driver}`：设备模型最小视图（目前默认注册 console/ramfs 并自动绑定同名 driver）。
 - **驱动模型与设备树**：
   - 引入类 Linux 2.6 的 `driver_init`、`.initcall.init` 段收集与 `module_init` 宏自动加载机制。
   - **初始化解耦**：将内核的“早期打印控制台（Early Console，无中断、轮询输出）”与“完整设备驱动（中断使能、队列管理）”彻底分离。核心初始化（CPU/内存/中断）在 `start_kernel` 中完成，而完整的驱动初始化被延迟到 `PID=1` 的内核 `init` 线程中，通过 `do_initcalls` 安全加载，完美符合 Linux 规范。
@@ -110,6 +110,11 @@ qemu-system-i386 -kernel out/myos.bin -initrd out/initramfs.cpio -m 512M -serial
 ```
 
 *提示：启动后，您可以在当前终端直接与 OS Shell 交互。支持直接输入路径（如 `/bin/smoke`）执行用户态程序。按 `Ctrl+A` 然后按 `X` 退出 QEMU。*
+
+## 头文件布局（开发约定）
+- `include/linux/`：核心子系统头（`sched/mm/fs/file/fdtable/syscall/...`），尽量按职责拆分，避免聚合大头文件。
+- `include/asm/`：x86 相关头（`ptrace/processor/irqflags/unistd/multiboot/gdt/idt` 等）。
+- 工程不再使用 `include/*.h` 的“扁平头文件”，代码中统一 `#include "linux/xxx.h"` 或 `#include "asm/xxx.h"`。
 
 ## 学习指南
 如果您想深入了解本项目每一行代码的运作原理，请阅读 [Documentation/Annotation.md](./Documentation/Annotation.md)。该文档详细拆解了引导流程、中断上下文切换、驱动模型、VFS、系统调用等核心细节。

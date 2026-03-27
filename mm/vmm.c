@@ -1,9 +1,11 @@
-#include "vmm.h"
-#include "pmm.h"
-#include "libc.h"
-#include "isr.h"
-#include "task.h"
-#include "kheap.h"
+#include "linux/vmm.h"
+#include "linux/pmm.h"
+#include "linux/libc.h"
+#include "linux/interrupt.h"
+#include "linux/sched.h"
+#include "linux/mm.h"
+#include "linux/exit.h"
+#include "linux/kheap.h"
 
 /*
  * 1024 Page Directory Entries.
@@ -424,14 +426,14 @@ struct pt_regs *page_fault_handler(struct pt_regs *regs)
         }
 
         /* Check if we can remap it (e.g., missed user/write flags during lazy alloc) */
-        if (task_user_vma_allows(page_base, is_write, is_instr_fetch)) {
+        if (vma_allows(current ? current->mm : NULL, page_base, is_write, is_instr_fetch)) {
             uint32_t pte = vmm_get_pte_flags_ex(page_directory, (void*)page_base);
             if (pte && (!(pte & PTE_USER) || (is_write && !(pte & PTE_READ_WRITE)))) {
                 void *phys = pmm_alloc_page();
                 if (!phys)
                     panic("KERNEL PANIC: Out of physical memory in Page Fault handler.");
                 uint32_t flags = PTE_PRESENT | PTE_USER;
-                if (task_user_vma_allows(page_base, 1, 0))
+                if (vma_allows(current ? current->mm : NULL, page_base, 1, 0))
                     flags |= PTE_READ_WRITE;
                 vmm_map_page_ex(page_directory, phys, (void*)page_base, flags);
                 memset((void*)page_base, 0, 4096);
@@ -441,7 +443,7 @@ struct pt_regs *page_fault_handler(struct pt_regs *regs)
 
         /* If we reach here, it's a genuine protection fault we can't handle */
         printf("User Page Fault: unhandled protection fault.\n");
-        task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
+        do_exit_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
         struct pt_regs *task_schedule(struct pt_regs *r);
         return task_schedule(regs);
     }
@@ -450,7 +452,7 @@ struct pt_regs *page_fault_handler(struct pt_regs *regs)
     if (faulting_address < 0x1000) {
         if (is_user) {
             printf("User Page Fault: null access.\n");
-            task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
+            do_exit_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
             struct pt_regs *task_schedule(struct pt_regs *r);
             return task_schedule(regs);
         }
@@ -458,13 +460,13 @@ struct pt_regs *page_fault_handler(struct pt_regs *regs)
     }
     if (is_user && faulting_address >= 0xC0000000) {
         printf("User Page Fault: kernel address.\n");
-        task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
+        do_exit_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
         struct pt_regs *task_schedule(struct pt_regs *r);
         return task_schedule(regs);
     }
-    if (is_user && !task_user_vma_allows(page_base, is_write, is_instr_fetch)) {
+    if (is_user && !vma_allows(current ? current->mm : NULL, page_base, is_write, is_instr_fetch)) {
         printf("User Page Fault: out of range.\n");
-        task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
+        do_exit_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
         struct pt_regs *task_schedule(struct pt_regs *r);
         return task_schedule(regs);
     }
@@ -476,7 +478,7 @@ struct pt_regs *page_fault_handler(struct pt_regs *regs)
     uint32_t flags = PTE_PRESENT;
     if (is_user) {
         flags |= PTE_USER;
-        if (task_user_vma_allows(page_base, 1, 0))
+        if (vma_allows(current ? current->mm : NULL, page_base, 1, 0))
             flags |= PTE_READ_WRITE;
     } else {
         flags |= PTE_READ_WRITE;
@@ -498,7 +500,7 @@ void init_vmm(void)
     memset(page_directory, 0, 4096);
 
     /* 2. Identity Map the first 128MB (Physical 0-128MB -> Virtual 0-128MB) */
-    /* This ensures kernel, initrd, and low memory are all accessible */
+    /* This ensures kernel, initramfs, and low memory are all accessible */
     /* We need 32 page tables to cover 128MB (128 / 4 = 32) */
 
     /* Loop through 32 Page Tables (covering 128MB) */
@@ -532,5 +534,5 @@ void init_vmm(void)
     cr0 |= 0x80000000; /* Set PG bit (31) */
     __asm__ volatile("mov %0, %%cr0" :: "r"(cr0));
 
-    printf("VMM: Paging Enabled! Identity mapped 0-4MB.\n");
+    printf("VMM: Paging Enabled! Identity mapped 0-128MB.\n");
 }

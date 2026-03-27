@@ -1,9 +1,24 @@
-#include "multiboot.h"
-#include "libc.h"
-#include "serial.h"
-#include "vga.h"
-#include "console.h"
-#include "init.h"
+#include "asm/multiboot.h"
+#include "asm/gdt.h"
+#include "asm/idt.h"
+#include "linux/libc.h"
+#include "linux/serial.h"
+#include "linux/vga.h"
+#include "linux/console.h"
+#include "linux/init.h"
+#include "linux/mm.h"
+#include "linux/fs.h"
+#include "linux/ramfs.h"
+#include "linux/procfs.h"
+#include "linux/devfs.h"
+#include "linux/sysfs.h"
+#include "linux/syscall.h"
+#include "linux/timer.h"
+#include "linux/sched.h"
+#include "linux/fork.h"
+#include "linux/binfmts.h"
+#include "linux/device_model.h"
+#include "linux/tty.h"
 
 extern initcall_t __initcall_start[];
 extern initcall_t __initcall_end[];
@@ -14,20 +29,6 @@ static void do_initcalls(void)
     for (call = __initcall_start; call < __initcall_end; call++)
         (*call)();
 }
-#include "gdt.h"
-#include "idt.h"
-#include "mm.h"
-#include "fs.h"
-#include "ramfs.h"
-#include "initrd.h"
-#include "procfs.h"
-#include "devfs.h"
-#include "sysfs.h"
-#include "syscall.h"
-#include "timer.h"
-#include "task.h"
-#include "device_model.h"
-#include "tty.h"
 
 void populate_rootfs(struct multiboot_info *mbi);
 
@@ -48,7 +49,7 @@ static void kernel_init(void)
 static void rest_init(void)
 {
     /* 1. Create the kernel_init thread. It will become PID 1. */
-    task_create(kernel_init);
+    kernel_thread(kernel_init);
 
     /* 2. The current thread (PID 0) becomes the idle thread. */
     /* Enable Interrupts to start scheduling */
@@ -88,8 +89,6 @@ void start_kernel(struct multiboot_info* mbi, uint32_t magic)
     // Extract initramfs directly into the root ramfs
     populate_rootfs(mbi);
 
-    // Since initrd is gone, we don't pass its root to driver_init anymore.
-    // The device model can just use the rootfs.
     driver_init();
 
     /* Initialize System Calls */

@@ -1,24 +1,20 @@
-#include "file.h"
-#include "syscall.h"
-#include "task.h"
-#include "libc.h"
+#include "linux/file.h"
+#include "linux/syscall.h"
+#include "linux/sched.h"
+#include "linux/fork.h"
+#include "linux/exit.h"
+#include "linux/signal.h"
+#include "linux/binfmts.h"
+#include "linux/cred.h"
+#include "linux/mm.h"
+#include "linux/fdtable.h"
+#include "linux/irqflags.h"
+#include "linux/interrupt.h"
+#include "linux/libc.h"
 #include "string.h"
-#include "vmm.h"
-#include "fs.h"
-#include "file.h"
-#include "kheap.h"
-
-static inline uint32_t irq_save(void)
-{
-    uint32_t flags;
-    __asm__ volatile("pushf; pop %0; cli" : "=r"(flags) :: "memory");
-    return flags;
-}
-
-static inline void irq_restore(uint32_t flags)
-{
-    __asm__ volatile("push %0; popf" :: "r"(flags) : "memory", "cc");
-}
+#include "linux/vmm.h"
+#include "linux/fs.h"
+#include "linux/kheap.h"
 
 #define SYSCALL_RETURN() do { irq_restore(irq_flags); return regs; } while (0)
 
@@ -160,8 +156,8 @@ struct pt_regs *syscall_handler(struct pt_regs *regs)
         case SYS_WRITE:
         {
             int fd = (int)regs->ebx;
-            struct fd_struct *d = task_fd_get(fd);
-            if (!d) {
+            struct file *f = fget(fd);
+            if (!f) {
                 regs->eax = (uint32_t)-1;
                 break;
             }
@@ -182,7 +178,7 @@ struct pt_regs *syscall_handler(struct pt_regs *regs)
                     memcpy(tmp, (void*)(regs->ecx + off), chunk);
                 }
 
-                uint32_t n = file_write(d->file, (uint8_t*)tmp, chunk);
+                uint32_t n = file_write(f, (uint8_t*)tmp, chunk);
                 if (n == 0)
                     break;
                 off += n;
@@ -206,19 +202,19 @@ struct pt_regs *syscall_handler(struct pt_regs *regs)
             break;
         case SYS_EXIT:
             if (from_user) {
-                task_exit_with_status((int)regs->ebx);
+                sys_exit((int)regs->ebx);
                 struct pt_regs *task_schedule(struct pt_regs *r);
                 regs = task_schedule(regs);
             } else {
-                task_exit();
+                do_exit(0);
             }
             regs->eax = 0;
             break;
         case SYS_READ:
         {
             int fd = (int)regs->ebx;
-            struct fd_struct *d = task_fd_get(fd);
-            if (!d) {
+            struct file *f = fget(fd);
+            if (!f) {
                 regs->eax = (uint32_t)-1;
                 break;
             }
@@ -230,7 +226,7 @@ struct pt_regs *syscall_handler(struct pt_regs *regs)
                 uint32_t chunk = want - off;
                 if (chunk > sizeof(tmp)) chunk = sizeof(tmp);
 
-                uint32_t n = file_read(d->file, (uint8_t*)tmp, chunk);
+                uint32_t n = file_read(f, (uint8_t*)tmp, chunk);
                 if (n == 0)
                     break;
 
@@ -269,11 +265,11 @@ struct pt_regs *syscall_handler(struct pt_regs *regs)
                 regs->eax = (uint32_t)-1;
                 break;
             }
-            regs->eax = (uint32_t)task_fd_alloc(f);
+            regs->eax = (uint32_t)get_unused_fd(f);
             break;
         }
         case SYS_CLOSE: {
-            regs->eax = (uint32_t)task_fd_close((int)regs->ebx);
+            regs->eax = (uint32_t)close_fd((int)regs->ebx);
             break;
         }
         case SYS_BRK: {
@@ -281,12 +277,12 @@ struct pt_regs *syscall_handler(struct pt_regs *regs)
             if (from_user) {
                 if (req != 0) {
                     if (req < 0x1000 || req >= 0xC0000000) {
-                        regs->eax = task_brk(0);
+                        regs->eax = sys_brk(0);
                         break;
                     }
                 }
             }
-            regs->eax = task_brk(req);
+            regs->eax = sys_brk(req);
             break;
         }
         case SYS_CHDIR: {
@@ -355,12 +351,12 @@ struct pt_regs *syscall_handler(struct pt_regs *regs)
         }
         case SYS_GETDENTS: {
             int fd = (int)regs->ebx;
-            struct fd_struct *d = task_fd_get(fd);
-            if (!d || !d->file || !d->file->dentry || !d->file->dentry->inode) {
+            struct file *f = fget(fd);
+            if (!f || !f->dentry || !f->dentry->inode) {
                 regs->eax = (uint32_t)-1;
                 break;
             }
-            struct inode *node = d->file->dentry->inode;
+            struct inode *node = f->dentry->inode;
             if ((node->flags & 0x7) != FS_DIRECTORY) {
                 regs->eax = (uint32_t)-1;
                 break;
@@ -381,7 +377,7 @@ struct pt_regs *syscall_handler(struct pt_regs *regs)
             }
             uint32_t off = 0;
             while (off + 12 <= out_cap) {
-                struct dirent *de = readdir_fs(d->file, d->file->pos);
+                struct dirent *de = readdir_fs(f, f->pos);
                 if (!de)
                     break;
                 uint32_t name_len = (uint32_t)strlen(de->name);
@@ -399,13 +395,13 @@ struct pt_regs *syscall_handler(struct pt_regs *regs)
                 struct linux_dirent *lde = (struct linux_dirent*)(out + off);
                 memset(lde, 0, reclen);
                 lde->d_ino = de->ino;
-                lde->d_off = d->file->pos + 1;
+                lde->d_off = f->pos + 1;
                 lde->d_reclen = (uint16_t)reclen;
                 memcpy(lde->d_name, de->name, name_len);
                 lde->d_name[name_len] = 0;
 
                 off += reclen;
-                d->file->pos++;
+                f->pos++;
             }
             if (off == 0) {
                 kfree(out);
@@ -436,7 +432,7 @@ getdents_end:
             } else {
                 strcpy(path, (const char*)regs->ebx);
             }
-            regs->eax = (uint32_t)(task_execve(path, regs) == 0 ? 0 : (uint32_t)-1);
+            regs->eax = (uint32_t)(sys_execve(path, regs) == 0 ? 0 : (uint32_t)-1);
             break;
         }
         case SYS_WAITPID: {
@@ -445,7 +441,7 @@ getdents_end:
             int reason = 0;
             uint32_t info0 = 0;
             uint32_t info1 = 0;
-            if (task_wait(pid, &code, &reason, &info0, &info1) != 0) {
+            if (sys_waitpid(pid, &code, &reason, &info0, &info1) != 0) {
                 regs->eax = (uint32_t)-1;
                 break;
             }
@@ -470,36 +466,36 @@ getdents_end:
             int fd = (int)regs->ebx;
             uint32_t req = regs->ecx;
             uint32_t arg = regs->edx;
-            struct fd_struct *d = task_fd_get(fd);
-            if (!d || !d->file || !d->file->dentry || !d->file->dentry->inode) {
+            struct file *f = fget(fd);
+            if (!f || !f->dentry || !f->dentry->inode) {
                 regs->eax = (uint32_t)-1;
                 break;
             }
-            regs->eax = (uint32_t)file_ioctl(d->file, req, arg);
+            regs->eax = (uint32_t)file_ioctl(f, req, arg);
             break;
         }
         case SYS_KILL: {
             uint32_t pid = regs->ebx;
             int sig = (int)regs->ecx;
-            regs->eax = (uint32_t)(task_kill(pid, sig) == 0 ? 0 : (uint32_t)-1);
+            regs->eax = (uint32_t)(sys_kill(pid, sig) == 0 ? 0 : (uint32_t)-1);
             break;
         }
         case SYS_MMAP: {
             uint32_t addr = regs->ebx;
             uint32_t len = regs->ecx;
             uint32_t prot = regs->edx;
-            uint32_t res = task_mmap(addr, len, prot);
+            uint32_t res = sys_mmap(addr, len, prot);
             regs->eax = res ? res : (uint32_t)-1;
             break;
         }
         case SYS_MUNMAP: {
             uint32_t addr = regs->ebx;
             uint32_t len = regs->ecx;
-            regs->eax = (uint32_t)(task_munmap(addr, len) == 0 ? 0 : (uint32_t)-1);
+            regs->eax = (uint32_t)(sys_munmap(addr, len) == 0 ? 0 : (uint32_t)-1);
             break;
         }
         case SYS_FORK: {
-            regs->eax = (uint32_t)task_fork(regs);
+            regs->eax = (uint32_t)sys_fork(regs);
             break;
         }
         case SYS_UMASK: {

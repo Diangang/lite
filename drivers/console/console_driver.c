@@ -1,6 +1,6 @@
-#include "device_model.h"
-#include "init.h"
-#include "libc.h"
+#include "linux/device_model.h"
+#include "linux/init.h"
+#include "linux/libc.h"
 
 static struct device_driver drv_console;
 

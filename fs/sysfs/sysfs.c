@@ -1,10 +1,10 @@
-#include "file.h"
-#include "sysfs.h"
-#include "libc.h"
-#include "init.h"
-#include "timer.h"
-#include "kheap.h"
-#include "device_model.h"
+#include "linux/file.h"
+#include "linux/sysfs.h"
+#include "linux/libc.h"
+#include "linux/init.h"
+#include "linux/timer.h"
+#include "linux/kheap.h"
+#include "linux/device_model.h"
 
 static struct dirent sys_dirent;
 // Note: sys_root is dynamically allocated in init_sysfs now

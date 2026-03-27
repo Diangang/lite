@@ -1,8 +1,8 @@
-#include "fs.h"
-#include "ramfs.h"
-#include "kheap.h"
-#include "libc.h"
-#include "console.h"
+#include "linux/fs.h"
+#include "linux/ramfs.h"
+#include "linux/kheap.h"
+#include "linux/libc.h"
+#include "linux/console.h"
 
 static struct file_system_type *file_systems;
 static struct vfsmount *vfs_mounts;
