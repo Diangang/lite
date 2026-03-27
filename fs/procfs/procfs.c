@@ -874,4 +874,4 @@ static int init_proc_fs(void)
     printf("proc filesystem registered.\n");
     return 0;
 }
-module_init(init_proc_fs);
+fs_initcall(init_proc_fs);

@@ -19,5 +19,4 @@ static int x86_platform_devices_init(void)
 
     return 0;
 }
-// We use module_init so this runs automatically during do_initcalls()
-module_init(x86_platform_devices_init);
+subsys_initcall(x86_platform_devices_init);

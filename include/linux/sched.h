@@ -51,7 +51,6 @@ extern uint32_t sched_switch_count;
 
 void set_task_comm(struct task_struct *task, const char *program);
 
-void init_task(void);
 void sched_init(void);
 struct pt_regs *task_schedule(struct pt_regs *regs);
 void task_tick(void);

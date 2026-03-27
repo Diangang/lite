@@ -2,6 +2,7 @@
 #include "linux/libc.h"
 #include "linux/sched.h"
 #include "linux/ramfs.h"
+#include "linux/uaccess.h"
 
 // Keep vfs_build_abs to build absolute path strings for simplicity
 // Alternatively, we could do path_walk from task cwd dentry without strings, but this is simpler
@@ -281,4 +282,32 @@ int vfs_unlink(const char *path)
         return pnode->f_ops->unlink(pdentry, name);
 
     return -1;
+}
+
+int sys_mkdir(const char *pathname, int from_user)
+{
+    char tmp[128];
+    if (from_user) {
+        if (strncpy_from_user(tmp, sizeof(tmp), pathname) != 0)
+            return -1;
+    } else {
+        if (!pathname)
+            return -1;
+        strcpy(tmp, pathname);
+    }
+    return vfs_mkdir(tmp) == 0 ? 0 : -1;
+}
+
+int sys_unlink(const char *pathname, int from_user)
+{
+    char tmp[128];
+    if (from_user) {
+        if (strncpy_from_user(tmp, sizeof(tmp), pathname) != 0)
+            return -1;
+    } else {
+        if (!pathname)
+            return -1;
+        strcpy(tmp, pathname);
+    }
+    return vfs_unlink(tmp);
 }

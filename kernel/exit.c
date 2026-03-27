@@ -4,6 +4,7 @@
 #include "linux/kheap.h"
 #include "linux/libc.h"
 #include "linux/irqflags.h"
+#include "linux/uaccess.h"
 
 static void task_free_user_memory(struct task_struct *task)
 {
@@ -107,6 +108,31 @@ int sys_waitpid(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0
         irq_restore(flags);
         task_yield();
     }
+}
+
+int sys_waitpid_uapi(uint32_t id, void *status, uint32_t status_len, int from_user)
+{
+    int code = 0;
+    int reason = 0;
+    uint32_t info0 = 0;
+    uint32_t info1 = 0;
+    if (sys_waitpid(id, &code, &reason, &info0, &info1) != 0)
+        return -1;
+
+    if (status && status_len >= 16) {
+        uint32_t tmp[4];
+        tmp[0] = (uint32_t)code;
+        tmp[1] = (uint32_t)reason;
+        tmp[2] = info0;
+        tmp[3] = info1;
+        if (from_user) {
+            if (copy_to_user(status, tmp, 16) != 0)
+                return -1;
+        } else {
+            memcpy(status, tmp, 16);
+        }
+    }
+    return 0;
 }
 
 int sys_kill(uint32_t id, int sig)

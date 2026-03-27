@@ -60,7 +60,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `/sys/kernel/version`、`/sys/kernel/uptime`。
   - `/sys/devices/<dev>/{type,bus,driver}`：设备模型最小视图（目前默认注册 console/ramfs 并自动绑定同名 driver）。
 - **驱动模型与设备树**：
-  - 引入类 Linux 2.6 的 `driver_init`、`.initcall.init` 段收集与 `module_init` 宏自动加载机制。
+  - 引入类 Linux 2.6 的 `driver_init`、分级 initcall 段收集与 `module_init` 宏自动加载机制（分级条目最终被链接到连续的 initcall 段，内核通过 `__initcall_start..__initcall_end` 统一遍历；级别顺序由链接脚本中各 `.initcallN.init` 的排列保证）。
   - **初始化解耦**：将内核的“早期打印控制台（Early Console，无中断、轮询输出）”与“完整设备驱动（中断使能、队列管理）”彻底分离。核心初始化（CPU/内存/中断）在 `start_kernel` 中完成，而完整的驱动初始化被延迟到 `PID=1` 的内核 `init` 线程中，通过 `do_initcalls` 安全加载，完美符合 Linux 规范。
 - **用户态交互**：完全移除内核态 Shell，由 1号进程 (`/sbin/init`) 挂载文件系统并 fork 执行真正的用户态 Shell (`/sbin/sh`)，实现彻底的特权级分离。内置提供基于 C 语言编写的集成测试程序 `/bin/smoke`。
 - **PID 1 对齐 Linux**：PID 1 在完成 initcall 与挂载后会直接“exec”为用户态 `/sbin/init`（不再额外创建一个新 pid），语义更接近 Linux 2.6 的 `kernel_init -> execve(init)`。
@@ -68,7 +68,8 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
 - **文件系统 (VFS)**：结构体 (`i_ino`, `i_mode`, `i_size`) 和全局动态 inode 分配器 (`get_next_ino`) 完美对齐 Linux 2.6 标准，支持虚拟文件系统如 `ramfs`、`devfs`、`procfs`、`sysfs`。
 - **系统调用 (int 0x80)**：
   - 用户态 syscall 会进行用户指针校验，避免非法地址导致内核崩溃。
-  - `SYS_WRITE/SYS_READ` 在内核侧通过 `copyin/copyout` 分段拷贝访问用户缓冲区。
+  - `SYS_WRITE/SYS_READ` 在内核侧通过 `copy_from_user/copy_to_user` 分段拷贝访问用户缓冲区。
+  - syscall 分发器只负责寄存器参数解包与分发，具体的 `sys_read/sys_write/sys_open/...` 实现在对应子系统（`fs/*`、`kernel/exit.c` 等），组织方式对齐 Linux 2.6。
   - `SYS_READ/SYS_WRITE` 提供最小 `read(fd,...)` / `write(fd,...)` 风格接口（fd=0/1/2 绑定 `/dev/console`），fdtable 为 per-task，fd 持有 file 对象与 offset。
   - `SYS_OPEN/SYS_CLOSE/SYS_UNLINK` 提供最小路径打开、关闭与删除文件能力（路径解析基于 VFS mount 表），支持内存物理页回收。
   - `SYS_CHDIR/SYS_GETCWD/SYS_GETDENTS/SYS_MKDIR` 支持用户态 shell 做路径切换、目录遍历与创建目录。

@@ -38,7 +38,14 @@ SECTIONS
 	.initcall.init BLOCK(4K) : ALIGN(4K)
 	{
 		__initcall_start = .;
-		*(.initcall.init)
+
+		KEEP(*(.initcall0.init))
+		KEEP(*(.initcall1.init))
+		KEEP(*(.initcall2.init))
+		KEEP(*(.initcall3.init))
+		KEEP(*(.initcall4.init))
+		KEEP(*(.initcall5.init))
+
 		__initcall_end = .;
 	}
 

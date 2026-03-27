@@ -1,6 +1,7 @@
 #include "linux/fs.h"
 #include "linux/cred.h"
 #include "linux/libc.h"
+#include "linux/uaccess.h"
 
 /* Global inode allocator for pseudo filesystems */
 static uint32_t last_ino = 100; // Start at 100 to avoid conflicts with special statically assigned ones like root(1) or proc entries
@@ -45,4 +46,18 @@ int vfs_chmod(const char *path, uint32_t mode)
         return -1;
     node->i_mode = mode & 0777;
     return 0;
+}
+
+int sys_chmod(const char *pathname, uint32_t mode, int from_user)
+{
+    char tmp[128];
+    if (from_user) {
+        if (strncpy_from_user(tmp, sizeof(tmp), pathname) != 0)
+            return -1;
+    } else {
+        if (!pathname)
+            return -1;
+        strcpy(tmp, pathname);
+    }
+    return vfs_chmod(tmp, mode) == 0 ? 0 : -1;
 }

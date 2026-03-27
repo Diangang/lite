@@ -189,4 +189,4 @@ static int init_devfs_fs(void)
     printf("devfs filesystem registered.\n");
     return 0;
 }
-module_init(init_devfs_fs);
+fs_initcall(init_devfs_fs);

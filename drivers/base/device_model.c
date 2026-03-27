@@ -13,7 +13,8 @@ static void kobject_init(struct kobject *kobj, const char *name, void (*release)
     memset(kobj, 0, sizeof(*kobj));
     if (name) {
         uint32_t n = (uint32_t)strlen(name);
-        if (n >= sizeof(kobj->name)) n = sizeof(kobj->name) - 1;
+        if (n >= sizeof(kobj->name))
+            n = sizeof(kobj->name) - 1;
         memcpy(kobj->name, name, n);
         kobj->name[n] = 0;
     }
@@ -176,22 +177,6 @@ void init_driver(struct device_driver *drv, const char *name, struct bus_type *b
     drv->probe = probe;
 }
 
-void driver_init(void)
-{
-    if (devmodel_inited)
-        return;
-    memset(&platform_bus, 0, sizeof(platform_bus));
-    kobject_init(&platform_bus.kobj, "platform", NULL);
-    platform_bus.match = default_match;
-    platform_bus.devices = NULL;
-    platform_bus.drivers = NULL;
-    platform_bus.next = NULL;
-    bus_list = &platform_bus;
-    devmodel_inited = 1;
-
-    printf("Driver core initialized.\n");
-}
-
 uint32_t device_model_device_count(void)
 {
     if (!devmodel_inited)
@@ -231,4 +216,20 @@ struct device *device_model_find_device(const char *name)
         d = (struct device*)d->kobj.next;
     }
     return NULL;
+}
+
+void driver_init(void)
+{
+    if (devmodel_inited)
+        return;
+    memset(&platform_bus, 0, sizeof(platform_bus));
+    kobject_init(&platform_bus.kobj, "platform", NULL);
+    platform_bus.match = default_match;
+    platform_bus.devices = NULL;
+    platform_bus.drivers = NULL;
+    platform_bus.next = NULL;
+    bus_list = &platform_bus;
+    devmodel_inited = 1;
+
+    printf("Driver core initialized.\n");
 }

@@ -473,4 +473,4 @@ static int init_sysfs_fs(void)
     printf("sysfs filesystem registered.\n");
     return 0;
 }
-module_init(init_sysfs_fs);
+fs_initcall(init_sysfs_fs);

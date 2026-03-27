@@ -222,7 +222,7 @@ void task_list(void)
     } while (task && task != task_head);
 }
 
-void init_task(void)
+static void init_task(void)
 {
     struct task_struct *task = (struct task_struct*)kmalloc(sizeof(struct task_struct));
     uint32_t *stack = (uint32_t*)kmalloc(THREAD_SIZE);

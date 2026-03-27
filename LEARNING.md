@@ -39,6 +39,14 @@
 - PID 0：`sched_init()` 初始化出的初始任务，`rest_init()` 中进入 idle loop（`hlt` 等待 tick）。
 - PID 1：由 `rest_init()` 创建的 `kernel_init` 任务，完成 initcall 与挂载后通过 `task_exec_user("/sbin/init")` 直接进入用户态 init，使 PID 1 的语义更接近 Linux 2.6。
 
+## 4.2 分级 initcall
+
+- `module_init(fn)` 会把 `fn` 的函数指针放进链接段里（initcall 段），由 `kernel_init` 阶段的 `do_initcalls()` 统一遍历调用。
+- 为了对齐 Linux 2.6 的分层启动语义，Lite 将 initcall 分成 6 个级别并按序执行：
+  - `early_initcall/core_initcall/subsys_initcall/fs_initcall/device_initcall/late_initcall`
+  - `module_init` 当前等价于 `device_initcall`（设备与驱动相关初始化默认放这一层）。
+- `do_initcalls()` 的遍历范围只有 `__initcall_start .. __initcall_end`，级别顺序由链接脚本中各 `.initcallN.init` 段的排列顺序保证（对齐 Linux 的做法）。
+
 ## 5. pt_regs 与 copy_thread
 
 - **命名对齐**：将寄存器现场结构体命名为 `pt_regs`，与 Linux 2.6 一致。
@@ -68,6 +76,9 @@
 - `fork.c`：任务创建与 fork 路径（`copy_thread`、`kernel_thread/sys_fork`）。
 - `exit.c`：任务退出与回收（`task_exit/wait/kill`）。
 - `fs/exec.c`：用户程序加载与 `exec`/`enter_user_mode` 路径（ELF 装载、页表与 VMA 初始化）。
+- `kernel/syscall.c`：syscall 入口与分发（x86 `int 0x80`），只负责寄存器参数解包、调用 `sys_*`，以及统一调度收尾（`task_should_resched`）。
+- `include/linux/syscalls.h`：对内的 syscall 实现入口声明（`sys_read/sys_write/...`），用于把实现放在对应子系统文件里。
+- `include/linux/uaccess.h`：用户指针访问封装（`copy_to_user/copy_from_user/strncpy_from_user`），对齐 Linux 的 uaccess 习惯。
 - `fs/procfs/base.c`：`/proc` 基础导出（cwd 相关、fd 相关、通用格式化）。
 - `fs/procfs/array.c`：`/proc` 基础信息导出（tasks/stat/cmdline/status）。
 - `fs/procfs/task_mmu.c`：`/proc` 与地址空间相关导出（maps）。
