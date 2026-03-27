@@ -13,7 +13,7 @@ void serial_put_char(char a) {
    outb(0x3f8, a);
 }
 
-struct registers *serial_callback(struct registers *regs) {
+struct pt_regs *serial_callback(struct pt_regs *regs) {
     /* Check if it's a read interrupt (IIR) */
     /* Read the character */
     if (inb(0x3f8 + 5) & 1) {

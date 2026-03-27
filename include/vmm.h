@@ -40,6 +40,6 @@ int vmm_user_accessible(uint32_t* dir, void* addr, uint32_t len, int write);
 int vmm_copyin(void* dst, const void* src_user, uint32_t len);
 int vmm_copyout(void* dst_user, const void* src, uint32_t len);
 void vmm_get_cow_stats(uint32_t *faults, uint32_t *copies);
-struct registers *page_fault_handler(struct registers *regs);
+struct pt_regs *page_fault_handler(struct pt_regs *regs);
 
 #endif

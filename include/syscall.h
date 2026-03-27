@@ -33,6 +33,6 @@ enum {
 };
 
 void init_syscall(void);
-struct registers *syscall_handler(struct registers *regs);
+struct pt_regs *syscall_handler(struct pt_regs *regs);
 
 #endif

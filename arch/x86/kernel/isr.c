@@ -122,7 +122,7 @@ char *exception_messages[] = {
 };
 
 /* Common handler for all ISRs */
-struct registers *isr_handler(struct registers *regs)
+struct pt_regs *isr_handler(struct pt_regs *regs)
 {
     if (regs->int_no < 256)
         interrupt_count[regs->int_no]++;
@@ -138,7 +138,7 @@ struct registers *isr_handler(struct registers *regs)
         printf(exception_messages[regs->int_no]);
         printf("\n");
         task_exit_with_reason(1, TASK_EXIT_EXCEPTION, regs->int_no, regs->eip);
-        struct registers *task_schedule(struct registers *r);
+        struct pt_regs *task_schedule(struct pt_regs *r);
         regs = task_schedule(regs);
         return regs;
     }
@@ -155,7 +155,7 @@ struct registers *isr_handler(struct registers *regs)
 }
 
 /* Common handler for all IRQs */
-struct registers *irq_handler(struct registers *regs)
+struct pt_regs *irq_handler(struct pt_regs *regs)
 {
     if (regs->int_no < 256)
         interrupt_count[regs->int_no]++;

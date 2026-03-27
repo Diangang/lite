@@ -52,7 +52,7 @@ void init_syscall(void)
     register_interrupt_handler(128, syscall_handler);
 }
 
-struct registers *syscall_handler(struct registers *regs)
+struct pt_regs *syscall_handler(struct pt_regs *regs)
 {
     uint32_t irq_flags = irq_save();
     int from_user = (regs->cs & 0x3) == 0x3;
@@ -160,7 +160,7 @@ struct registers *syscall_handler(struct registers *regs)
         case SYS_WRITE:
         {
             int fd = (int)regs->ebx;
-            task_fd_t *d = task_fd_get(fd);
+            struct fd_struct *d = task_fd_get(fd);
             if (!d) {
                 regs->eax = (uint32_t)-1;
                 break;
@@ -207,7 +207,7 @@ struct registers *syscall_handler(struct registers *regs)
         case SYS_EXIT:
             if (from_user) {
                 task_exit_with_status((int)regs->ebx);
-                struct registers *task_schedule(struct registers *r);
+                struct pt_regs *task_schedule(struct pt_regs *r);
                 regs = task_schedule(regs);
             } else {
                 task_exit();
@@ -217,7 +217,7 @@ struct registers *syscall_handler(struct registers *regs)
         case SYS_READ:
         {
             int fd = (int)regs->ebx;
-            task_fd_t *d = task_fd_get(fd);
+            struct fd_struct *d = task_fd_get(fd);
             if (!d) {
                 regs->eax = (uint32_t)-1;
                 break;
@@ -355,7 +355,7 @@ struct registers *syscall_handler(struct registers *regs)
         }
         case SYS_GETDENTS: {
             int fd = (int)regs->ebx;
-            task_fd_t *d = task_fd_get(fd);
+            struct fd_struct *d = task_fd_get(fd);
             if (!d || !d->file || !d->file->dentry || !d->file->dentry->inode) {
                 regs->eax = (uint32_t)-1;
                 break;
@@ -470,7 +470,7 @@ getdents_end:
             int fd = (int)regs->ebx;
             uint32_t req = regs->ecx;
             uint32_t arg = regs->edx;
-            task_fd_t *d = task_fd_get(fd);
+            struct fd_struct *d = task_fd_get(fd);
             if (!d || !d->file || !d->file->dentry || !d->file->dentry->inode) {
                 regs->eax = (uint32_t)-1;
                 break;
@@ -532,7 +532,7 @@ getdents_end:
     irq_restore(irq_flags);
 
     if (task_should_resched()) {
-        struct registers *task_schedule(struct registers *regs);
+        struct pt_regs *task_schedule(struct pt_regs *regs);
         regs = task_schedule(regs);
     }
 

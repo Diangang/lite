@@ -29,7 +29,7 @@
 当前发现的两类“结构性偏差/欠账”（会阻塞后续阶段验收）：
 
 - **MM 回收路径未与 VMA 语义对齐**：
-  - 缺页/权限已经由 VMA 驱动，但退出回收仍主要依赖 `user_base/user_pages/user_stack_base` 的旧模型，无法覆盖 heap/brk 扩展映射的页，存在资源泄漏风险。
+  - 现状已对齐：退出回收基于 `mm->mmap` 释放用户页，并释放页表页与 `pgd`；旧的 `user_base/user_pages/user_stack_base` 范围模型已移除。
 - **syscall/VFS 语义出现多轨并行**：
   - 已修正：核心 I/O 已收敛到 `SYS_OPEN/SYS_READ/SYS_WRITE/SYS_CLOSE` 的 fd 风格语义。
   - 后续仍需在 VFS 对象模型层面完成收敛（file/inode 等），避免 syscall 层长期特判。
@@ -96,7 +96,7 @@
 在 P0.1 完成后再继续：
 
 - **C1.1 引入 mm_struct（task 内只保留 `mm*`）**
-  - mm 持有：page directory、vma list、heap_base/brk、stack、统计信息等。
+  - mm 持有：pgd、mmap、start_brk/brk、start_stack、统计信息等。
   - kernel thread 可无 mm；user process 必须绑定 mm。
 - **C1.2 /proc/<pid>/maps 对齐**
   - 从“当前任务 maps”升级为 `/proc/<pid>/maps`，输出来自 mm。

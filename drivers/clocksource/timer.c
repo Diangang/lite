@@ -12,7 +12,7 @@ static uint32_t tick = 0;
 static uint32_t current_frequency = 0;
 
 /* Timer Interrupt Handler (IRQ0) */
-static struct registers *timer_callback(struct registers *regs)
+static struct pt_regs *timer_callback(struct pt_regs *regs)
 {
     (void)regs;
     tick++;

@@ -3,8 +3,7 @@
 
 #include <stdint.h>
 
-/* Registers structure passed to ISR handler */
-struct registers {
+struct pt_regs {
     uint32_t ds;                                     /* Data segment selector */
     uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax; /* Pushed by pusha */
     uint32_t int_no, err_code;                       /* Interrupt number and error code */
@@ -12,16 +11,16 @@ struct registers {
 };
 
 /* Function pointer for interrupt handlers */
-typedef struct registers *(*isr_t)(struct registers *);
+typedef struct pt_regs *(*isr_t)(struct pt_regs *);
 
 /* Public API */
 void isr_install(void);
-struct registers *isr_handler(struct registers *regs);
+struct pt_regs *isr_handler(struct pt_regs *regs);
 void register_interrupt_handler(uint8_t n, isr_t handler);
 
 /* IRQ definitions */
 void irq_install(void);
-struct registers *irq_handler(struct registers *regs);
+struct pt_regs *irq_handler(struct pt_regs *regs);
 
 uint32_t isr_get_count(uint8_t vector);
 

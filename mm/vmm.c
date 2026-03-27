@@ -388,7 +388,7 @@ void vmm_get_cow_stats(uint32_t *faults, uint32_t *copies)
     if (copies) *copies = cow_copies;
 }
 
-struct registers *page_fault_handler(struct registers *regs)
+struct pt_regs *page_fault_handler(struct pt_regs *regs)
 {
     /* The faulting address is stored in the CR2 register */
     uint32_t faulting_address;
@@ -442,7 +442,7 @@ struct registers *page_fault_handler(struct registers *regs)
         /* If we reach here, it's a genuine protection fault we can't handle */
         printf("User Page Fault: unhandled protection fault.\n");
         task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
-        struct registers *task_schedule(struct registers *r);
+        struct pt_regs *task_schedule(struct pt_regs *r);
         return task_schedule(regs);
     }
 
@@ -451,7 +451,7 @@ struct registers *page_fault_handler(struct registers *regs)
         if (is_user) {
             printf("User Page Fault: null access.\n");
             task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
-            struct registers *task_schedule(struct registers *r);
+            struct pt_regs *task_schedule(struct pt_regs *r);
             return task_schedule(regs);
         }
         panic("KERNEL PANIC: Null pointer access.");
@@ -459,13 +459,13 @@ struct registers *page_fault_handler(struct registers *regs)
     if (is_user && faulting_address >= 0xC0000000) {
         printf("User Page Fault: kernel address.\n");
         task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
-        struct registers *task_schedule(struct registers *r);
+        struct pt_regs *task_schedule(struct pt_regs *r);
         return task_schedule(regs);
     }
     if (is_user && !task_user_vma_allows(page_base, is_write, is_instr_fetch)) {
         printf("User Page Fault: out of range.\n");
         task_exit_with_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
-        struct registers *task_schedule(struct registers *r);
+        struct pt_regs *task_schedule(struct pt_regs *r);
         return task_schedule(regs);
     }
 

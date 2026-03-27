@@ -9,29 +9,44 @@ typedef struct wait_queue {
     void *head;
 } wait_queue_t;
 
-typedef struct vma {
-    uint32_t start;
-    uint32_t end;
-    uint32_t flags;
-    struct vma *next;
-} vma_t;
+struct vm_area_struct {
+    uint32_t vm_start;
+    uint32_t vm_end;
+    uint32_t vm_flags;
+    struct vm_area_struct *vm_next;
+};
 
-typedef struct mm {
-    uint32_t *page_directory;
-    uint32_t user_base;
-    uint32_t user_pages;
-    uint32_t user_stack_base;
-    uint32_t heap_base;
-    uint32_t heap_brk;
-    vma_t *vma_list;
-} mm_t;
+struct mm_struct {
+    uint32_t *pgd;
+    uint32_t start_code;
+    uint32_t end_code;
+    uint32_t start_stack;
+    uint32_t start_brk;
+    uint32_t brk;
+    struct vm_area_struct *mmap;
+};
 
-typedef struct task_fd {
+struct fd_struct {
     int used;
     struct file *file;
-} task_fd_t;
+};
 
 enum { TASK_FD_MAX = 32 };
+enum { THREAD_SIZE = 4096 };
+
+struct files_struct {
+    struct fd_struct fd[TASK_FD_MAX];
+};
+
+struct fs_struct {
+    struct dentry *pwd;
+    struct dentry *root;
+};
+
+struct thread_struct {
+    struct pt_regs *regs;
+    uint32_t *sp0;
+};
 
 enum {
     VMA_READ = 1 << 0,
@@ -60,10 +75,10 @@ const char *task_get_cwd(void);
 struct dentry *task_get_cwd_dentry(void);
 struct dentry *task_get_root_dentry(void);
 int task_set_cwd_dentry(struct dentry *d);
-int task_execve(const char *program, struct registers *regs);
+int task_execve(const char *program, struct pt_regs *regs);
 uint32_t task_mmap(uint32_t addr, uint32_t length, uint32_t prot);
 int task_munmap(uint32_t addr, uint32_t length);
-int task_fork(struct registers *regs);
+int task_fork(struct pt_regs *regs);
 uint32_t task_get_uid(void);
 uint32_t task_get_gid(void);
 uint32_t task_get_umask(void);
@@ -71,7 +86,7 @@ uint32_t task_set_umask(uint32_t mask);
 void task_user_heap_init(uint32_t heap_base, uint32_t stack_base);
 uint32_t task_brk(uint32_t new_end);
 int task_fd_alloc(struct file *file);
-task_fd_t *task_fd_get(int fd);
+struct fd_struct *task_fd_get(int fd);
 int task_fd_close(int fd);
 void task_install_stdio(struct inode *console);
 
@@ -80,7 +95,7 @@ void sched_init(void);
 void fork_init(void);
 int task_create(void (*entry)(void));
 int task_create_user(const char *program);
-struct registers *task_schedule(struct registers *regs);
+struct pt_regs *task_schedule(struct pt_regs *regs);
 void task_tick(void);
 void task_sleep(uint32_t ticks);
 void task_yield(void);
@@ -94,7 +109,7 @@ void task_set_current_page_directory(uint32_t* dir);
 void task_set_user_info(uint32_t base, uint32_t pages, uint32_t stack_base);
 void task_get_user_info(uint32_t *base, uint32_t *pages, uint32_t *stack_base);
 int task_user_vma_allows(uint32_t addr, int is_write, int is_exec);
-const char *task_get_current_program(void);
+const char *task_get_current_comm(void);
 uint32_t task_get_current_id(void);
 int task_current_is_user(void);
 int task_should_resched(void);

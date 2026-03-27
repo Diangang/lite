@@ -42,7 +42,7 @@ unsigned char kbdus[256] =
 };
 
 /* Keyboard Interrupt Handler */
-struct registers *keyboard_callback(struct registers *regs)
+struct pt_regs *keyboard_callback(struct pt_regs *regs)
 {
     (void)regs;
 
