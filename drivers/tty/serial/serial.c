@@ -35,6 +35,7 @@ void init_serial() {
 
    // DO NOT enable IRQs yet, this is just early console for polling output
    console_set_targets(CONSOLE_TARGET_SERIAL);
+   tty_set_output_targets(TTY_OUTPUT_SERIAL);
 }
 
 /* Full Serial Driver Initialization */

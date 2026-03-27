@@ -26,7 +26,7 @@
   - 消除了启动引导时的 `vfs_boot_cwd`，采用 Linux 风格的根目录初始化。
 - **文件系统**:
   - `ramfs`: 退化为极简的数据壳，完全依赖 VFS 的 Generic 方法运作。
-  - `initrd`, `procfs`, `devfs`, `sysfs`: 全面支持 VFS 新架构。
+  - `initrd`, `procfs`, `devtmpfs`, `sysfs`: 全面支持 VFS 新架构。
 
 ### 4. 设备驱动模型 (Drivers)
 - `kobject` / `kset` (简化版)：在 `sysfs` 中暴露内核对象。

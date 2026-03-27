@@ -41,6 +41,7 @@ void driver_init(void);
 struct bus_type *bus_register(const char *name, int (*match)(struct device *, struct device_driver *));
 int driver_register(struct device_driver *drv);
 int device_register(struct device *dev);
+int device_unregister(struct device *dev);
 int device_unbind(struct device *dev);
 int device_rebind(struct device *dev);
 

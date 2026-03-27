@@ -10,7 +10,7 @@
 #include "linux/vmm.h"
 #include "linux/pmm.h"
 #include "asm/gdt.h"
-#include "linux/devfs.h"
+#include "linux/devtmpfs.h"
 #include "linux/fs.h"
 #include "linux/console.h"
 
@@ -296,7 +296,7 @@ int task_exec_user(const char *program)
         return -1;
 
     files_init(current);
-    install_stdio(devfs_get_console());
+    install_stdio(devtmpfs_get_tty());
 
     if (!current->mm) {
         current->mm = mm_create();

@@ -6,7 +6,7 @@
 #include "linux/libc.h"
 #include "linux/vmm.h"
 #include "linux/pmm.h"
-#include "linux/devfs.h"
+#include "linux/devtmpfs.h"
 #include "linux/fs.h"
 #include "linux/console.h"
 #include "linux/irqflags.h"
@@ -249,7 +249,7 @@ static int task_create_internal(void (*entry)(void), const char *program)
     if (program) {
         struct task_struct *prev = current;
         current = task;
-        install_stdio(devfs_get_console());
+        install_stdio(devtmpfs_get_tty());
         current = prev;
     }
     task->waitq = NULL;

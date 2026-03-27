@@ -210,7 +210,7 @@ void test_mounts() {
         ok = 0;
     if (!contains(buf, n, "proc /proc"))
         ok = 0;
-    if (!contains(buf, n, "devfs /dev"))
+    if (!contains(buf, n, "devtmpfs /dev"))
         ok = 0;
     if (!contains(buf, n, "sysfs /sys"))
         ok = 0;

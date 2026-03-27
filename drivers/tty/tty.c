@@ -6,6 +6,8 @@
 #include "linux/exit.h"
 #include "linux/signal.h"
 #include "linux/console.h"
+#include "linux/vga.h"
+#include "linux/serial.h"
 
 #define INPUT_BUF_SIZE 256
 
@@ -19,6 +21,7 @@ static uint32_t tty_flags = (TTY_FLAG_ECHO | TTY_FLAG_CANON);
 static char tty_linebuf[256];
 static uint32_t tty_line_len = 0;
 static uint32_t tty_line_pos = 0;
+static uint32_t tty_output_targets = TTY_OUTPUT_VGA;
 
 static uint32_t foreground_pid = 0;
 static void (*user_exit_hook)(void) = NULL;
@@ -56,6 +59,33 @@ uint32_t tty_get_foreground_pid(void)
 uint32_t tty_get_flags(void)
 {
     return tty_flags;
+}
+
+void tty_set_output_targets(uint32_t targets)
+{
+    tty_output_targets |= targets;
+}
+
+uint32_t tty_get_output_targets(void)
+{
+    return tty_output_targets;
+}
+
+void tty_put_char(char c)
+{
+    if (tty_output_targets & TTY_OUTPUT_VGA)
+        vga_put_char(c);
+    if (tty_output_targets & TTY_OUTPUT_SERIAL)
+        serial_put_char(c);
+}
+
+uint32_t tty_write(const uint8_t *buf, uint32_t len)
+{
+    if (!buf || len == 0)
+        return 0;
+    for (uint32_t i = 0; i < len; i++)
+        tty_put_char((char)buf[i]);
+    return len;
 }
 
 void tty_set_flags(uint32_t flags)
@@ -137,20 +167,25 @@ uint32_t tty_read_blocking(char *buf, uint32_t len)
                 if (c == '\n') {
                     if (tty_line_len + 1 < sizeof(tty_linebuf))
                         tty_linebuf[tty_line_len++] = c;
-                    if (tty_flags & TTY_FLAG_ECHO) printf("\n");
+                    if (tty_flags & TTY_FLAG_ECHO)
+                        tty_put_char('\n');
                     break;
                 }
                 if (c == '\b' || c == 0x7F) {
                     if (tty_line_len > 0) {
                         tty_line_len--;
-                        if (tty_flags & TTY_FLAG_ECHO)
-                            printf("\b \b");
+                        if (tty_flags & TTY_FLAG_ECHO) {
+                            tty_put_char('\b');
+                            tty_put_char(' ');
+                            tty_put_char('\b');
+                        }
                     }
                     continue;
                 }
                 if (tty_line_len + 1 < sizeof(tty_linebuf)) {
                     tty_linebuf[tty_line_len++] = c;
-                    if (tty_flags & TTY_FLAG_ECHO) printf("%c", c);
+                    if (tty_flags & TTY_FLAG_ECHO)
+                        tty_put_char(c);
                 }
             }
         } else {
@@ -161,7 +196,8 @@ uint32_t tty_read_blocking(char *buf, uint32_t len)
             }
             if (c == '\r') c = '\n';
             buf[read++] = c;
-            if (tty_flags & TTY_FLAG_ECHO) printf("%c", c);
+            if (tty_flags & TTY_FLAG_ECHO)
+                tty_put_char(c);
             if (read > 0)
                 return read;
         }

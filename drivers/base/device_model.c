@@ -2,6 +2,7 @@
 #include "linux/kheap.h"
 #include "linux/libc.h"
 #include "linux/fs.h"
+#include "linux/devtmpfs.h"
 
 #define OFFSETOF(type, member) ((uint32_t)(&((type*)0)->member))
 #define CONTAINER_OF(ptr, type, member) ((type*)((uint8_t*)(ptr) - OFFSETOF(type, member)))
@@ -130,8 +131,32 @@ int device_register(struct device *dev)
         return -1;
     dev->kobj.next = (struct kobject*)dev->bus->devices;
     dev->bus->devices = dev;
+    devtmpfs_register_device(dev);
     try_bind_device(dev->bus, dev);
     return 0;
+}
+
+int device_unregister(struct device *dev)
+{
+    if (!dev || !dev->bus)
+        return -1;
+    device_unbind(dev);
+    struct device *prev = NULL;
+    struct device *cur = dev->bus->devices;
+    while (cur) {
+        if (cur == dev) {
+            if (prev)
+                prev->kobj.next = cur->kobj.next;
+            else
+                dev->bus->devices = (struct device*)cur->kobj.next;
+            devtmpfs_unregister_device(dev);
+            kobject_put(&dev->kobj);
+            return 0;
+        }
+        prev = cur;
+        cur = (struct device*)cur->kobj.next;
+    }
+    return -1;
 }
 
 struct device *device_register_simple(const char *name, const char *type, struct bus_type *bus, void *data)

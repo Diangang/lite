@@ -50,16 +50,9 @@ struct pt_regs *keyboard_callback(struct pt_regs *regs)
     uint8_t scancode = inb(0x60);
 
     /* If the top bit of the byte is set, it means a key has been released */
-    if (scancode & 0x80)
-    {
-        /* Key released - ignore for now */
-    }
-    else
-    {
+    if (!(scancode & 0x80) && (kbdus[scancode] != 0))
         /* Key pressed - pass the character to the shell */
-        if (kbdus[scancode] != 0)
-            tty_receive_char(kbdus[scancode]);
-    }
+        tty_receive_char(kbdus[scancode]);
     return regs;
 }
 

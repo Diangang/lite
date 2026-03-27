@@ -13,7 +13,7 @@ v4 说明：在 v3 基线之上，结合最新实现（ramfs 根、用户态 she
 - **Trap/调度基础**：syscall trap gate；`tss.esp0` per-task 更新；tick 驱动时间片与抢占；waitqueue + `sys_waitpid` 阻塞闭环。
 - **MM（VMA 驱动）**：VMA 统一描述用户空间；缺页按 VMA 校验权限并按需分配；`brk` 最小版本；退出按 VMA 回收用户页与页表页。
 - **VFS（最小 mount tree）**：
-  - rootfs(ramfs)/procfs/devfs/sysfs + mount 表。
+  - rootfs(ramfs)/procfs/devtmpfs/sysfs + mount 表。
   - **`/` 为可写 ramfs**；initramfs 在启动早期解包填充 `/`；根目录可列出挂载点。
   - 路径归一化支持 `.`/`..` 与多重 `/`；cwd 用于 shell 演示。
 - **fd 风格 syscall**：`open/read/write/close` + per-task fdtable，stdin/stdout/stderr 默认绑定 `/dev/console`。
@@ -136,7 +136,7 @@ v4 说明：在 v3 基线之上，结合最新实现（ramfs 根、用户态 she
   - 目录遍历接口收敛（从 getdent 过渡到更通用的 getdents 语义）
   - 权限与身份（uid/gid/mode/umask）最小闭环
 - 验收：
-  - procfs/sysfs/ramfs/devfs 全部走统一 VFS 打开实例语义。
+  - procfs/sysfs/ramfs/devtmpfs 全部走统一 VFS 打开实例语义。
   - 用户态 `ush` 的 `ls` 使用 `getdents` 批量遍历目录项并能正常输出。
   - 权限最小闭环：mkdir/open/read/write/chdir 会进行 uid/gid/mode/umask 权限判断；chmod 受 owner/root 限制。
   - 反复打开/遍历/关闭不会造成内核堆持续增长（可用 `/proc/meminfo` 观测）。

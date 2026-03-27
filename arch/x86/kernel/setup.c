@@ -15,7 +15,6 @@ static int x86_platform_devices_init(void)
 
     // Register static hardware devices that exist on this "board"
     device_register_simple("console", "console", platform, NULL);
-    device_register_simple("ramfs", "memfs", platform, NULL);
 
     return 0;
 }

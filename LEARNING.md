@@ -76,6 +76,7 @@
 - `fork.c`：任务创建与 fork 路径（`copy_thread`、`kernel_thread/sys_fork`）。
 - `exit.c`：任务退出与回收（`task_exit/wait/kill`）。
 - `fs/exec.c`：用户程序加载与 `exec`/`enter_user_mode` 路径（ELF 装载、页表与 VMA 初始化）。
+- `fs/devtmpfs/devtmpfs.c`：devtmpfs 设备节点（/dev）最小实现，节点由设备模型注册/注销驱动生成（`/dev/console` 对应内核控制台，`/dev/tty` 对应用户态终端）。
 - `kernel/syscall.c`：syscall 入口与分发（x86 `int 0x80`），只负责寄存器参数解包、调用 `sys_*`，以及统一调度收尾（`task_should_resched`）。
 - `include/linux/syscalls.h`：对内的 syscall 实现入口声明（`sys_read/sys_write/...`），用于把实现放在对应子系统文件里。
 - `include/linux/uaccess.h`：用户指针访问封装（`copy_to_user/copy_from_user/strncpy_from_user`），对齐 Linux 的 uaccess 习惯。

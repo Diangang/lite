@@ -25,16 +25,16 @@ Memory Management subsystem.
 ### `fs/`
 The Virtual File System (VFS) and concrete filesystem implementations.
 - Contains generic VFS components: `inode.c`, `dentry.c`, `namei.c` (path resolution), `file.c`, `open.c`, `read_write.c`, `namespace.c` (mounts).
-- Subdirectories contain specific filesystems: `ramfs/`, `procfs/`, `sysfs/`, `devfs/`.
+- Subdirectories contain specific filesystems: `ramfs/`, `procfs/`, `sysfs/`, `devtmpfs/`.
 
 ### `drivers/`
 Device drivers categorized by subsystem, mirroring the Linux `drivers/` tree.
 - **`drivers/base/`**: The generic Device Model (kobjects, bus, drivers, devices).
-- **`drivers/video/`**: Display drivers (e.g., `vga.c`).
+- **`drivers/video/`**: Display drivers (e.g., `console/vga.c`).
 - **`drivers/clocksource/`**: System timers (e.g., `timer.c`).
-- **`drivers/tty/`**: Teletype and serial drivers (`tty.c`, `serial.c`).
+- **`drivers/tty/`**: TTY core and subdrivers (`tty.c`, `serial/`).
 - **`drivers/input/`**: Input devices (`keyboard.c`).
-- **`drivers/console/`**: High-level console routing.
+- **`drivers/video/console/`**: Console routing, VGA console, and console driver binding.
 
 ### `include/`
 Header files.

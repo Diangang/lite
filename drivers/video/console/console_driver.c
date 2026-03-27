@@ -7,7 +7,6 @@ static struct device_driver drv_console;
 static int console_probe(struct device *dev)
 {
     (void)dev;
-    // console hardware initialization could happen here
     return 0;
 }
 

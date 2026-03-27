@@ -1,5 +1,6 @@
 #include "linux/console.h"
 #include "linux/libc.h"
+#include "linux/tty.h"
 
 static const size_t VGA_WIDTH = 80;
 static const size_t VGA_HEIGHT = 25;
@@ -100,5 +101,6 @@ void init_vga(void)
     }
 
     console_set_targets(CONSOLE_TARGET_VGA);
+    tty_set_output_targets(TTY_OUTPUT_VGA);
     printf("VGA initialized.\n");
 }

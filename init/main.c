@@ -10,7 +10,7 @@
 #include "linux/fs.h"
 #include "linux/ramfs.h"
 #include "linux/procfs.h"
-#include "linux/devfs.h"
+#include "linux/devtmpfs.h"
 #include "linux/sysfs.h"
 #include "linux/syscall.h"
 #include "linux/timer.h"
@@ -38,7 +38,7 @@ static void kernel_init(void)
     do_initcalls();
 
     vfs_mount_fs("/proc", "proc");
-    vfs_mount_fs("/dev", "devfs");
+    vfs_mount_fs("/dev", "devtmpfs");
     vfs_mount_fs("/sys", "sysfs");
 
     printf("kernel_init: exec /sbin/init as PID 1\n");
