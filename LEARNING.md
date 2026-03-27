@@ -34,6 +34,11 @@
 - `sched_init()`：负责建立最初的 idle 任务与调度基础（当前实现为调用 `init_task()`）。
 - `fork_init()`：预留 fork 相关的全局初始化入口（当前为空壳，后续可加入 task/mm 对象池、PID 分配器等）。
 
+## 4.1 PID 0/1 对齐
+
+- PID 0：`sched_init()` 初始化出的初始任务，`rest_init()` 中进入 idle loop（`hlt` 等待 tick）。
+- PID 1：由 `rest_init()` 创建的 `kernel_init` 任务，完成 initcall 与挂载后通过 `task_exec_user("/sbin/init")` 直接进入用户态 init，使 PID 1 的语义更接近 Linux 2.6。
+
 ## 5. pt_regs 与 copy_thread
 
 - **命名对齐**：将寄存器现场结构体命名为 `pt_regs`，与 Linux 2.6 一致。
@@ -48,3 +53,21 @@
 - `mm_struct`：使用 `pgd`（页目录指针）与 `mmap`（VMA 链表），堆区间用 `start_brk/brk`，栈基址用 `start_stack`。
 - `vm_area_struct`：使用 `vm_start/vm_end/vm_flags/vm_next`。
 - `THREAD_SIZE`：当前每 task 的内核栈固定为 4KB（1 页）。
+
+## 7. 调度 smoke（用户态）
+
+- 早期内核态的 demo 线程（打印 A/B）已移除，避免把“演示逻辑”常驻在内核初始化路径里。
+- 当前调度相关的可观测/可复现验证放在用户态 `/bin/smoke`：
+  - `fork` 产生两个子进程；
+  - 子进程循环执行 `sleep(ticks)` 与 `yield()`，同时输出字符；
+  - 父进程用 `waitpid` 等待并检查退出码，验证调度与阻塞路径闭环。
+
+## 8. task 代码拆分
+
+- `task.c`：task 公共结构、mm/vma 管理、fd 管理等基础设施。
+- `fork.c`：任务创建与 fork 路径（`copy_thread`、`task_create/task_fork`）。
+- `sched.c`：调度与等待队列（`task_schedule/tick/sleep/yield`）。
+- `exit.c`：任务退出与回收（`task_exit/wait/kill`）。
+- `exec.c`：用户程序加载与 `exec`/`enter_user_mode` 路径（ELF 装载、页表与 VMA 初始化）。
+- `proc_task.c`：`/proc` 相关导出（tasks/maps/stat/cmdline/status/fd/cwd）。
+- `task_internal.h`：task 内部结构与跨文件共享符号（对外 API 仍在 `task.h`）。

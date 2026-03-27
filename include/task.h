@@ -113,8 +113,7 @@ const char *task_get_current_comm(void);
 uint32_t task_get_current_id(void);
 int task_current_is_user(void);
 int task_should_resched(void);
-void task_set_demo_enabled(int enabled);
-int task_get_demo_enabled(void);
+int task_exec_user(const char *program);
 
 enum {
     TASK_EXIT_NORMAL = 0,

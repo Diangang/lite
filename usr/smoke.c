@@ -116,6 +116,53 @@ void test_bad_ptr() {
     }
 }
 
+void test_sched() {
+    print("\n--- Test 6: User Scheduler (fork + sleep + yield) ---\n");
+    int pid_a = fork();
+    if (pid_a == 0) {
+        for (int i = 0; i < 20; i++) {
+            write(1, "A", 1);
+            sleep(1);
+            yield();
+        }
+        write(1, "\n", 1);
+        exit(11);
+    }
+    if (pid_a < 0) {
+        print("FAIL: fork() for A failed\n");
+        return;
+    }
+
+    int pid_b = fork();
+    if (pid_b == 0) {
+        for (int i = 0; i < 20; i++) {
+            write(1, "B", 1);
+            sleep(1);
+            yield();
+        }
+        write(1, "\n", 1);
+        exit(22);
+    }
+    if (pid_b < 0) {
+        print("FAIL: fork() for B failed\n");
+        return;
+    }
+
+    int st_a[4] = {0};
+    int st_b[4] = {0};
+    waitpid(pid_a, st_a, 16);
+    waitpid(pid_b, st_b, 16);
+    print("A exit_code=");
+    print_int(st_a[0]);
+    print(", B exit_code=");
+    print_int(st_b[0]);
+    print("\n");
+    if (st_a[0] == 11 && st_b[0] == 22)
+        print("Scheduler test OK.\n");
+    else
+        print("FAIL: Unexpected scheduler test exit codes.\n");
+}
+
 static int contains(const char *hay, int hay_len, const char *needle)
 {
     if (!hay || !needle)
@@ -140,7 +187,7 @@ static int contains(const char *hay, int hay_len, const char *needle)
 }
 
 void test_mounts() {
-    print("\n--- Test 6: /proc/mounts ---\n");
+    print("\n--- Test 7: /proc/mounts ---\n");
     int fd = open("/proc/mounts", 0);
     if (fd < 0) {
         print("FAIL: Could not open /proc/mounts\n");
@@ -184,6 +231,7 @@ int main() {
     test_pf();
     test_mmap();
     test_bad_ptr();
+    test_sched();
     test_mounts();
 
     print("\n================================\n");

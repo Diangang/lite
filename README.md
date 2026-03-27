@@ -63,6 +63,8 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - 引入类 Linux 2.6 的 `driver_init`、`.initcall.init` 段收集与 `module_init` 宏自动加载机制。
   - **初始化解耦**：将内核的“早期打印控制台（Early Console，无中断、轮询输出）”与“完整设备驱动（中断使能、队列管理）”彻底分离。核心初始化（CPU/内存/中断）在 `start_kernel` 中完成，而完整的驱动初始化被延迟到 `PID=1` 的内核 `init` 线程中，通过 `do_initcalls` 安全加载，完美符合 Linux 规范。
 - **用户态交互**：完全移除内核态 Shell，由 1号进程 (`/sbin/init`) 挂载文件系统并 fork 执行真正的用户态 Shell (`/sbin/sh`)，实现彻底的特权级分离。内置提供基于 C 语言编写的集成测试程序 `/bin/smoke`。
+- **PID 1 对齐 Linux**：PID 1 在完成 initcall 与挂载后会直接“exec”为用户态 `/sbin/init`（不再额外创建一个新 pid），语义更接近 Linux 2.6 的 `kernel_init -> execve(init)`。
+- **调度自测（用户态 smoke）**：调度相关的演示/自测已迁移到用户态 `/bin/smoke`，通过 `fork + sleep + yield` 验证 Tick 驱动的时间片递减、阻塞/让出与上下文切换路径。
 - **文件系统 (VFS)**：结构体 (`i_ino`, `i_mode`, `i_size`) 和全局动态 inode 分配器 (`get_next_ino`) 完美对齐 Linux 2.6 标准，支持虚拟文件系统如 `ramfs`、`devfs`、`procfs`、`sysfs`。
 - **系统调用 (int 0x80)**：
   - 用户态 syscall 会进行用户指针校验，避免非法地址导致内核崩溃。

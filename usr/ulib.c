@@ -24,6 +24,14 @@ int syscall3(int sys_num, int arg1, int arg2, int arg3) {
     return ret;
 }
 
+void yield(void) {
+    syscall0(SYS_YIELD);
+}
+
+void sleep(int ticks) {
+    syscall1(SYS_SLEEP, ticks);
+}
+
 int syscall6(int sys_num, int arg1, int arg2, int arg3, int arg4, int arg5, int arg6) {
     int ret;
     // We only have limited registers, for mmap we might need to pass arguments in memory or registers

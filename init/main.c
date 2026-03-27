@@ -40,22 +40,9 @@ static void kernel_init(void)
     vfs_mount_fs("/dev", "devfs");
     vfs_mount_fs("/sys", "sysfs");
 
-    /* Switch to user mode and start init process */
-    /* We try standard Linux init paths in order */
-    int init_pid;
-
-    init_pid = task_create_user("/sbin/init");
-    if (init_pid > 0) goto init_started;
-
-    panic("No init found. Try passing init= option to kernel.");
-
-init_started:
-    printf("init task created (pid %d).\n", init_pid);
-
-    /* The kernel_init thread has done its job. It can exit now,
-       or just wait/idle if we don't have thread exit fully working yet. */
-    while (1)
-        task_sleep(100);
+    printf("kernel_init: exec /sbin/init as PID 1\n");
+    if (task_exec_user("/sbin/init") != 0)
+        panic("No init found. Try passing init= option to kernel.");
 }
 
 static void rest_init(void)

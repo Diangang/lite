@@ -29,6 +29,9 @@ int syscall1(int sys_num, int arg1);
 int syscall2(int sys_num, int arg1, int arg2);
 int syscall3(int sys_num, int arg1, int arg2, int arg3);
 
+void yield(void);
+void sleep(int ticks);
+
 int write(int fd, const void *buf, int count);
 int read(int fd, void *buf, int count);
 void exit(int status);
