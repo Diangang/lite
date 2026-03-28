@@ -12,10 +12,10 @@ SOURCES_S = arch/x86/boot/boot.s arch/x86/kernel/interrupt.s
 SOURCES_C = init/main.c kernel/syscall.c kernel/fork.c kernel/pid.c kernel/cred.c kernel/sched.c kernel/exit.c \
 	arch/x86/kernel/gdt.c arch/x86/kernel/idt.c arch/x86/kernel/isr.c arch/x86/kernel/setup.c \
 	arch/x86/kernel/irq.c \
-	mm/mm.c mm/mmap.c mm/pmm.c mm/vmm.c mm/kheap.c mm/filemap.c lib/libc.c \
+	mm/mm.c mm/bootmem.c mm/mmzone.c mm/mmap.c mm/page_alloc.c mm/vmscan.c mm/memory.c mm/vmalloc.c mm/slab.c mm/filemap.c lib/libc.c lib/kref.c lib/kobject.c \
 	fs/file.c fs/fdtable.c fs/exec.c fs/inode.c fs/dentry.c fs/namei.c fs/read_write.c fs/open.c fs/readdir.c fs/ioctl.c fs/namespace.c fs/ramfs/ramfs.c fs/procfs/procfs.c fs/procfs/base.c fs/procfs/array.c fs/procfs/task_mmu.c fs/devtmpfs/devtmpfs.c \
 	fs/sysfs/sysfs.c init/initramfs.c \
-	drivers/base/device_model.c drivers/input/keyboard.c \
+	drivers/base/core.c drivers/base/bus.c drivers/base/driver.c drivers/base/init.c drivers/input/keyboard.c \
 	drivers/clocksource/timer.c drivers/tty/tty.c drivers/tty/serial/serial.c \
 	drivers/video/console/vga.c drivers/video/console/console.c drivers/video/console/console_driver.c
 OBJECTS = $(SOURCES_S:.s=.o) $(SOURCES_C:.c=.o)

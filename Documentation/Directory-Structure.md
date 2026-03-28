@@ -20,7 +20,7 @@ Core, architecture-independent kernel mechanisms.
 
 ### `mm/`
 Memory Management subsystem.
-- Contains Physical Memory Management (`pmm.c`), Virtual Memory Management/Paging (`vmm.c`), Kernel Heap (`kheap.c`), and the newly implemented Page Cache (`filemap.c`).
+- Contains Physical Page Allocation (`page_alloc.c`), Page Table/Paging (`memory.c`), Kernel Heap (`slab.c`), and the Page Cache (`filemap.c`).
 
 ### `fs/`
 The Virtual File System (VFS) and concrete filesystem implementations.

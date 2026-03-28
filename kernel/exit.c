@@ -1,7 +1,7 @@
 #include "linux/sched.h"
 #include "linux/exit.h"
 #include "linux/pid.h"
-#include "linux/kheap.h"
+#include "linux/slab.h"
 #include "linux/libc.h"
 #include "linux/irqflags.h"
 #include "linux/uaccess.h"

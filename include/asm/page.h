@@ -1,0 +1,13 @@
+#ifndef ASM_PAGE_H
+#define ASM_PAGE_H
+
+#define PAGE_SHIFT 12
+#define PAGE_SIZE (1UL << PAGE_SHIFT)
+
+#define PAGE_OFFSET 0xC0000000
+#define TASK_SIZE PAGE_OFFSET
+
+#define USER_STACK_TOP TASK_SIZE
+#define USER_STACK_BASE (USER_STACK_TOP - PAGE_SIZE)
+
+#endif

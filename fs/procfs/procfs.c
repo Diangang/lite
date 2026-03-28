@@ -7,9 +7,11 @@
 #include "internal.h"
 #include "linux/timer.h"
 #include "linux/interrupt.h"
-#include "linux/kheap.h"
-#include "linux/pmm.h"
-#include "linux/vmm.h"
+#include "linux/slab.h"
+#include "linux/page_alloc.h"
+#include "linux/mmzone.h"
+#include "linux/vmscan.h"
+#include "asm/pgtable.h"
 
 static struct dirent proc_dirent;
 // Note: proc_root is dynamically allocated in init_procfs now
@@ -158,13 +160,34 @@ static uint32_t proc_read_meminfo(struct inode *node, uint32_t offset, uint32_t 
     (void)node;
     static char tmp[256];
     uint32_t off = 0;
-    uint32_t total_kb = pmm_get_total_kb();
-    uint32_t free_kb = pmm_get_free_kb();
+    uint32_t total_kb = (uint32_t)(totalram_pages() * (PAGE_SIZE / 1024));
+    uint32_t free_kb = (uint32_t)(freeram_pages() * (PAGE_SIZE / 1024));
+    uint32_t min_kb = 0;
+    uint32_t low_kb = 0;
+    uint32_t high_kb = 0;
+    if (contig_page_data.zone_dma.spanned_pages) {
+        min_kb += contig_page_data.zone_dma.watermark[WMARK_MIN] * (PAGE_SIZE / 1024);
+        low_kb += contig_page_data.zone_dma.watermark[WMARK_LOW] * (PAGE_SIZE / 1024);
+        high_kb += contig_page_data.zone_dma.watermark[WMARK_HIGH] * (PAGE_SIZE / 1024);
+    }
+    if (contig_page_data.zone_normal.spanned_pages) {
+        min_kb += contig_page_data.zone_normal.watermark[WMARK_MIN] * (PAGE_SIZE / 1024);
+        low_kb += contig_page_data.zone_normal.watermark[WMARK_LOW] * (PAGE_SIZE / 1024);
+        high_kb += contig_page_data.zone_normal.watermark[WMARK_HIGH] * (PAGE_SIZE / 1024);
+    }
     buf_append(tmp, &off, sizeof(tmp), "MemTotal: ");
     buf_append_u32(tmp, &off, sizeof(tmp), total_kb);
     buf_append(tmp, &off, sizeof(tmp), " kB\nMemFree: ");
     buf_append_u32(tmp, &off, sizeof(tmp), free_kb);
-    buf_append(tmp, &off, sizeof(tmp), " kB\n");
+    buf_append(tmp, &off, sizeof(tmp), " kB\nMinFree: ");
+    buf_append_u32(tmp, &off, sizeof(tmp), min_kb);
+    buf_append(tmp, &off, sizeof(tmp), " kB\nLowFree: ");
+    buf_append_u32(tmp, &off, sizeof(tmp), low_kb);
+    buf_append(tmp, &off, sizeof(tmp), " kB\nHighFree: ");
+    buf_append_u32(tmp, &off, sizeof(tmp), high_kb);
+    buf_append(tmp, &off, sizeof(tmp), " kB\nKswapdWakeups: ");
+    buf_append_u32(tmp, &off, sizeof(tmp), kswapd_wakeup_count());
+    buf_append(tmp, &off, sizeof(tmp), "\n");
     if (off < sizeof(tmp)) tmp[off] = 0;
     if (offset >= off)
         return 0;
@@ -181,7 +204,7 @@ static uint32_t proc_read_cow(struct inode *node, uint32_t offset, uint32_t size
     uint32_t off = 0;
     uint32_t faults = 0;
     uint32_t copies = 0;
-    vmm_get_cow_stats(&faults, &copies);
+    get_cow_stats(&faults, &copies);
     buf_append(tmp, &off, sizeof(tmp), "faults=");
     buf_append_u32(tmp, &off, sizeof(tmp), faults);
     buf_append(tmp, &off, sizeof(tmp), "\ncopies=");

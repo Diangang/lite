@@ -17,7 +17,7 @@ v4 说明：在 v3 基线之上，结合最新实现（ramfs 根、用户态 she
   - **`/` 为可写 ramfs**；initramfs 在启动早期解包填充 `/`；根目录可列出挂载点。
   - 路径归一化支持 `.`/`..` 与多重 `/`；cwd 用于 shell 演示。
 - **fd 风格 syscall**：`open/read/write/close` + per-task fdtable，stdin/stdout/stderr 默认绑定 `/dev/console`。
-- **procfs/sysfs 可观测性**：`/proc/tasks /proc/sched /proc/irq /proc/maps /proc/meminfo`，以及 `/proc/<pid>/{maps,stat,cmdline,status,fd/*}`；sysfs 提供 kernel/version/uptime 与 devices 基础节点。
+- **procfs/sysfs 可观测性**：`/proc/tasks /proc/sched /proc/irq /proc/maps /proc/meminfo`，以及 `/proc/<pid>/{maps,stat,cmdline,status,fd/*}`；sysfs 仅保留最小观测节点（kernel/version/uptime 与 devices/bus 最小视图）。
 - **用户态最小闭环**：`shell.elf` 用户态 shell 原型（依赖 `open/read/write/close + chdir/getcwd/getdent/mkdir`）。
 
 已知结构性欠账（会阻塞后续阶段）：
@@ -36,7 +36,7 @@ v4 说明：在 v3 基线之上，结合最新实现（ramfs 根、用户态 she
 - **先系统后功能**：优先让用户态能自举（PID1/init → shell），再扩展存储与更复杂的内核子系统。
 - **对象模型优先**：process/mm、file/vfs、device/driver、tty、block 是长期主干；任何功能必须挂在对象模型上。
 - **ABI 收敛优先**：syscall、ioctl、/proc、/sys 的接口一旦暴露，尽量避免频繁破坏式改动。
-- **可观测性必须前置**：每个阶段都要能用 `/proc` `/sys` 看见关键状态，避免“黑箱调试”。
+- **可观测性必须前置**：每个阶段都要能用 `/proc` `/sys` 看见关键状态，避免“黑箱调试”，但 sysfs 只做最小路径，不扩展成完整属性系统。
 - 参考：当前实现对齐 Linux 2.6 子系统的梳理与后续规划见 [linux26_minimal_plan.md](./linux26_minimal_plan.md)。
 
 ---
@@ -112,6 +112,23 @@ v4 说明：在 v3 基线之上，结合最新实现（ramfs 根、用户态 she
 
 ## 4. Phase C：MM 扩展（mmap/munmap → fork/COW）
 
+### C0 MM 对齐 Linux 2.6（按紧急程度）
+
+**P0 必需（阻塞正确性/后续演进）**
+- 去掉 bitmap 作为主状态源，free_area 完全由 `struct page` 驱动，确保 buddy 与页状态一致。
+- `__alloc_pages_nodemask` 接入 watermarks（MIN/LOW/HIGH），分配路径具备最小拒绝/回收触发机制。
+- 分区语义补齐最小 ZONE_DMA/ZONE_NORMAL，保证设备与低端内存路径可扩展。
+
+**P1 高优先（结构对齐与可扩展性）**
+- 拆分 `free_area_init_core` 与 `mem_init` 的职责边界，形成早期保留与常规释放的清晰分层。
+- `pgdat/zone/zonelist` 结构按 Linux 2.6 语义补齐基础字段，保留 NUMA 扩展入口。
+- 引入 `vmalloc/ioremap/kmap` 的骨架入口，预留高端映射路径。
+
+**P2 中优先（运行时完整性与性能）**
+- 引入 LRU/kswapd/vmscan 的最小框架，占位即可贯通回收路径。
+- page cache/buffer cache 与 writeback 的最小闭环，保证文件系统可演进。
+- SLUB 的 partial/empty 列表与回收入口，减少内核堆碎片与泄漏风险。
+
 ### C1 mmap/munmap（匿名映射优先）
 
 - 目标：引入匿名映射区，减少对 brk 的依赖；为动态加载/栈保护等铺路。
@@ -143,9 +160,15 @@ v4 说明：在 v3 基线之上，结合最新实现（ramfs 根、用户态 she
 
 ---
 
-## 6. Phase E：设备模型（非网络）
+## 6. Phase E：设备模型（最小骨架，服务核心主线）
 
-目标：形成 kobject/device/driver/bus 的最小框架，为 block/tty/clock 等设备统一管理与可观测铺路。
+目标：形成 kobject/device/driver/bus 的最小框架，仅用于 block/tty/clock 主线设备管理与观测，不扩展为完整 sysfs 属性系统。
+
+- 补齐到 Linux 2.6 driver core 的阶段性路线（裁剪版）：
+  - E1 kobject/kset/kref 最小骨架与生命周期。
+  - E2 bus 视角最小化（/sys/bus/<bus>/{devices,drivers} 仅用于观测）。
+  - E3 资源与中断描述（struct resource、dev->irq、platform_data）。
+  - E4 最小平台设备表（不做 uevent/modalias/自动加载）。
 
 - 验收：
   - `/sys/devices` 可以反映设备树（console、ramdisk、后续 block 设备）。

@@ -18,15 +18,15 @@
 
 ---
 
-## 2. 内存管理 (PMM & VMM) 阶段问题
+## 2. 内存管理 (page_alloc & paging) 阶段问题
 
-### 2.1 物理内存管理器 (PMM) 破坏内核代码
+### 2.1 物理页分配器 (page_alloc) 破坏内核代码
 - **现象**：系统在分配物理页后出现随机崩溃。
-- **定位**：PMM 的 Bitmap（位图）存放位置覆盖了内核的 `.bss` 段或代码段。
-- **解决**：在 `linker.ld` 中暴露 `end` 符号，并在 `pmm.c` 中将 Bitmap 强制放置在 `&end` 之后。在初始化位图时，将 `0x0` 到 `bitmap_end` 之间的所有物理页均标记为“已占用”。
+- **定位**：早期内存保留范围不正确，导致可用页误覆盖内核镜像或模块区域。
+- **解决**：通过 `bootmem_reserve` 保留内核镜像与模块区；`free_area_init` 仅释放 E820 可用且不在 bootmem 保留区的页。
 
 ### 2.2 开启分页 (Paging) 后瞬间 Triple Fault
-- **现象**：在 `init_vmm` 中设置 `CR0` 寄存器的 `PG` 位（开启分页）后，QEMU 立即无限重启。
+- **现象**：在 `paging_init` 中设置 `CR0` 寄存器的 `PG` 位（开启分页）后，QEMU 立即无限重启。
 - **定位**：开启分页的瞬间，CPU 期望 EIP（指令指针）所在的地址必须在页表中有效。如果没有建立恒等映射（Identity Mapping），CPU 取下一条指令时会触发缺页异常（Page Fault），由于 IDT 尚未完全接管，直接导致 Triple Fault。
 - **解决**：在开启分页前，强制将物理地址 `0x000000` - `0x400000`（前 4MB）映射到相同的虚拟地址。
 
@@ -54,8 +54,8 @@
 - **根因**：错误解引用了 Multiboot 结构体。`mbi->mods_addr` 是一个指向 `struct multiboot_module` 结构体数组的**指针**，而非文件数据的物理地址。
 - **解决**：
   1. 修正指针算术：`uint32_t initramfs_location = ((struct multiboot_module*)mbi->mods_addr)->mod_start;`
-  2. 在 `vmm.c` 中扩展恒等映射到 128MB，确保 initramfs 被加载的高端内存地址可以直接被内核访问。
-  3. 在 `pmm.c` 中保护 Multiboot 模块所在的物理内存不被当作空闲内存分配。
+  2. 在 `memory.c` 中扩展恒等映射到 128MB，确保 initramfs 被加载的高端内存地址可以直接被内核访问。
+  3. 在 `page_alloc.c` 中保护 Multiboot 模块所在的物理内存不被当作空闲内存分配。
 
 ---
 
@@ -107,15 +107,15 @@
 
 ### 6.5 用户态 shell 进入即 Page Fault（栈页基址设置错误）
 - **现象**：执行 `run shell.elf` 后立刻触发 `Page Fault! ( not-present write user ) at 0xbffffffc`，并显示 `User Page Fault: out of range.`，用户任务被终止。
-- **定位**：该地址位于用户栈顶页（`0xBFFFF000` - `0xBFFFFFFF`）。但加载器在建立用户 VMA/映射时，把 `user_stack_base` 误写成 `0xBFF000`，导致：
-  - VMA 仅覆盖低地址的“栈页”，不包含 `0xBFFFF000`；
-  - `enter_user_mode()` 传入的用户栈顶固定为 `0xC0000000`，首次压栈必然写到 `0xBFFFFFFC`，触发缺页；
+- **定位**：该地址位于用户栈顶页（`USER_STACK_BASE` - `USER_STACK_TOP-1`）。但加载器在建立用户 VMA/映射时，把 `user_stack_base` 误写成 `0xBFF000`，导致：
+  - VMA 仅覆盖低地址的“栈页”，不包含 `USER_STACK_BASE`；
+  - `enter_user_mode()` 传入的用户栈顶固定为 `USER_STACK_TOP`，首次压栈必然写到 `USER_STACK_TOP-4`，触发缺页；
   - 缺页处理路径检查 VMA 失败，判定 out-of-range 并 kill。
-- **解决**：将 `load_user_program` 中的 `user_stack_base` 修正为 `0xBFFFF000`，使栈 VMA 与实际栈顶一致（同时映射该页）。
+- **解决**：将 `load_user_program` 中的 `user_stack_base` 修正为 `USER_STACK_BASE`，使栈 VMA 与实际栈顶一致（同时映射该页）。
 
 ### 6.6 用户态 mmap 写入触发 present fault（低端恒等映射权限冲突）
 - **现象**：执行 `mmap.elf` 后输出 `Page Fault! ( write user ) at 0x403000`，并显示 `User Page Fault: unhandled.`。
-- **定位**：用户 VMA 位于 `0x400000` 低端区域，但内核在 `init_vmm` 里对 `0~128MB` 做了 supervisor-only 恒等映射。用户写入时触发“present but no user permission”类型缺页，现有缺页处理只处理 not-present 分支，导致直接杀死用户进程。
+- **定位**：用户 VMA 位于 `0x400000` 低端区域，但内核在 `paging_init` 里对 `0~128MB` 做了 supervisor-only 恒等映射。用户写入时触发“present but no user permission”类型缺页，现有缺页处理只处理 not-present 分支，导致直接杀死用户进程。
 - **解决**：在缺页处理里增加 “present fault 且 VMA 允许访问” 的修正路径：为该页重新分配物理页，设置 `PTE_USER` 并按 VMA 设定读写权限，确保用户映射可写。
 
 ### 6.7 fork/COW 写入触发两次 Page Fault（写时复制预期现象）
@@ -136,7 +136,7 @@
 ### 6.9 用户态 execve 退出后父进程触发 Page Fault (EIP 0x400037)
 - **现象**：在用户态 shell (`shell.elf`) 中执行 `run cat.elf` 后，`cat.elf` 正常输出内容并退出。但当控制权交还给父进程继续执行 `SYS_WAITPID` 之后的指令（EIP: 0x400037）时，触发了 `Page Fault`（试图读取地址 `0x0`，导致 unhandled 崩溃）。
 - **定位**：
-  1. **内核页表共享冲突**：在 `init_vmm` 中，内核将物理内存的前 `128MB` 进行了恒等映射（Identity Mapping）。
+  1. **内核页表共享冲突**：在 `paging_init` 中，内核将物理内存的前 `128MB` 进行了恒等映射（Identity Mapping）。
   2. **加载基址冲突**：用户程序的链接脚本 `ulinker.ld` 之前的加载基址为 `0x400000`（4MB），恰好落在内核恒等映射的范围内。
   3. **相互破坏**：由于落在同一范围内，`init.elf`、`shell.elf` 和 `cat.elf` 实际上共享了同一块内核页表结构。当 `shell.elf` 调用 `SYS_EXECVE` 加载新程序时，会调用 `mm_destroy` 销毁旧空间，这直接清空了共享页表中的映射条目。`cat.elf` 退出后切回父进程，由于 4MB 处的映射已被破坏，CPU 读到全零数据，引发了缺页异常。
 - **解决**：修改 `usr/ulinker.ld`，将用户程序的链接基址从 `0x400000` (4MB) 提升到 `0x40000000` (1GB)。1GB 远超内核恒等映射范围，使得每个用户进程都有自己完全独立的页表区域，销毁和修改不再相互干扰。
@@ -179,7 +179,7 @@
 - **解决**：
   1. 修正 `usr/ushprog.s` 中的硬编码系统调用号，将 `SYS_FORK` 修正为 20，`SYS_WAITPID` 修正为 15。
   2. 优化 `kernel/sched.c` 中的 `task_yield()` 实现：若任务处于 `TASK_BLOCKED` 状态则安全使用 `sti; hlt` 等待中断；若处于 `TASK_RUNNABLE` 状态则通过触发软中断 `int $0x80` (SYS_YIELD) 安全、强制地触发上下文切换。
-  3. 优化 `vmm.c`，隐藏用户栈动态分配和写时复制(COW)产生的常规缺页异常打印，仅打印真正的非法越权访问错误。
+  3. 优化 `memory.c`，隐藏用户栈动态分配和写时复制(COW)产生的常规缺页异常打印，仅打印真正的非法越权访问错误。
 
 ## 16. initramfs 不支持多级目录的问题
 - **现象**：`initramfs.cpio` 中如果有 `usr/bin/` 这样的多级目录，在加载时会报错 `Failed to create initramfs dentry`。

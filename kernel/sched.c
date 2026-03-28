@@ -1,8 +1,8 @@
 #include "linux/sched.h"
 #include "linux/timer.h"
-#include "linux/vmm.h"
+#include "asm/pgtable.h"
 #include "asm/gdt.h"
-#include "linux/kheap.h"
+#include "linux/slab.h"
 #include "linux/libc.h"
 #include "linux/fs.h"
 #include "linux/irqflags.h"
@@ -120,12 +120,12 @@ struct pt_regs *task_schedule(struct pt_regs *regs)
                 sched_switch_count++;
             current = candidate;
             if (current->mm && current->mm->pgd) {
-                if (current->mm->pgd != vmm_get_current_directory())
-                    vmm_switch_directory(current->mm->pgd);
+                if (current->mm->pgd != get_pgd_current())
+                    switch_pgd(current->mm->pgd);
             } else {
-                uint32_t *kdir = vmm_get_kernel_directory();
-                if (kdir && kdir != vmm_get_current_directory())
-                    vmm_switch_directory(kdir);
+                pgd_t *kdir = get_pgd_kernel();
+                if (kdir && kdir != get_pgd_current())
+                    switch_pgd(kdir);
             }
             tss_set_kernel_stack((uint32_t)current->thread.sp0);
             current->time_slice = TASK_TIMESLICE_TICKS;

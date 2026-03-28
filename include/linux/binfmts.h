@@ -2,10 +2,11 @@
 #define LINUX_BINFMT_H
 
 #include <stdint.h>
+#include "asm/pgtable.h"
 
 struct pt_regs;
 
-int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_stack, uint32_t** out_dir,
+int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_stack, pgd_t** out_dir,
                              uint32_t* out_base, uint32_t* out_pages, uint32_t* out_stack_base);
 void user_task(void);
 int task_exec_user(const char *program);

@@ -2,6 +2,7 @@
 #define LINUX_MM_H
 
 #include <stdint.h>
+#include "asm/pgtable.h"
 
 struct vm_area_struct {
     uint32_t vm_start;
@@ -11,7 +12,7 @@ struct vm_area_struct {
 };
 
 struct mm_struct {
-    uint32_t *pgd;
+    pgd_t *pgd;
     uint32_t start_code;
     uint32_t end_code;
     uint32_t start_stack;

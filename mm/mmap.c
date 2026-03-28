@@ -1,9 +1,10 @@
 #include "linux/sched.h"
 #include "linux/mm.h"
-#include "linux/kheap.h"
+#include "linux/slab.h"
 #include "linux/libc.h"
-#include "linux/vmm.h"
-#include "linux/pmm.h"
+#include "asm/pgtable.h"
+#include "linux/page_alloc.h"
+#include "asm/page.h"
 #include "linux/irqflags.h"
 
 static uint32_t align_up(uint32_t value)
@@ -11,25 +12,25 @@ static uint32_t align_up(uint32_t value)
     return (value + 0xFFF) & ~0xFFF;
 }
 
-static int task_free_user_page_mapped(uint32_t *dir, uint32_t va_page)
+static int task_free_user_page_mapped(pgd_t *dir, uint32_t va_page)
 {
     if (!dir)
         return 0;
-    uint32_t pde_idx = va_page / (1024 * 4096);
-    uint32_t pte_idx = (va_page % (1024 * 4096)) / 4096;
-    uint32_t pde = dir[pde_idx];
-    if (!(pde & PTE_PRESENT))
+    uint32_t pde_idx = pgd_index(va_page);
+    uint32_t pte_idx = pte_index(va_page);
+    pgdval_t pde = dir[pde_idx];
+    if (!pgd_present(pde))
         return 0;
-    uint32_t *table = (uint32_t*)(pde & ~0xFFF);
-    uint32_t pte = table[pte_idx];
-    if (!(pte & PTE_PRESENT))
+    pte_t *table = (pte_t*)(pde & ~0xFFF);
+    pteval_t pte = table[pte_idx];
+    if (!pte_present(pte))
         return 0;
-    if (!(pte & PTE_USER))
+    if (!pte_user(pte))
         return 0;
 
-    uint32_t phys = pte & ~0xFFF;
+    uint32_t phys = pte_pfn(pte);
     table[pte_idx] = 0;
-    pmm_free_page((void*)phys);
+    free_page((unsigned long)phys);
     return 1;
 }
 
@@ -57,7 +58,7 @@ struct mm_struct *mm_create(void)
     if (!mm)
         return NULL;
     memset(mm, 0, sizeof(*mm));
-    mm->pgd = vmm_get_current_directory();
+    mm->pgd = get_pgd_current();
     return mm;
 }
 
@@ -65,7 +66,7 @@ void mm_destroy(struct mm_struct *mm)
 {
     if (!mm)
         return;
-    if (!mm->pgd || mm->pgd == vmm_get_kernel_directory()) {
+    if (!mm->pgd || mm->pgd == get_pgd_kernel()) {
         vma_list_free(mm);
         kfree(mm);
         return;
@@ -82,9 +83,9 @@ void mm_destroy(struct mm_struct *mm)
         v = v->vm_next;
     }
 
-    uint32_t *kernel_dir = vmm_get_kernel_directory();
+    pgd_t *kernel_dir = get_pgd_kernel();
     for (uint32_t i = 0; i < 1024; i++) {
-        uint32_t pde = mm->pgd[i];
+        pgdval_t pde = mm->pgd[i];
         if (!(pde & PTE_PRESENT))
             continue;
 
@@ -94,10 +95,10 @@ void mm_destroy(struct mm_struct *mm)
             kernel_pde_phys = kernel_dir[i] & ~0xFFF;
         if (kernel_pde_phys && kernel_pde_phys == pde_phys)
             continue;
-        pmm_free_page((void*)pde_phys);
+        free_page((unsigned long)pde_phys);
     }
 
-    pmm_free_page(mm->pgd);
+    free_page((unsigned long)mm->pgd);
     vma_list_free(mm);
     kfree(mm);
 }
@@ -111,7 +112,7 @@ uint32_t do_mmap(struct mm_struct *mm, uint32_t addr, uint32_t length, uint32_t 
     uint32_t len = align_up(length);
     if (len == 0)
         return 0;
-    uint32_t limit = mm->start_stack ? mm->start_stack : 0xC0000000;
+    uint32_t limit = mm->start_stack ? mm->start_stack : TASK_SIZE;
     if (limit <= 0x1000)
         return 0;
 
@@ -332,7 +333,7 @@ void mm_init_brk(struct mm_struct *mm, uint32_t heap_base, uint32_t stack_base)
         return;
     if (heap_base < 0x1000)
         return;
-    if (heap_base >= 0xC0000000)
+    if (heap_base >= TASK_SIZE)
         return;
     if (stack_base && heap_base + 0x1000 >= stack_base)
         return;
@@ -356,7 +357,7 @@ uint32_t do_brk(struct mm_struct *mm, uint32_t new_end)
 
     if (new_end < mm->start_brk)
         return mm->brk;
-    if (new_end >= 0xC0000000)
+    if (new_end >= TASK_SIZE)
         return mm->brk;
     if (mm->start_stack && align_up(new_end) + 0x1000 > mm->start_stack)
         return mm->brk;

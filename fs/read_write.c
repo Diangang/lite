@@ -1,7 +1,7 @@
 #include "linux/fs.h"
 #include "linux/file.h"
 #include "linux/fdtable.h"
-#include "linux/vmm.h"
+#include "asm/pgtable.h"
 #include "linux/libc.h"
 #include "linux/uaccess.h"
 
@@ -24,7 +24,7 @@ int sys_write(int fd, const void *buf, uint32_t len, int from_user)
     if (len > 4096)
         return -1;
     if (from_user) {
-        if (!vmm_user_accessible(vmm_get_current_directory(), (void*)buf, len, 0))
+        if (!access_ok(get_pgd_current(), (void*)buf, len, 0))
             return -1;
     }
 
@@ -61,7 +61,7 @@ int sys_read(int fd, void *buf, uint32_t len, int from_user)
     if (len > 4096)
         return -1;
     if (from_user) {
-        if (!vmm_user_accessible(vmm_get_current_directory(), buf, len, 1))
+        if (!access_ok(get_pgd_current(), buf, len, 1))
             return -1;
     }
 

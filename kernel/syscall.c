@@ -10,6 +10,7 @@
 #include "linux/irqflags.h"
 #include "linux/interrupt.h"
 #include "linux/libc.h"
+#include "asm/page.h"
 #include "string.h"
 #include "linux/uaccess.h"
 
@@ -56,7 +57,7 @@ static struct pt_regs *syscall_handler(struct pt_regs *regs)
             uint32_t req = regs->ebx;
             if (from_user) {
                 if (req != 0) {
-                    if (req < 0x1000 || req >= 0xC0000000) {
+                    if (req < 0x1000 || req >= TASK_SIZE) {
                         regs->eax = sys_brk(0);
                         break;
                     }

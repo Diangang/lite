@@ -5,9 +5,9 @@
 ## 当前架构演进状态
 
 ### 1. 内存管理 (MM)
-- **PMM**: 物理内存位图分配器
-- **VMM**: 页表映射，Identity Mapping
-- **KHEAP**: 内核堆分配器 (`kmalloc` / `kfree`)
+- **page_alloc**: 物理页位图分配器
+- **paging**: 页表映射，Identity Mapping
+- **slab**: 内核堆分配器 (`kmalloc` / `kfree`)
 - **Page Cache**: 已经实现基础的页缓存结构 (`address_space`, `page_cache_entry`)，支持按页进行文件数据的读写。
 
 ### 2. 进程管理 (Task)

@@ -1,5 +1,5 @@
 #include "linux/file.h"
-#include "linux/kheap.h"
+#include "linux/slab.h"
 #include "linux/libc.h"
 #include "linux/fs.h"
 #include "linux/ramfs.h"

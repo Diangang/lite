@@ -92,3 +92,25 @@
 - `include/linux/sched.h`：task 结构与调度相关常量/全局（对齐 Linux 习惯的头文件命名）。
 - `include/linux/mm.h`：`mm_struct`/`vm_area_struct` 与 VMA 标志位定义。
 - `include/linux/wait.h`：wait queue 类型与接口声明。
+
+## 9. 内存管理初始化流程
+
+- **入口**：`init_mm()` 负责早期内存与分页初始化，当前顺序是 `bootmem_init → init_zones → build_all_zonelists → free_area_init → paging_init → mem_init → kswapd_init → kmem_cache_init`。
+- **bootmem**：只用于早期线性分配与保留内存范围，为 page/zone 数据结构提供可用空间。
+- **zone/page**：建立最小 `struct page` 数组与 `zone_dma/zone_normal`，并初始化 `free_area` 与 `zonelist` 作为 buddy 的挂接点。
+- **free_area_init/free_area_init_core**：物理页分配主路径初始化，建立 buddy 元数据并标记 `PG_RESERVED`，准备 free_area。
+- **watermarks**：`__alloc_pages_nodemask` 依据 HIGH/LOW/MIN 水位选择分配并触发最小回收唤醒点。
+- **GFP_DMA**：通过 DMA-only zonelist 将分配限制在 ZONE_DMA。
+- **vmscan/kswapd**：预留最小回收线程入口与唤醒路径，并通过 `/proc/meminfo` 输出 watermarks 与唤醒计数。
+- **vmalloc/ioremap/kmap**：提供最小骨架入口，后续接入高端映射与设备映射路径。
+
+## 10. kobject/kref 最小实现
+
+- **kref**：提供最小引用计数接口（init/get/put），统一对象生命周期入口。
+- **kobject**：提供 name/父子关系指针与 release 回调，kref 负责引用计数，kobj_type 作为最小类型钩子。
+- **kset**：用于聚合 kobject 列表，driver core 维护 devices/drivers 的最小集合。
+- **sysfs 映射**：`/sys/devices` 通过 devices kset 枚举，保持最小 kobject 驱动输出路径。
+- **sysfs 总线视图**：`/sys/bus/platform/{devices,drivers}` 基于 kset 列表输出。
+- **driver bind/unbind**：`/sys/bus/platform/drivers/<drv>/{bind,unbind}` 支持最小手工绑定/解绑。
+- **mem_init**：把可用页挂入 zone 的 free_area，正式启用 buddy 分配路径。
+- **slub/kmalloc**：小对象缓存与大对象按页分配，形成内核通用动态分配入口。

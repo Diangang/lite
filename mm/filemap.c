@@ -1,7 +1,6 @@
 #include "linux/fs.h"
-#include "linux/pmm.h"
-#include "linux/vmm.h"
-#include "linux/kheap.h"
+#include "linux/page_alloc.h"
+#include "linux/slab.h"
 #include "linux/libc.h"
 #include "linux/pagemap.h"
 
@@ -30,7 +29,7 @@ static struct page_cache_entry *add_to_page_cache(struct address_space *mapping,
         return NULL;
     p->index = index;
     // Allocate a physical page for cache
-    p->phys_addr = (uint32_t)pmm_alloc_page();
+    p->phys_addr = (uint32_t)alloc_page(GFP_KERNEL);
     if (!p->phys_addr) {
         kfree(p);
         return NULL;
@@ -138,7 +137,7 @@ void truncate_inode_pages(struct address_space *mapping, uint32_t lstart)
         while (p) {
             struct page_cache_entry *next = p->next;
             if (p->phys_addr)
-                pmm_free_page((void*)p->phys_addr);
+                free_page((unsigned long)p->phys_addr);
 
             // Also need to remove it from the mapping list?
             // Since we are clearing the whole mapping, we can just free the structs

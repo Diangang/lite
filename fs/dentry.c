@@ -1,5 +1,5 @@
 #include "linux/fs.h"
-#include "linux/kheap.h"
+#include "linux/slab.h"
 #include "linux/libc.h"
 
 struct dentry *vfs_root_dentry = NULL;

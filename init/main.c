@@ -17,7 +17,7 @@
 #include "linux/sched.h"
 #include "linux/fork.h"
 #include "linux/binfmts.h"
-#include "linux/device_model.h"
+#include "linux/device.h"
 #include "linux/tty.h"
 
 extern initcall_t __initcall_start[];

@@ -4,8 +4,8 @@
 #include "linux/init.h"
 #include "linux/tty.h"
 #include "linux/console.h"
-#include "linux/kheap.h"
-#include "linux/device_model.h"
+#include "linux/slab.h"
+#include "linux/device.h"
 
 #define MAX_DEVICES 32
 

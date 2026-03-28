@@ -20,20 +20,20 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - PS/2 键盘驱动。
   - **PIT 可编程定时器**（提供系统 Tick 和 uptime 支持）。
   - 调度以 Tick 驱动时间片递减，时间片耗尽触发一次抢占式切换。
-  - **物理内存管理 (PMM)**：
-    - Multiboot E820 内存地图解析。
-    - **Bitmap 位图分配器**：支持按页 (4KB) 粒度的物理内存分配 (`alloc`) 与释放 (`free`)。
-  - **虚拟内存管理 (VMM)**：
+  - **物理内存管理 (page_alloc/buddy)**：
+    - Multiboot E820 内存地图解析与 bootmem 早期保留。
+    - **Buddy 框架**：支持按页 (4KB) 及按 order 的物理页分配与释放，并挂接到 zone/free_area 与 zonelist。
+  - **虚拟内存管理 (paging/pgtable)**：
     - **分页机制 (Paging)**：开启 x86 保护模式分页，设置 CR3 和 CR0 寄存器。
     - **恒等映射**：将物理内存前 128MB 映射到相同的虚拟地址，保证内核与低端内存可访问。
     - **缺页异常处理**：捕获 `#PF` (Interrupt 14)，支持最小按需映射（not-present 缺页自动分配并映射），并基于用户 VMA 范围校验合法性。
     - **映射查询**：提供虚拟地址是否已映射与虚实地址转换的辅助接口。
     - **独立页目录**：支持克隆内核页目录并在任务间切换。
     - **用户态回收**：用户进程退出后基于 VMA 回收用户页，并释放非内核共享的页表页与页目录页。
-  - **内核堆分配器 (KHeap)**：
-    - 实现了 `kmalloc` 和 `kfree`，支持动态内存分配。
-    - 采用 **First-Fit** 策略与空闲块 **合并 (Coalescing)** 算法。
-    - 初始化时会映射 1MB 堆空间并建立空闲链表，`kmalloc` 失败时会按需扩展堆空间。
+  - **vmalloc/ioremap/kmap 骨架**：预留高端映射与设备映射入口。
+  - **内核对象分配 (SLUB 框架)**：
+    - 实现了 `kmem_cache` 框架与 `kmalloc/kfree`，支持小对象缓存与大对象按页分配。
+    - 初始化流程为 `bootmem → zones → build_all_zonelists → free_area_init → paging → mem_init → kswapd_init → slab`，为后续对齐 Linux 2.6 留出替换接口。
   - **极简标准 C 库**（实现了 `printf`, `memset`, `memcpy`, `itoa` 等核心函数）。
 - **Initramfs (CPIO newc)**：
   - 通过 Multiboot module 加载 cpio 归档，并在内核早期解包到 rootfs（ramfs）。
@@ -45,7 +45,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `/proc/maps`：当前任务的 VMA 列表（`cat proc/maps`）。
   - `/proc/self/maps`：当前任务 VMA（更 Linux-like 的路径形式）。
   - `/proc/<pid>/maps`：指定 pid 的 VMA（例如 `cat proc/1/maps`）。
-  - `/proc/meminfo`：物理内存总量与空闲量（`cat proc/meminfo`）。
+  - `/proc/meminfo`：物理内存总量、空闲量与 watermarks/kswapd 统计（`cat proc/meminfo`）。
   - `/proc/cow`：COW 缺页次数与复制次数统计（`cat proc/cow`）。
   - `/proc/mounts`：当前挂载表（`cat proc/mounts`）。
   - `/proc/<pid>/stat`：任务基础状态（`cat proc/1/stat`）。
@@ -60,9 +60,12 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
 - **sysfs（最小自描述接口）**：
   - `/sys/kernel/version`、`/sys/kernel/uptime`。
   - `/sys/devices/<dev>/{type,bus,driver}`：设备模型最小视图（目前默认注册 console 并自动绑定同名 driver）。
+  - `/sys/bus/platform/{devices,drivers}`：基于 kset 的最小总线视图，drivers 支持 `bind/unbind`。
 - **驱动模型与设备树**：
   - 引入类 Linux 2.6 的 `driver_init`、分级 initcall 段收集与 `module_init` 宏自动加载机制（分级条目最终被链接到连续的 initcall 段，内核通过 `__initcall_start..__initcall_end` 统一遍历；级别顺序由链接脚本中各 `.initcallN.init` 的排列保证）。
   - **初始化解耦**：将内核的“早期打印控制台（Early Console，无中断、轮询输出）”与“完整设备驱动（中断使能、队列管理）”彻底分离。核心初始化（CPU/内存/中断）在 `start_kernel` 中完成，而完整的驱动初始化被延迟到 `PID=1` 的内核 `init` 线程中，通过 `do_initcalls` 安全加载，完美符合 Linux 规范。
+  - **kobject/kref 基础**：提供最小对象生命周期管理与引用计数，为 sysfs 与 driver core 提供一致化底座。
+  - **kset/kobj_type 骨架**：提供最小聚合与类型钩子结构，为后续 sysfs 自动映射做准备。
 - **用户态交互**：完全移除内核态 Shell，由 1号进程 (`/sbin/init`) 挂载文件系统并 fork 执行真正的用户态 Shell (`/sbin/sh`)，实现彻底的特权级分离。内置提供基于 C 语言编写的集成测试程序 `/bin/smoke`。
 - **PID 1 对齐 Linux**：PID 1 在完成 initcall 与挂载后会直接“exec”为用户态 `/sbin/init`（不再额外创建一个新 pid），语义更接近 Linux 2.6 的 `kernel_init -> execve(init)`。
 - **调度自测（用户态 smoke）**：调度相关的演示/自测已迁移到用户态 `/bin/smoke`，通过 `fork + sleep + yield` 验证 Tick 驱动的时间片递减、阻塞/让出与上下文切换路径。

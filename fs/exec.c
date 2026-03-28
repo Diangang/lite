@@ -4,11 +4,12 @@
 #include "linux/binfmts.h"
 #include "linux/exit.h"
 #include "linux/file.h"
-#include "linux/kheap.h"
+#include "linux/slab.h"
 #include "linux/libc.h"
 #include "linux/timer.h"
-#include "linux/vmm.h"
-#include "linux/pmm.h"
+#include "asm/pgtable.h"
+#include "linux/page_alloc.h"
+#include "asm/page.h"
 #include "asm/gdt.h"
 #include "linux/devtmpfs.h"
 #include "linux/fs.h"
@@ -76,17 +77,17 @@ static uint32_t align_up(uint32_t value)
     return (value + 0xFFF) & ~0xFFF;
 }
 
-static void ensure_private_table(uint32_t* dir, uint32_t pde_idx)
+static void ensure_private_table(pgd_t* dir, uint32_t pde_idx)
 {
     if (dir[pde_idx] & PTE_PRESENT) {
-        uint32_t* old_table = (uint32_t*)(dir[pde_idx] & ~0xFFF);
-        uint32_t* new_table = (uint32_t*)pmm_alloc_page();
+        pte_t* old_table = (pte_t*)(dir[pde_idx] & ~0xFFF);
+        pte_t* new_table = (pte_t*)alloc_page(GFP_KERNEL);
         if (!new_table)
             return;
         memcpy(new_table, old_table, 4096);
         dir[pde_idx] = ((uint32_t)new_table) | PTE_PRESENT | PTE_READ_WRITE | PTE_USER;
     } else {
-        uint32_t* new_table = (uint32_t*)pmm_alloc_page();
+        pte_t* new_table = (pte_t*)alloc_page(GFP_KERNEL);
         if (!new_table)
             return;
         memset(new_table, 0, 4096);
@@ -94,15 +95,15 @@ static void ensure_private_table(uint32_t* dir, uint32_t pde_idx)
     }
 }
 
-static void ensure_private_table_range(uint32_t* dir, uint32_t start, uint32_t end)
+static void ensure_private_table_range(pgd_t* dir, uint32_t start, uint32_t end)
 {
-    uint32_t start_idx = start / (1024 * 4096);
-    uint32_t end_idx = (end - 1) / (1024 * 4096);
+    uint32_t start_idx = pgd_index(start);
+    uint32_t end_idx = pgd_index(end - 1);
     for (uint32_t i = start_idx; i <= end_idx; i++)
         ensure_private_table(dir, i);
 }
 
-int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_stack, uint32_t** out_dir,
+int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_stack, pgd_t** out_dir,
                              uint32_t* out_base, uint32_t* out_pages, uint32_t* out_stack_base)
 {
     struct inode *node = vfs_resolve(name);
@@ -167,7 +168,7 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
         Elf32_Phdr *phdr = (Elf32_Phdr*)(buf + ehdr->e_phoff + i * ehdr->e_phentsize);
         if (phdr->p_type != 1)
             continue;
-        if (phdr->p_vaddr >= 0xC0000000 || (phdr->p_vaddr + phdr->p_memsz) >= 0xC0000000)
+        if (phdr->p_vaddr >= TASK_SIZE || (phdr->p_vaddr + phdr->p_memsz) >= TASK_SIZE)
             return printf("User program vaddr out of range.\n"), kfree(buf), -1;
 
         if (phdr->p_filesz > 0 && phdr->p_offset + phdr->p_filesz > node->i_size)
@@ -185,17 +186,17 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
 
     enum { PF_X = 1, PF_W = 2, PF_R = 4 };
 
-    uint32_t* user_dir = vmm_clone_kernel_directory();
+    pgd_t* user_dir = pgd_clone_kernel();
     if (!user_dir)
         return printf("User page directory alloc failed.\n"), kfree(buf), -1;
 
     uint32_t user_base = align_down(min_vaddr);
     uint32_t user_end = align_up(max_vaddr);
-    uint32_t user_stack_base = 0xBFFFF000;
+    uint32_t user_stack_base = USER_STACK_BASE;
     uint32_t pages = (user_end - user_base) / 4096;
     uint32_t heap_base = user_end;
 
-    ensure_private_table(user_dir, user_stack_base / (1024 * 4096));
+    ensure_private_table(user_dir, pgd_index(user_stack_base));
 
     if (current && !current->mm)
         current->mm = mm_create();
@@ -215,27 +216,27 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
 
         ensure_private_table_range(user_dir, seg_start, seg_end);
         for (uint32_t va = seg_start; va < seg_end; va += 4096) {
-            uint32_t old_phys = vmm_virt_to_phys_ex(user_dir, (void*)va);
+            uint32_t old_phys = virt_to_phys_pgd(user_dir, (void*)va);
             if (old_phys != 0xFFFFFFFF && ((old_phys & ~0xFFF) != va))
                 continue;
-            void *phys = pmm_alloc_page();
+            void *phys = alloc_page(GFP_KERNEL);
             if (!phys)
                 return printf("User program page alloc failed.\n"), kfree(buf), -1;
-            vmm_map_page_ex(user_dir, phys, (void*)va, PTE_PRESENT | PTE_READ_WRITE | PTE_USER);
+            map_page_ex(user_dir, phys, (void*)va, PTE_PRESENT | PTE_READ_WRITE | PTE_USER);
         }
     }
     mm_add_vma(current->mm, user_stack_base, user_stack_base + 4096, VMA_READ | VMA_WRITE);
     mm_init_brk(current->mm, heap_base, user_stack_base);
 
-    void *stack_phys = pmm_alloc_page();
+    void *stack_phys = alloc_page(GFP_KERNEL);
     if (!stack_phys)
         return printf("User stack alloc failed.\n"), kfree(buf), -1;
-    vmm_map_page_ex(user_dir, stack_phys, (void*)user_stack_base,
+    map_page_ex(user_dir, stack_phys, (void*)user_stack_base,
                     PTE_PRESENT | PTE_READ_WRITE | PTE_USER);
 
     uint32_t entry_point = ehdr->e_entry;
-    uint32_t* old_dir = vmm_get_current_directory();
-    vmm_switch_directory(user_dir);
+    pgd_t* old_dir = get_pgd_current();
+    switch_pgd(user_dir);
 
     for (uint16_t i = 0; i < ehdr->e_phnum; i++) {
         Elf32_Phdr *phdr = (Elf32_Phdr*)(buf + ehdr->e_phoff + i * ehdr->e_phentsize);
@@ -248,14 +249,14 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
             uint32_t seg_start = align_down(phdr->p_vaddr);
             uint32_t seg_end = align_up(phdr->p_vaddr + phdr->p_memsz);
             for (uint32_t va = seg_start; va < seg_end; va += 4096)
-                vmm_set_page_readonly_ex(user_dir, (void*)va);
+                set_page_readonly_pgd(user_dir, (void*)va);
         }
     }
-    vmm_switch_directory(old_dir);
+    switch_pgd(old_dir);
     kfree(buf);
 
     *entry = entry_point;
-    *user_stack = 0xC0000000;
+    *user_stack = USER_STACK_TOP;
     *out_dir = user_dir;
     *out_base = user_base;
     *out_pages = pages;
@@ -267,7 +268,7 @@ void user_task(void)
 {
     uint32_t entry = 0;
     uint32_t stack = 0;
-    uint32_t* user_dir = NULL;
+    pgd_t* user_dir = NULL;
     uint32_t user_base = 0;
     uint32_t user_pages = 0;
     uint32_t user_stack_base = 0;
@@ -283,7 +284,7 @@ void user_task(void)
     current->mm->start_code = user_base;
     current->mm->end_code = user_base + user_pages * 4096;
     current->mm->start_stack = user_stack_base;
-    vmm_switch_directory(user_dir);
+    switch_pgd(user_dir);
     enter_user_mode(entry, stack);
     panic("Returned from user mode?!");
 }
@@ -308,7 +309,7 @@ int task_exec_user(const char *program)
 
     uint32_t entry = 0;
     uint32_t stack = 0;
-    uint32_t* user_dir = NULL;
+    pgd_t* user_dir = NULL;
     uint32_t user_base = 0;
     uint32_t user_pages = 0;
     uint32_t user_stack_base = 0;
@@ -320,7 +321,7 @@ int task_exec_user(const char *program)
     current->mm->start_code = user_base;
     current->mm->end_code = user_base + user_pages * 4096;
     current->mm->start_stack = user_stack_base;
-    vmm_switch_directory(user_dir);
+    switch_pgd(user_dir);
     enter_user_mode(entry, stack);
     panic("Returned from user mode?!");
     return -1;
@@ -343,7 +344,7 @@ int sys_execve(const char *program, struct pt_regs *regs)
 
     uint32_t entry = 0;
     uint32_t user_stack = 0;
-    uint32_t *user_dir = NULL;
+    pgd_t *user_dir = NULL;
     uint32_t user_base = 0;
     uint32_t user_pages = 0;
     uint32_t user_stack_base = 0;
@@ -375,7 +376,7 @@ int sys_execve(const char *program, struct pt_regs *regs)
     regs->eip = entry;
     regs->useresp = user_stack;
 
-    vmm_switch_directory(user_dir);
+    switch_pgd(user_dir);
     mm_destroy(old_mm);
     return 0;
 }

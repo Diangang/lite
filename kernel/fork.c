@@ -2,10 +2,10 @@
 #include "linux/fork.h"
 #include "linux/binfmts.h"
 #include "linux/pid.h"
-#include "linux/kheap.h"
+#include "linux/slab.h"
 #include "linux/libc.h"
-#include "linux/vmm.h"
-#include "linux/pmm.h"
+#include "asm/pgtable.h"
+#include "linux/page_alloc.h"
 #include "linux/devtmpfs.h"
 #include "linux/fs.h"
 #include "linux/console.h"
@@ -41,12 +41,12 @@ static struct mm_struct *mm_clone_cow(struct mm_struct *src)
 {
     if (!src)
         return NULL;
-    uint32_t *new_dir = vmm_clone_kernel_directory();
+    pgd_t *new_dir = pgd_clone_kernel();
     if (!new_dir)
         return NULL;
     struct mm_struct *mm = (struct mm_struct*)kmalloc(sizeof(struct mm_struct));
     if (!mm) {
-        pmm_free_page(new_dir);
+        free_page((unsigned long)new_dir);
         return NULL;
     }
     memset(mm, 0, sizeof(*mm));
@@ -58,7 +58,7 @@ static struct mm_struct *mm_clone_cow(struct mm_struct *src)
     mm->brk = src->brk;
     mm->mmap = vma_clone_list(src->mmap);
     if (src->mmap && !mm->mmap) {
-        pmm_free_page(new_dir);
+        free_page((unsigned long)new_dir);
         kfree(mm);
         return NULL;
     }
@@ -67,21 +67,21 @@ static struct mm_struct *mm_clone_cow(struct mm_struct *src)
         uint32_t start = v->vm_start & ~0xFFF;
         uint32_t end = (v->vm_end + 0xFFF) & ~0xFFF;
         for (uint32_t va = start; va < end; va += 4096) {
-            uint32_t pte = vmm_get_pte_flags_ex(src->pgd, (void*)va);
+            pteval_t pte = get_pte_flags(src->pgd, (void*)va);
             if (!(pte & PTE_PRESENT))
                 continue;
             if (!(pte & PTE_USER))
                 continue;
-            uint32_t phys = pte & ~0xFFF;
-            uint32_t flags = pte & 0xFFF;
+            uint32_t phys = pte_pfn(pte);
+            pteval_t flags = pte & 0xFFF;
             int was_write = (flags & PTE_READ_WRITE) != 0;
             if (was_write) {
                 flags &= ~PTE_READ_WRITE;
                 flags |= PTE_COW;
-                vmm_update_page_flags_ex(src->pgd, (void*)va, flags);
+                set_pte_flags(src->pgd, (void*)va, flags);
             }
-            vmm_map_page_ex(new_dir, (void*)phys, (void*)va, flags);
-            pmm_ref_page((void*)phys);
+            map_page_ex(new_dir, (void*)phys, (void*)va, flags);
+            get_page((unsigned long)phys);
         }
         v = v->vm_next;
     }

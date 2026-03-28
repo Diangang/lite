@@ -1,7 +1,7 @@
 #include <stdarg.h>
 #include "linux/libc.h"
 #include "linux/console.h"
-#include "linux/kheap.h"
+#include "linux/slab.h"
 
 void *memset(void *s, int c, size_t n)
 {

@@ -1,6 +1,6 @@
 #include "linux/fs.h"
 #include "linux/ramfs.h"
-#include "linux/kheap.h"
+#include "linux/slab.h"
 #include "linux/libc.h"
 #include "linux/console.h"
 

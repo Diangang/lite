@@ -1,4 +1,4 @@
-#include "linux/device_model.h"
+#include "linux/device.h"
 #include "linux/init.h"
 #include "linux/libc.h"
 

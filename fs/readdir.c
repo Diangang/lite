@@ -2,7 +2,7 @@
 #include "linux/fs.h"
 #include "linux/libc.h"
 #include "linux/fdtable.h"
-#include "linux/kheap.h"
+#include "linux/slab.h"
 #include "linux/uaccess.h"
 
 // Generic readdir based on dcache
