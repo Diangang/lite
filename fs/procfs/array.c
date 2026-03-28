@@ -1,5 +1,6 @@
 #include "linux/sched.h"
 #include "linux/pid.h"
+#include "linux/exit.h"
 #include "internal.h"
 
 uint32_t task_dump_tasks(char *buf, uint32_t len)
@@ -127,6 +128,14 @@ uint32_t task_dump_status_pid(uint32_t pid, char *buf, uint32_t len)
     proc_buf_append(buf, &off, len, t->mm ? "user" : "kthread");
     proc_buf_append(buf, &off, len, "\nCwd:\t");
     proc_buf_append(buf, &off, len, "/");
+    proc_buf_append(buf, &off, len, "\nExitCode:\t");
+    proc_buf_append_u32(buf, &off, len, (uint32_t)t->exit_code);
+    proc_buf_append(buf, &off, len, "\nExitState:\t");
+    proc_buf_append_u32(buf, &off, len, (uint32_t)t->exit_state);
+    if (t->exit_state == TASK_EXIT_SIGNAL) {
+        proc_buf_append(buf, &off, len, "\nSignal:\t");
+        proc_buf_append_u32(buf, &off, len, t->exit_info0);
+    }
     proc_buf_append(buf, &off, len, "\n");
 
     if (off < len)

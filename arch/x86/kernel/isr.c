@@ -174,9 +174,7 @@ struct pt_regs *irq_handler(struct pt_regs *regs)
 
     if (regs->int_no == IRQ0) {
         task_tick();
-        if (!task_current_is_user() ||
-            (regs->cs & 0x3) == 0x3 ||
-            task_should_resched())
+        if (task_should_resched())
             regs = task_schedule(regs);
     }
 

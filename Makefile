@@ -4,23 +4,23 @@ CC = gcc
 AS = as
 LD = ld
 
-CFLAGS = -m32 -ffreestanding -O2 -Wall -Wextra -fno-pie -fno-builtin \
-	-Iinclude -Ikernel -Ilib -Iarch/x86 -Imm -Ifs -Idrivers -Idrivers/base -Idrivers/input -Idrivers/tty -Idrivers/tty/serial -Idrivers/clocksource -Idrivers/video -Idrivers/video/console -Iinit
+CFLAGS = -m32 -ffreestanding -O2 -Wall -Wextra -fno-pie -fno-builtin
+CFLAGS += -Iinclude -Ikernel -Ilib -Iarch/x86 -Imm -Ifs -Idrivers -Idrivers/base -Idrivers/input -Idrivers/tty -Idrivers/tty/serial -Idrivers/clocksource -Idrivers/video -Idrivers/video/console -Iinit
 LDFLAGS = -m elf_i386 -T arch/x86/kernel/linker.ld -nostdlib
 
 SOURCES_S = arch/x86/boot/boot.s arch/x86/kernel/interrupt.s
-SOURCES_C = init/main.c kernel/syscall.c kernel/fork.c kernel/pid.c kernel/cred.c kernel/sched.c kernel/exit.c \
-	arch/x86/kernel/gdt.c arch/x86/kernel/idt.c arch/x86/kernel/isr.c arch/x86/kernel/setup.c \
-	arch/x86/kernel/irq.c \
-	mm/mm.c mm/bootmem.c mm/mmzone.c mm/mmap.c mm/page_alloc.c mm/vmscan.c mm/memory.c mm/vmalloc.c mm/slab.c mm/filemap.c lib/libc.c lib/kref.c lib/kobject.c \
-	fs/file.c fs/fdtable.c fs/exec.c fs/inode.c fs/dentry.c fs/namei.c fs/read_write.c fs/open.c fs/readdir.c fs/ioctl.c fs/namespace.c fs/ramfs/ramfs.c fs/procfs/procfs.c fs/procfs/base.c fs/procfs/array.c fs/procfs/task_mmu.c fs/devtmpfs/devtmpfs.c \
-	fs/sysfs/sysfs.c init/initramfs.c \
-	drivers/base/core.c drivers/base/bus.c drivers/base/driver.c drivers/base/init.c drivers/input/keyboard.c \
-	drivers/clocksource/timer.c drivers/tty/tty.c drivers/tty/serial/serial.c \
-	drivers/video/console/vga.c drivers/video/console/console.c drivers/video/console/console_driver.c
+SOURCES_C = init/main.c init/version.c kernel/syscall.c kernel/fork.c kernel/pid.c kernel/cred.c kernel/sched.c kernel/exit.c kernel/ksysfs.c kernel/panic.c kernel/printk.c kernel/params.c kernel/time.c kernel/signal.c kernel/wait.c
+SOURCES_C += arch/x86/kernel/gdt.c arch/x86/kernel/idt.c arch/x86/kernel/isr.c arch/x86/kernel/setup.c
+SOURCES_C += arch/x86/kernel/irq.c
+SOURCES_C += mm/mm.c mm/bootmem.c mm/mmzone.c mm/mmap.c mm/page_alloc.c mm/vmscan.c mm/memory.c mm/vmalloc.c mm/slab.c mm/filemap.c lib/libc.c lib/kref.c lib/kobject.c
+SOURCES_C += fs/file.c fs/fdtable.c fs/exec.c fs/inode.c fs/dentry.c fs/namei.c fs/read_write.c fs/open.c fs/readdir.c fs/ioctl.c fs/namespace.c fs/ramfs/ramfs.c fs/procfs/procfs.c fs/procfs/base.c fs/procfs/array.c fs/procfs/task_mmu.c fs/devtmpfs/devtmpfs.c
+SOURCES_C += fs/sysfs/sysfs.c init/initramfs.c
+SOURCES_C += drivers/base/core.c drivers/base/bus.c drivers/base/driver.c drivers/base/init.c drivers/input/keyboard.c
+SOURCES_C += drivers/clocksource/timer.c drivers/tty/tty.c drivers/tty/serial/serial.c
+SOURCES_C += drivers/video/console/vga.c drivers/video/console/console.c drivers/video/console/console_driver.c
 OBJECTS = $(SOURCES_S:.s=.o) $(SOURCES_C:.c=.o)
 
-OUT_DIR = out
+OUT_DIR=out
 KERNEL = $(OUT_DIR)/myos.bin
 ISO = $(OUT_DIR)/myos.iso
 INITRAMFS = $(OUT_DIR)/initramfs.cpio
@@ -29,9 +29,9 @@ USH_ELF = $(OUT_DIR)/shell.elf
 USH_OBJS = usr/crt0.o usr/ulib.o usr/shell.o
 INIT_ELF = $(OUT_DIR)/init.elf
 INIT_OBJS = usr/crt0.o usr/ulib.o usr/init.o
-UNIT_TEST_ELF = $(OUT_DIR)/smoke.elf
-UNIT_TEST_OBJS = usr/crt0.o usr/ulib.o usr/smoke.o
-USER_ELFS = $(USH_ELF) $(INIT_ELF) $(UNIT_TEST_ELF)
+SMOKE_ELF = $(OUT_DIR)/smoke.elf
+SMOKE_OBJS = usr/crt0.o usr/ulib.o usr/smoke.o
+USER_ELFS = $(USH_ELF) $(INIT_ELF) $(SMOKE_ELF)
 
 all: $(OUT_DIR) $(KERNEL) $(INITRAMFS)
 
@@ -66,7 +66,7 @@ $(INITRAMFS): $(USER_ELFS)
 	cp $(INIT_ELF) rootfs/sbin/init
 	cp $(USH_ELF) rootfs/sbin/sh
 	# Copy other tools to /bin (dropping .elf extension for aesthetics)
-	cp $(UNIT_TEST_ELF) rootfs/bin/smoke
+	cp $(SMOKE_ELF) rootfs/bin/smoke
 	cd rootfs && find . | cpio -o -H newc > ../$(INITRAMFS)
 	rm -rf rootfs
 
@@ -76,8 +76,8 @@ $(USH_ELF): $(USH_OBJS) usr/ulinker.ld
 $(INIT_ELF): $(INIT_OBJS) usr/ulinker.ld
 	$(LD) -m elf_i386 -T usr/ulinker.ld -o $@ $(INIT_OBJS)
 
-$(UNIT_TEST_ELF): $(UNIT_TEST_OBJS) usr/ulinker.ld
-	$(LD) -m elf_i386 -T usr/ulinker.ld -o $@ $(UNIT_TEST_OBJS)
+$(SMOKE_ELF): $(SMOKE_OBJS) usr/ulinker.ld
+	$(LD) -m elf_i386 -T usr/ulinker.ld -o $@ $(SMOKE_OBJS)
 
 run: $(KERNEL) $(INITRAMFS)
 	qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -serial stdio
@@ -86,7 +86,7 @@ debug: $(KERNEL) $(INITRAMFS)
 	qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -s -S -serial stdio
 
 clean:
-	rm -f $(OBJECTS) $(USH_OBJS) $(INIT_OBJS) $(UNIT_TEST_OBJS)
+	rm -f $(OBJECTS) $(USH_OBJS) $(INIT_OBJS) $(SMOKE_OBJS)
 	rm -rf $(OUT_DIR) isodir rootfs
 
 .PHONY: all iso run run-iso clean

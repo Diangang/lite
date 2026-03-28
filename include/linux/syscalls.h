@@ -13,7 +13,9 @@ int sys_unlink(const char *pathname, int from_user);
 int sys_mkdir(const char *pathname, int from_user);
 int sys_getdents(int fd, void *dirp, uint32_t count, int from_user);
 int sys_ioctl(int fd, uint32_t request, uint32_t arg);
-int sys_waitpid_uapi(uint32_t pid, void *status, uint32_t status_len, int from_user);
+int sys_waitpid(uint32_t pid, void *status, uint32_t status_len, int from_user);
 int sys_chmod(const char *pathname, uint32_t mode, int from_user);
+uint32_t sys_mprotect(uint32_t addr, uint32_t length, uint32_t prot);
+uint32_t sys_mremap(uint32_t addr, uint32_t old_length, uint32_t new_length);
 
 #endif

@@ -62,9 +62,15 @@ _start:
 	sub $KERNEL_BASE, %edi
 	xor %eax, %eax
 	mov $1024, %ecx
+	cld
 	rep stosl
 
 	/* Build identity map for first 4MB */
+	mov $boot_page_table_low, %edi
+	sub $KERNEL_BASE, %edi
+	xor %eax, %eax
+	mov $1024, %ecx
+	rep stosl
 	mov $boot_page_table_low, %edi
 	sub $KERNEL_BASE, %edi
 	xor %eax, %eax

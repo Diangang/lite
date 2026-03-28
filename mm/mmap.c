@@ -21,7 +21,7 @@ static int task_free_user_page_mapped(pgd_t *dir, uint32_t va_page)
     pgdval_t pde = dir[pde_idx];
     if (!pgd_present(pde))
         return 0;
-    pte_t *table = (pte_t*)(pde & ~0xFFF);
+    pte_t *table = (pte_t*)phys_to_virt(pde & ~0xFFF);
     pteval_t pte = table[pte_idx];
     if (!pte_present(pte))
         return 0;
@@ -51,6 +51,7 @@ static void vma_add(struct mm_struct *mm, uint32_t start, uint32_t end, uint32_t
 static int vma_range_free(struct mm_struct *mm, uint32_t start, uint32_t end);
 static uint32_t vma_find_gap(struct mm_struct *mm, uint32_t size, uint32_t limit);
 static struct vm_area_struct *vma_find_heap(struct mm_struct *mm);
+static struct vm_area_struct *vma_find_covering(struct mm_struct *mm, uint32_t start, uint32_t end);
 
 struct mm_struct *mm_create(void)
 {
@@ -225,6 +226,130 @@ int sys_munmap(uint32_t addr, uint32_t length)
     return do_munmap(current->mm, addr, length);
 }
 
+static int update_mapped_page_flags(struct mm_struct *mm, uint32_t start, uint32_t end, uint32_t prot)
+{
+    if (!mm || !mm->pgd)
+        return -1;
+    uint32_t flags = PTE_PRESENT | PTE_USER;
+    if (prot & VMA_WRITE)
+        flags |= PTE_READ_WRITE;
+    uint32_t page_start = start & ~0xFFF;
+    uint32_t page_end = (end + 0xFFF) & ~0xFFF;
+    for (uint32_t va = page_start; va < page_end; va += 4096) {
+        pteval_t pte = get_pte_flags(mm->pgd, (void*)va);
+        if (!pte)
+            continue;
+        pteval_t new_flags = (pte & (PAGE_SIZE - 1));
+        new_flags |= PTE_USER | PTE_PRESENT;
+        if (flags & PTE_READ_WRITE)
+            new_flags |= PTE_READ_WRITE;
+        else
+            new_flags &= ~PTE_READ_WRITE;
+        if (!(flags & PTE_READ_WRITE))
+            new_flags &= ~PTE_COW;
+        set_pte_flags(mm->pgd, (void*)va, new_flags);
+    }
+    return 0;
+}
+
+uint32_t do_mprotect(struct mm_struct *mm, uint32_t addr, uint32_t length, uint32_t prot)
+{
+    if (!mm)
+        return 0;
+    if (length == 0)
+        return 0;
+    if (addr < 0x1000)
+        return 0;
+    if (addr & 0xFFF)
+        return 0;
+    uint32_t len = align_up(length);
+    if (len == 0)
+        return 0;
+    uint32_t end = addr + len;
+    if (end <= addr)
+        return 0;
+
+    uint32_t flags = 0;
+    if (prot & VMA_READ) flags |= VMA_READ;
+    if (prot & VMA_WRITE) flags |= VMA_WRITE;
+    if (prot & VMA_EXEC) flags |= VMA_EXEC;
+
+    struct vm_area_struct *v = vma_find_covering(mm, addr, end);
+    if (!v)
+        return 0;
+
+    if (addr > v->vm_start)
+        vma_add(mm, v->vm_start, addr, v->vm_flags);
+    if (end < v->vm_end)
+        vma_add(mm, end, v->vm_end, v->vm_flags);
+    v->vm_start = addr;
+    v->vm_end = end;
+    v->vm_flags = flags;
+
+    update_mapped_page_flags(mm, addr, end, flags);
+    return 1;
+}
+
+uint32_t sys_mprotect(uint32_t addr, uint32_t length, uint32_t prot)
+{
+    if (!current || !current->mm)
+        return 0;
+    return do_mprotect(current->mm, addr, length, prot);
+}
+
+uint32_t do_mremap(struct mm_struct *mm, uint32_t addr, uint32_t old_length, uint32_t new_length)
+{
+    if (!mm)
+        return 0;
+    if (old_length == 0 || new_length == 0)
+        return 0;
+    if (addr < 0x1000)
+        return 0;
+    if (addr & 0xFFF)
+        return 0;
+    uint32_t old_len = align_up(old_length);
+    uint32_t new_len = align_up(new_length);
+    if (old_len == 0 || new_len == 0)
+        return 0;
+    uint32_t old_end = addr + old_len;
+    if (old_end <= addr)
+        return 0;
+    uint32_t new_end = addr + new_len;
+    if (new_end <= addr)
+        return 0;
+
+    struct vm_area_struct *v = vma_find_covering(mm, addr, old_end);
+    if (!v)
+        return 0;
+
+    if (new_len == old_len)
+        return addr;
+
+    if (new_len < old_len) {
+        v->vm_end = addr + new_len;
+        uint32_t page_start = v->vm_end & ~0xFFF;
+        uint32_t page_end = (old_end + 0xFFF) & ~0xFFF;
+        for (uint32_t va = page_start; va < page_end; va += 4096)
+            task_free_user_page_mapped(mm->pgd, va);
+        return addr;
+    }
+
+    uint32_t limit = mm->start_stack ? mm->start_stack : TASK_SIZE;
+    if (new_end > limit)
+        return 0;
+    if (!vma_range_free(mm, old_end, new_end))
+        return 0;
+    v->vm_end = new_end;
+    return addr;
+}
+
+uint32_t sys_mremap(uint32_t addr, uint32_t old_length, uint32_t new_length)
+{
+    if (!current || !current->mm)
+        return 0;
+    return do_mremap(current->mm, addr, old_length, new_length);
+}
+
 static void vma_add(struct mm_struct *mm, uint32_t start, uint32_t end, uint32_t flags)
 {
     if (!mm)
@@ -254,6 +379,19 @@ static int vma_range_free(struct mm_struct *mm, uint32_t start, uint32_t end)
         return 0;
     }
     return 1;
+}
+
+static struct vm_area_struct *vma_find_covering(struct mm_struct *mm, uint32_t start, uint32_t end)
+{
+    if (!mm)
+        return NULL;
+    struct vm_area_struct *v = mm->mmap;
+    while (v) {
+        if (start >= v->vm_start && end <= v->vm_end)
+            return v;
+        v = v->vm_next;
+    }
+    return NULL;
 }
 
 static uint32_t vma_find_gap(struct mm_struct *mm, uint32_t size, uint32_t limit)

@@ -1,5 +1,11 @@
 #include "ulib.h"
 
+enum {
+    VMA_READ = 1 << 0,
+    VMA_WRITE = 1 << 1,
+    VMA_EXEC = 1 << 2
+};
+
 void test_fork() {
     print("\n--- Test 1: Fork & Waitpid ---\n");
     int pid = fork();
@@ -104,8 +110,34 @@ void test_mmap() {
     }
 }
 
+void test_mprotect_mremap() {
+    print("\n--- Test 5: MPROTECT & MREMAP ---\n");
+    void *base = mmap(0, 8192, VMA_READ | VMA_WRITE, 0, -1, 0);
+    if (!base) {
+        print("mmap failed!\n");
+        return;
+    }
+
+    char *p = (char*)base;
+    p[0] = 'O';
+    p[1] = 'K';
+
+    int prot_res = syscall3(SYS_MPROTECT, (int)base, 8192, VMA_READ);
+    if (prot_res < 0) {
+        print("mprotect failed!\n");
+        return;
+    }
+
+    int remap = syscall3(SYS_MREMAP, (int)base, 8192, 4096);
+    if (remap == 0) {
+        print("mremap failed!\n");
+        return;
+    }
+    print("mprotect+mremap OK\n");
+}
+
 void test_bad_ptr() {
-    print("\n--- Test 5: Bad Pointer in Syscall ---\n");
+    print("\n--- Test 6: Bad Pointer in Syscall ---\n");
     print("Passing invalid pointer (0x08000000) to write()...\n");
     int ret = write(1, (void*)0x08000000, 4);
     if (ret == -1)
@@ -117,7 +149,7 @@ void test_bad_ptr() {
 }
 
 void test_sched() {
-    print("\n--- Test 6: User Scheduler (fork + sleep + yield) ---\n");
+    print("\n--- Test 7: User Scheduler (fork + sleep + yield) ---\n");
     int pid_a = fork();
     if (pid_a == 0) {
         for (int i = 0; i < 20; i++) {
@@ -187,7 +219,7 @@ static int contains(const char *hay, int hay_len, const char *needle)
 }
 
 void test_mounts() {
-    print("\n--- Test 7: /proc/mounts ---\n");
+    print("\n--- Test 8: /proc/mounts ---\n");
     int fd = open("/proc/mounts", 0);
     if (fd < 0) {
         print("FAIL: Could not open /proc/mounts\n");
@@ -230,6 +262,7 @@ int main() {
     test_file_io();
     test_pf();
     test_mmap();
+    test_mprotect_mremap();
     test_bad_ptr();
     test_sched();
     test_mounts();

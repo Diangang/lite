@@ -40,6 +40,8 @@ uint32_t do_mmap(struct mm_struct *mm, uint32_t addr, uint32_t length, uint32_t 
 int do_munmap(struct mm_struct *mm, uint32_t addr, uint32_t length);
 uint32_t sys_mmap(uint32_t addr, uint32_t length, uint32_t prot);
 int sys_munmap(uint32_t addr, uint32_t length);
+uint32_t sys_mprotect(uint32_t addr, uint32_t length, uint32_t prot);
+uint32_t sys_mremap(uint32_t addr, uint32_t old_length, uint32_t new_length);
 
 void mm_init_brk(struct mm_struct *mm, uint32_t heap_base, uint32_t stack_base);
 uint32_t do_brk(struct mm_struct *mm, uint32_t new_end);

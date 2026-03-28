@@ -69,7 +69,7 @@ void do_ls(char *path) {
 
     char buf[256];
     while (1) {
-        int nread = syscall3(21, fd, (int)buf, sizeof(buf)); // SYS_GETDENTS = 21
+        int nread = syscall3(SYS_GETDENTS, fd, (int)buf, sizeof(buf));
         if (nread <= 0)
             break;
 
@@ -192,7 +192,7 @@ int main() {
 
         if (strcmp(cmd, "pwd") == 0) {
             char cwd[128];
-            int ret = syscall2(11, (int)cwd, sizeof(cwd)); // SYS_GETCWD
+            int ret = syscall2(SYS_GETCWD, (int)cwd, sizeof(cwd));
             if (ret >= 0) {
                 print(cwd);
                 print("\n");
@@ -200,19 +200,20 @@ int main() {
         } else if (strcmp(cmd, "cd") == 0) {
             char *dir = split_token(&p);
             if (!dir) dir = "/";
-            syscall1(10, (int)dir); // SYS_CHDIR
+            syscall1(SYS_CHDIR, (int)dir);
         } else if (strcmp(cmd, "ls") == 0) {
             do_ls(split_token(&p));
         } else if (strcmp(cmd, "cat") == 0) {
             do_cat(split_token(&p));
         } else if (strcmp(cmd, "mkdir") == 0) {
             char *dir = split_token(&p);
-            if (dir) syscall1(13, (int)dir); // SYS_MKDIR
+            if (dir)
+                syscall1(SYS_MKDIR, (int)dir);
         } else if (strcmp(cmd, "rm") == 0) {
             do_rm(split_token(&p));
         } else if (strcmp(cmd, "writefile") == 0) {
             char *file = split_token(&p);
-            skip_spaces(&p); // The rest is content
+            skip_spaces(&p);
             do_writefile(file, p);
         } else if (strcmp(cmd, "run") == 0) {
             do_run(split_token(&p));

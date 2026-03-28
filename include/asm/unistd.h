@@ -21,12 +21,14 @@ enum {
     SYS_KILL = 17,
     SYS_MMAP = 18,
     SYS_MUNMAP = 19,
-    SYS_FORK = 20,
-    SYS_GETDENTS = 21,
-    SYS_UMASK = 22,
-    SYS_CHMOD = 23,
-    SYS_GETUID = 24,
-    SYS_GETGID = 25
+    SYS_MPROTECT = 20,
+    SYS_MREMAP = 21,
+    SYS_FORK = 22,
+    SYS_GETDENTS = 23,
+    SYS_UMASK = 24,
+    SYS_CHMOD = 25,
+    SYS_GETUID = 26,
+    SYS_GETGID = 27
 };
 
 #endif

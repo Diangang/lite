@@ -8,7 +8,6 @@
 #include "linux/pagemap.h"
 #include "asm/multiboot.h"
 #include "asm/page.h"
-#include "string.h"
 
 // Basic CPIO newc header
 struct cpio_newc_header {
@@ -41,14 +40,14 @@ static uint32_t parse_hex(const char *str, int len) {
 
 #define ALIGN4(val) (((val) + 3) & ~3)
 
-void populate_rootfs(struct multiboot_info *mbi) {
-    if (!(mbi->flags & 0x00000008))
+void populate_rootfs(void) {
+    if (!(boot_mbi.flags & 0x00000008))
         panic("No modules provided by bootloader. Skipping initramfs");
 
-    if (mbi->mods_count == 0)
+    if (boot_mbi.mods_count == 0)
         panic("Module count is zero. Skipping initramfs");
 
-    struct multiboot_module *mod = (struct multiboot_module *)phys_to_virt(mbi->mods_addr);
+    struct multiboot_module *mod = (struct multiboot_module *)phys_to_virt(boot_mbi.mods_addr);
     uint32_t location = mod->mod_start;
     uint32_t end_location = mod->mod_end;
 

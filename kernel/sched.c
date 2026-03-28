@@ -63,14 +63,47 @@ void wait_queue_wake_all(wait_queue_t *q)
     uint32_t flags = irq_save();
     struct task_struct *t = (struct task_struct*)q->head;
     q->head = NULL;
+    int woke = 0;
     while (t) {
         struct task_struct *next = t->wait_next;
         t->wait_next = NULL;
         t->waitq = NULL;
-        if (t->state == TASK_BLOCKED)
+        if (t->state == TASK_BLOCKED) {
             t->state = TASK_RUNNABLE;
+            if (t->time_slice <= 0)
+                t->time_slice = TASK_TIMESLICE_TICKS;
+            woke = 1;
+        }
         t = next;
     }
+    if (woke)
+        need_resched = 1;
+    irq_restore(flags);
+}
+
+void wait_queue_remove(wait_queue_t *q, struct task_struct *task)
+{
+    if (!q)
+        return;
+    if (!task)
+        return;
+
+    uint32_t flags = irq_save();
+    struct task_struct *prev = NULL;
+    struct task_struct *t = (struct task_struct*)q->head;
+    while (t) {
+        if (t == task) {
+            if (prev)
+                prev->wait_next = t->wait_next;
+            else
+                q->head = t->wait_next;
+            break;
+        }
+        prev = t;
+        t = t->wait_next;
+    }
+    task->wait_next = NULL;
+    task->waitq = NULL;
     irq_restore(flags);
 }
 
@@ -96,7 +129,8 @@ void task_tick(void)
         return;
     }
 
-    current->time_slice--;
+    if (current->time_slice > 0)
+        current->time_slice--;
     if (current->time_slice <= 0)
         need_resched = 1;
 }
@@ -107,11 +141,10 @@ struct pt_regs *task_schedule(struct pt_regs *regs)
         return regs;
 
     current->thread.regs = regs;
-    if (current->state == TASK_RUNNABLE && !need_resched)
+    if (!need_resched)
         return current->thread.regs;
 
     need_resched = 0;
-    current->time_slice = TASK_TIMESLICE_TICKS;
 
     struct task_struct *candidate = current->next;
     while (candidate) {
@@ -128,7 +161,8 @@ struct pt_regs *task_schedule(struct pt_regs *regs)
                     switch_pgd(kdir);
             }
             tss_set_kernel_stack((uint32_t)current->thread.sp0);
-            current->time_slice = TASK_TIMESLICE_TICKS;
+            if (current->time_slice <= 0)
+                current->time_slice = TASK_TIMESLICE_TICKS;
             return current->thread.regs;
         }
 
@@ -149,18 +183,13 @@ void task_sleep(uint32_t ticks)
     current->wake_jiffies = timer_get_ticks() + ticks;
     current->state = TASK_SLEEPING;
     need_resched = 1;
+    task_yield();
 }
 
 void task_yield(void)
 {
     need_resched = 1;
-    if (current && current->state != TASK_RUNNABLE) {
-        while (current->state != TASK_RUNNABLE) {
-            __asm__ volatile("sti; hlt");
-        }
-    } else {
-        __asm__ volatile("sti; hlt");
-    }
+    __asm__ volatile("int $0x20");
 }
 
 int task_should_resched(void)

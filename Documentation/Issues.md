@@ -28,7 +28,9 @@
 ### 2.2 开启分页 (Paging) 后瞬间 Triple Fault
 - **现象**：在 `paging_init` 中设置 `CR0` 寄存器的 `PG` 位（开启分页）后，QEMU 立即无限重启。
 - **定位**：开启分页的瞬间，CPU 期望 EIP（指令指针）所在的地址必须在页表中有效。如果没有建立恒等映射（Identity Mapping），CPU 取下一条指令时会触发缺页异常（Page Fault），由于 IDT 尚未完全接管，直接导致 Triple Fault。
-- **解决**：在开启分页前，强制将物理地址 `0x000000` - `0x400000`（前 4MB）映射到相同的虚拟地址。
+- **补充定位**：低端页表清零后未重置写指针，导致 PTE 写到页表末尾之外，开启分页后低端映射实际为空，直接取指失败。
+- **解决**：在开启分页前，强制将包含启动代码的低端物理区做恒等映射（当前实现映射前 4MB），确保开启分页后能安全完成高半区跳转。
+  - 清零低端页表后必须重新设置写指针到页表基址，再填充前 4MB 的 PTE。
 
 ### 2.3 高半区切换后无输出或 Multiboot magic 错误
 - **现象**：切换为高半区线性映射后，QEMU 无输出卡死，或出现 `Invalid Multiboot magic number!`。
@@ -191,6 +193,16 @@
   1. 修正 `usr/ushprog.s` 中的硬编码系统调用号，将 `SYS_FORK` 修正为 20，`SYS_WAITPID` 修正为 15。
   2. 优化 `kernel/sched.c` 中的 `task_yield()` 实现：若任务处于 `TASK_BLOCKED` 状态则安全使用 `sti; hlt` 等待中断；若处于 `TASK_RUNNABLE` 状态则通过触发软中断 `int $0x80` (SYS_YIELD) 安全、强制地触发上下文切换。
   3. 优化 `memory.c`，隐藏用户栈动态分配和写时复制(COW)产生的常规缺页异常打印，仅打印真正的非法越权访问错误。
+
+### 6.11 init 启动后 `User Page Fault: out of range`（页表物理地址误用 + syscall 号漂移）
+- **现象**：`kernel_init` 启动后执行 `init: fork+exec /sbin/sh`，紧接着打印 `User Page Fault: out of range`，shell 无法进入或异常退出。
+- **定位**：
+  1. **页表物理地址被当作虚拟地址使用**：在释放用户页的路径里，直接把 PDE 指向的物理地址当作虚拟地址访问页表，导致内核在低地址读写并触发越界缺页。
+  2. **用户态硬编码 syscall 号漂移**：新增 `SYS_MPROTECT/SYS_MREMAP` 后，`ush` 中硬编码的 `SYS_GETDENTS/SYS_CHDIR/SYS_MKDIR` 编号错位，错误 syscall 调用打乱了执行流并放大异常。
+- **解决**：
+  1. 访问页表时统一使用 `phys_to_virt` 转换，保证 PDE 指向的页表物理地址能在内核虚拟地址中正确访问。
+  2. 用户态统一使用 `asm/unistd.h` 的 syscall 常量，移除硬编码编号。
+  3. 将回归用例整合进 `/bin/smoke`，覆盖 `fork/waitpid/mmap/mprotect/mremap`。
 
 ## 16. initramfs 不支持多级目录的问题
 - **现象**：`initramfs.cpio` 中如果有 `usr/bin/` 这样的多级目录，在加载时会报错 `Failed to create initramfs dentry`。

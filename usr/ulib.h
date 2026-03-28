@@ -2,24 +2,7 @@
 #define ULIB_H
 
 #include <stdint.h>
-
-#define SYS_WRITE 0
-#define SYS_YIELD 1
-#define SYS_SLEEP 2
-#define SYS_EXIT 3
-#define SYS_READ 4
-#define SYS_GETPID 5
-#define SYS_OPEN 6
-#define SYS_CLOSE 8
-#define SYS_CHDIR 10
-#define SYS_GETCWD 11
-#define SYS_UNLINK 12
-#define SYS_MKDIR 13
-#define SYS_EXECVE 14
-#define SYS_WAITPID 15
-#define SYS_MMAP 18
-#define SYS_MUNMAP 19
-#define SYS_FORK 20
+#include "asm/unistd.h"
 
 #define O_CREAT (1<<6)
 #define O_TRUNC (1<<9)

@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "linux/panic.h"
+
 static inline void outb(uint16_t port, uint8_t value)
 {
     __asm__ volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
@@ -24,29 +26,10 @@ size_t strlen(const char *s);
 int strcmp(const char *s1, const char *s2);
 int strncmp(const char *s1, const char *s2, size_t n);
 char *strcat(char *dest, const char *src);
-
-size_t strlen(const char* str);
-char *strcpy(char *dest, const char *src);
-int strcmp(const char *s1, const char *s2);
-int strncmp(const char *s1, const char *s2, size_t n);
 char *strdup(const char *s);
 
 void itoa(int num, int base, char *buf);
 
 void printf(const char *format, ...);
-
-__attribute__((noreturn))
-static inline void panic(const char *msg)
-{
-    if (msg)
-        printf("HALT: %s\n", msg);
-
-    __asm__ volatile ("cli");
-
-    for (;;)
-        __asm__ volatile ("hlt");
-
-    __builtin_unreachable();
-}
 
 #endif

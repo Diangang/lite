@@ -3,7 +3,6 @@
 #include "linux/libc.h"
 #include "linux/sched.h"
 #include "linux/wait.h"
-#include "linux/exit.h"
 #include "linux/signal.h"
 #include "linux/console.h"
 #include "linux/vga.h"

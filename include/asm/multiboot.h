@@ -48,6 +48,8 @@ struct multiboot_module {
     uint32_t reserved;
 } __attribute__((packed));
 
+extern struct multiboot_info boot_mbi;
+
 #define MULTIBOOT_MEMORY_AVAILABLE 1
 #define MULTIBOOT_MEMORY_RESERVED 2
 #define MULTIBOOT_MEMORY_ACPI_RECLAIMABLE 3

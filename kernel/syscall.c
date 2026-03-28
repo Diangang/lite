@@ -11,7 +11,6 @@
 #include "linux/interrupt.h"
 #include "linux/libc.h"
 #include "asm/page.h"
-#include "string.h"
 #include "linux/uaccess.h"
 
 static struct pt_regs *syscall_handler(struct pt_regs *regs)
@@ -29,7 +28,6 @@ static struct pt_regs *syscall_handler(struct pt_regs *regs)
             break;
         case SYS_SLEEP:
             task_sleep(regs->ebx);
-            task_yield();
             regs->eax = 0;
             break;
         case SYS_EXIT:
@@ -95,7 +93,7 @@ static struct pt_regs *syscall_handler(struct pt_regs *regs)
             break;
         }
         case SYS_WAITPID:
-            regs->eax = (uint32_t)sys_waitpid_uapi(regs->ebx, (void*)regs->ecx, regs->edx, from_user);
+            regs->eax = (uint32_t)sys_waitpid(regs->ebx, (void*)regs->ecx, regs->edx, from_user);
             break;
         case SYS_IOCTL:
             regs->eax = (uint32_t)sys_ioctl((int)regs->ebx, regs->ecx, regs->edx);
@@ -111,6 +109,14 @@ static struct pt_regs *syscall_handler(struct pt_regs *regs)
         case SYS_MUNMAP:
             regs->eax = (uint32_t)(sys_munmap(regs->ebx, regs->ecx) == 0 ? 0 : (uint32_t)-1);
             break;
+        case SYS_MPROTECT:
+            regs->eax = (uint32_t)(sys_mprotect(regs->ebx, regs->ecx, regs->edx) ? 0 : (uint32_t)-1);
+            break;
+        case SYS_MREMAP: {
+            uint32_t res = sys_mremap(regs->ebx, regs->ecx, regs->edx);
+            regs->eax = res ? res : (uint32_t)-1;
+            break;
+        }
         case SYS_FORK:
             regs->eax = (uint32_t)sys_fork(regs);
             break;

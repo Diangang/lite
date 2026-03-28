@@ -198,7 +198,7 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
     uint32_t pages = (user_end - user_base) / 4096;
     uint32_t heap_base = user_end;
 
-    ensure_private_table(user_dir, pgd_index(user_stack_base));
+    ensure_private_table_range(user_dir, user_stack_base, USER_STACK_TOP);
 
     if (current && !current->mm)
         current->mm = mm_create();
@@ -227,14 +227,16 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
             map_page_ex(user_dir, phys, (void*)va, PTE_PRESENT | PTE_READ_WRITE | PTE_USER);
         }
     }
-    mm_add_vma(current->mm, user_stack_base, user_stack_base + 4096, VMA_READ | VMA_WRITE);
+    mm_add_vma(current->mm, user_stack_base, USER_STACK_TOP, VMA_READ | VMA_WRITE);
     mm_init_brk(current->mm, heap_base, user_stack_base);
 
-    void *stack_phys = alloc_page(GFP_KERNEL);
-    if (!stack_phys)
-        return printf("User stack alloc failed.\n"), kfree(buf), -1;
-    map_page_ex(user_dir, stack_phys, (void*)user_stack_base,
-                    PTE_PRESENT | PTE_READ_WRITE | PTE_USER);
+    for (uint32_t va = user_stack_base; va < USER_STACK_TOP; va += PAGE_SIZE) {
+        void *stack_phys = alloc_page(GFP_KERNEL);
+        if (!stack_phys)
+            return printf("User stack alloc failed.\n"), kfree(buf), -1;
+        map_page_ex(user_dir, stack_phys, (void*)va,
+                        PTE_PRESENT | PTE_READ_WRITE | PTE_USER);
+    }
 
     uint32_t entry_point = ehdr->e_entry;
     pgd_t* old_dir = get_pgd_current();

@@ -1,6 +1,6 @@
 #include "asm/multiboot.h"
-#include "asm/gdt.h"
-#include "asm/idt.h"
+#include "asm/page.h"
+#include "asm/setup.h"
 #include "linux/libc.h"
 #include "linux/serial.h"
 #include "linux/vga.h"
@@ -12,16 +12,22 @@
 #include "linux/procfs.h"
 #include "linux/devtmpfs.h"
 #include "linux/sysfs.h"
+#include "linux/ksysfs.h"
 #include "linux/syscall.h"
 #include "linux/timer.h"
+#include "linux/time.h"
 #include "linux/sched.h"
 #include "linux/fork.h"
 #include "linux/binfmts.h"
 #include "linux/device.h"
+#include "linux/params.h"
+#include "linux/printk.h"
 #include "linux/tty.h"
+#include "linux/version.h"
 
 extern initcall_t __initcall_start[];
 extern initcall_t __initcall_end[];
+struct multiboot_info boot_mbi;
 
 static void do_initcalls(void)
 {
@@ -30,20 +36,53 @@ static void do_initcalls(void)
         (*call)();
 }
 
-void populate_rootfs(struct multiboot_info *mbi);
+void populate_rootfs(void);
 
-static void kernel_init(void)
+static void do_basic_setup(void)
 {
-    /* Execute all registered module init functions (driver core, device tree, etc.) */
+    driver_init();
     do_initcalls();
+    init_syscall();
+    printf("Syscall handler installed.\n");
+}
+
+static int run_init_process(const char *path)
+{
+    printf("kernel_init: exec %s as PID 1\n", path);
+    return task_exec_user(path);
+}
+
+static void prepare_namespace(void)
+{
+    vfs_init();
+    populate_rootfs();
 
     vfs_mount_fs("/proc", "proc");
     vfs_mount_fs("/dev", "devtmpfs");
-    vfs_mount_fs("/sys", "sysfs");
+    ksysfs_init();
 
-    printf("kernel_init: exec /sbin/init as PID 1\n");
-    if (task_exec_user("/sbin/init") != 0)
+    const char *init = get_init_process();
+    if (run_init_process(init) != 0) {
+        const char *fallbacks[] = {
+            "/sbin/init",
+            "/etc/init",
+            "/bin/init",
+            "/bin/sh"
+        };
+        for (uint32_t i = 0; i < (sizeof(fallbacks) / sizeof(fallbacks[0])); i++) {
+            if (!strcmp(init, fallbacks[i]))
+                continue;
+            if (run_init_process(fallbacks[i]) == 0)
+                return;
+        }
         panic("No init found. Try passing init= option to kernel.");
+    }
+}
+
+static void kernel_init(void)
+{
+    do_basic_setup();
+    prepare_namespace();
 }
 
 static void rest_init(void)
@@ -71,32 +110,24 @@ void start_kernel(struct multiboot_info* mbi, uint32_t magic)
     if (magic != MULTIBOOT_BOOTLOADER_MAGIC)
         panic("Invalid Multiboot magic number!");
 
-    /* Initialize Global Descriptor Table */
-    init_gdt();
-
-    /* Initialize Interrupt Descriptor Table, Exceptions, and IRQs */
-    init_idt();
+    setup_arch(mbi);
 
     /* Initialize the entire Memory Management subsystem (PMM, VMM, KHEAP) */
     init_mm(mbi);
 
-    /* Initialize the Virtual File System (VFS) and mount rootfs */
-    vfs_init();
-
     sched_init();
     fork_init();
 
-    // Extract initramfs directly into the root ramfs
-    populate_rootfs(mbi);
+    boot_mbi = *mbi;
+    if (boot_mbi.flags & 0x4)
+        setup_command_line((const char *)phys_to_virt(boot_mbi.cmdline));
+    else
+        setup_command_line(NULL);
 
-    driver_init();
+    printk(linux_banner);
 
-    /* Initialize System Calls */
-    init_syscall();
-    printf("Syscall handler installed.\n");
-
-    /* Initialize PIT Timer (100 Hz = 10ms per tick) */
-    init_timer(100);
+    /* Initialize PIT Timer (HZ = 10ms per tick) */
+    init_timer(HZ);
 
     printf("Hello, Kernel World!\n");
     printf("This is a minimal kernel running on QEMU.\n");

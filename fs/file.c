@@ -90,7 +90,7 @@ struct file *vfs_open_node(struct inode *node, uint32_t flags)
     if (!d)
         return NULL;
     struct file *f = vfs_open_dentry(d, flags);
-    vfs_dentry_put(d); // open_dentry incremented it
+    vfs_dentry_put(d);
     return f;
 }
 

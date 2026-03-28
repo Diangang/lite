@@ -290,17 +290,22 @@ int access_ok(pgd_t* pgd, void* addr, uint32_t len, int write)
     while (1) {
         pgdval_t pde;
         pteval_t pte;
-        if (!get_pte(pgd, page, &pde, &pte))
-            return 0;
-        if (!(pde & PTE_USER))
-            return 0;
-        if (!pte_user(pte))
-            return 0;
-        if (write) {
-            if (!(pde & PTE_READ_WRITE))
+        if (!get_pte(pgd, page, &pde, &pte)) {
+            if (!current || !current->mm)
                 return 0;
-            if (!pte_write(pte) && !(pte & PTE_COW))
+            if (!vma_allows(current->mm, page, write, 0))
                 return 0;
+        } else {
+            if (!(pde & PTE_USER))
+                return 0;
+            if (!pte_user(pte))
+                return 0;
+            if (write) {
+                if (!(pde & PTE_READ_WRITE))
+                    return 0;
+                if (!pte_write(pte) && !(pte & PTE_COW))
+                    return 0;
+            }
         }
         if (page == last)
             break;
@@ -404,8 +409,12 @@ struct pt_regs *do_page_fault(struct pt_regs *regs)
         panic("KERNEL PANIC: Page Fault caused by reserved bit violation!");
     }
 
+    int user_access = is_user;
+    if (!user_access && current && current->mm && faulting_address < TASK_SIZE)
+        user_access = 1;
+
     if (is_present) {
-        if (!is_user) {
+        if (!user_access) {
             printf("Page Fault! ( present, kernel ) at 0x%x - EIP: 0x%x\n", faulting_address, regs->eip);
             panic("KERNEL PANIC: Unhandled Kernel Page Fault.");
         }
@@ -438,7 +447,7 @@ struct pt_regs *do_page_fault(struct pt_regs *regs)
     }
 
     if (faulting_address < PAGE_SIZE) {
-        if (is_user) {
+        if (user_access) {
             printf("User Page Fault: null access.\n");
             do_exit_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
             struct pt_regs *task_schedule(struct pt_regs *r);
@@ -446,14 +455,14 @@ struct pt_regs *do_page_fault(struct pt_regs *regs)
         }
         panic("KERNEL PANIC: Null pointer access.");
     }
-    if (is_user && faulting_address >= TASK_SIZE) {
-        printf("User Page Fault: kernel address.\n");
+    if (user_access && faulting_address >= TASK_SIZE) {
+        printf("User Page Fault: kernel address at 0x%x - EIP: 0x%x\n", faulting_address, regs->eip);
         do_exit_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
         struct pt_regs *task_schedule(struct pt_regs *r);
         return task_schedule(regs);
     }
-    if (is_user && !vma_allows(current ? current->mm : NULL, page_base, is_write, is_instr_fetch)) {
-        printf("User Page Fault: out of range.\n");
+    if (user_access && !vma_allows(current ? current->mm : NULL, page_base, is_write, is_instr_fetch)) {
+        printf("User Page Fault: out of range at 0x%x - EIP: 0x%x\n", faulting_address, regs->eip);
         do_exit_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
         struct pt_regs *task_schedule(struct pt_regs *r);
         return task_schedule(regs);
@@ -464,7 +473,7 @@ struct pt_regs *do_page_fault(struct pt_regs *regs)
         panic("KERNEL PANIC: Out of physical memory in Page Fault handler.");
 
     pteval_t flags = PTE_PRESENT;
-    if (is_user) {
+    if (user_access) {
         flags |= PTE_USER;
         if (vma_allows(current ? current->mm : NULL, page_base, 1, 0))
             flags |= PTE_READ_WRITE;

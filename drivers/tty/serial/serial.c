@@ -26,14 +26,13 @@ struct pt_regs *serial_callback(struct pt_regs *regs) {
 
 /* Early Serial Console Initialization */
 void init_serial() {
-   outb(0x3f8 + 1, 0x00); // Disable all interrupts
-   outb(0x3f8 + 3, 0x80); // Enable DLAB (set baud rate divisor)
-   outb(0x3f8 + 0, 0x03); // Set divisor to 3 (lo byte) 38400 baud
-   outb(0x3f8 + 1, 0x00); // (hi byte)
-   outb(0x3f8 + 3, 0x03); // 8 bits, no parity, one stop bit
-   outb(0x3f8 + 2, 0xC7); // Enable FIFO, clear them, with 14-byte threshold
+   outb(0x3f8 + 1, 0x00);
+   outb(0x3f8 + 3, 0x80);
+   outb(0x3f8 + 0, 0x03);
+   outb(0x3f8 + 1, 0x00);
+   outb(0x3f8 + 3, 0x03);
+   outb(0x3f8 + 2, 0xC7);
 
-   // DO NOT enable IRQs yet, this is just early console for polling output
    console_set_targets(CONSOLE_TARGET_SERIAL);
    tty_set_output_targets(TTY_OUTPUT_SERIAL);
 }
@@ -41,8 +40,8 @@ void init_serial() {
 /* Full Serial Driver Initialization */
 static int serial_driver_init(void) {
    register_interrupt_handler(IRQ4, serial_callback);
-   outb(0x3f8 + 4, 0x0B); // IRQs enabled, RTS/DSR set
-   outb(0x3f8 + 1, 0x01); // Enable Received Data Available Interrupt
+   outb(0x3f8 + 4, 0x0B);
+   outb(0x3f8 + 1, 0x01);
    printf("Serial driver interrupts enabled.\n");
    return 0;
 }

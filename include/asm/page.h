@@ -10,7 +10,8 @@
 #define TASK_SIZE PAGE_OFFSET
 
 #define USER_STACK_TOP TASK_SIZE
-#define USER_STACK_BASE (USER_STACK_TOP - PAGE_SIZE)
+#define USER_STACK_PAGES 8
+#define USER_STACK_BASE (USER_STACK_TOP - (USER_STACK_PAGES * PAGE_SIZE))
 
 static inline void *phys_to_virt(uint32_t phys)
 {

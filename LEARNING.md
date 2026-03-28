@@ -1,6 +1,6 @@
 # Lite Kernel 学习笔记
 
-本文档补充 README 的“为什么/怎么做”，聚焦启动阶段的 initramfs 与 VFS 挂载逻辑。
+本文档补充 README 的“为什么/怎么做”，聚焦启动阶段的 initramfs 与 VFS 挂载逻辑；P0 命名/布局对齐已闭环。
 
 ## 1. Initramfs（cpio newc）如何加载
 
@@ -12,7 +12,7 @@
   - 普通文件：`vfs_open` + `vfs_write`
 - **结束标记**：文件名为 `TRAILER!!!` 时停止。
 
-整体流程在 [start_kernel](file:///data25/lidg/lite/init/main.c#L91-L103) 中发生：先 `vfs_init()` 挂载 rootfs，再解包 initramfs，最终形成可执行的用户态镜像。
+整体流程在 [start_kernel](file:///data25/lidg/lite/init/main.c#L81-L101) 与 [kernel_init](file:///data25/lidg/lite/init/main.c#L45-L55) 中分层完成：`start_kernel()` 完成架构与内存/调度初始化后进入 `rest_init()`，`kernel_init()` 先执行 `do_basic_setup()`，再由 `prepare_namespace()` 完成 VFS/initramfs 挂载与 `ksysfs_init()` 并进入用户态镜像。
 
 ## 2. VFS 挂载与挂载表
 
@@ -37,7 +37,7 @@
 ## 4.1 PID 0/1 对齐
 
 - PID 0：`sched_init()` 初始化出的初始任务，`rest_init()` 中进入 idle loop（`hlt` 等待 tick）。
-- PID 1：由 `rest_init()` 创建的 `kernel_init` 任务，完成 initcall 与挂载后通过 `task_exec_user("/sbin/init")` 直接进入用户态 init，使 PID 1 的语义更接近 Linux 2.6。
+- PID 1：由 `rest_init()` 创建的 `kernel_init` 任务，完成 `do_basic_setup()` 与 `prepare_namespace()` 后通过 `task_exec_user(init)` 进入用户态，优先使用 `init=` 指定路径，否则按 `/sbin/init`、`/etc/init`、`/bin/init`、`/bin/sh` 回退。
 
 ## 4.2 分级 initcall
 
@@ -58,7 +58,7 @@
 
 - `current`：当前正在运行的任务（单核全局指针语义，对齐 Linux 的 `current` 概念）。
 - `task_struct`：`pid/comm/parent/thread/fs/files/mm` 等字段命名对齐 Linux 风格。
-- `mm_struct`：使用 `pgd`（页目录指针）与 `mmap`（VMA 链表），堆区间用 `start_brk/brk`，栈基址用 `start_stack`。
+- `mm_struct`：使用 `pgd`（页目录指针）与 `mmap`（VMA 链表），堆区间用 `start_brk/brk`，栈基址用 `start_stack`，用户栈默认 8 页。
 - `vm_area_struct`：使用 `vm_start/vm_end/vm_flags/vm_next`。
 - `THREAD_SIZE`：当前每 task 的内核栈固定为 4KB（1 页）。
 
@@ -69,33 +69,44 @@
   - `fork` 产生两个子进程；
   - 子进程循环执行 `sleep(ticks)` 与 `yield()`，同时输出字符；
   - 父进程用 `waitpid` 等待并检查退出码，验证调度与阻塞路径闭环。
+- `/bin/smoke` 覆盖 `fork/waitpid/mmap/mprotect/mremap` 的最小回归验证。
 
 ## 8. task 代码拆分
 
-- `sched.c`：task 全局（`current/task_head` 等）与调度相关（`task_schedule/tick/sleep/yield`、`sched_init/init_task`）。
+- `sched.c`：task 全局（`current/task_head` 等）与调度相关（`task_schedule/tick/sleep/yield`、`sched_init/init_task`），`task_yield()` 通过软件触发 IRQ0 进入调度路径，唤醒 waitq 会触发一次调度请求。
 - `fork.c`：任务创建与 fork 路径（`copy_thread`、`kernel_thread/sys_fork`）。
-- `exit.c`：任务退出与回收（`task_exit/wait/kill`）。
+- `exit.c`：任务退出与回收（`task_exit/do_exit/do_exit_reason`），退出时对子进程执行 reparent 到 PID 1，同时从 wait 队列移除自身。
+- `wait.c`：等待与回收（`do_waitpid/sys_waitpid`），支持 `waitpid(-1)` 等待任意子进程并返回被回收的 PID。
+- `signal.c`：信号与退出（`sys_kill`），支持 `sig=0` 仅检查进程存在。
+- `/proc/<pid>/status`：新增 `ExitCode/ExitState/Signal` 字段用于观察退出原因。
 - `fs/exec.c`：用户程序加载与 `exec`/`enter_user_mode` 路径（ELF 装载、页表与 VMA 初始化）。
 - `fs/devtmpfs/devtmpfs.c`：devtmpfs 设备节点（/dev）最小实现，节点由设备模型注册/注销驱动生成（`/dev/console` 对应内核控制台，`/dev/tty` 对应用户态终端）。
-- `kernel/syscall.c`：syscall 入口与分发（x86 `int 0x80`），只负责寄存器参数解包、调用 `sys_*`，以及统一调度收尾（`task_should_resched`）。
+- `kernel/syscall.c`：syscall 入口与分发（x86 `int 0x80`），只负责寄存器参数解包、调用 `sys_*`，以及统一调度收尾（`task_should_resched`）；`SYS_SLEEP` 通过 `task_sleep` 进入阻塞并触发调度。
+- `arch/x86/kernel/isr.c`：IRQ0 时钟中断内仅在 `task_should_resched()` 为真时触发调度，避免无条件抢占。
+- `kernel/printk.c`：`printk` 输出入口，作为内核日志最小封装。
+- `kernel/panic.c`：panic 终止路径，封装 `cli/hlt` 并输出错误信息。
+- `kernel/params.c`：保存启动命令行到 `saved_command_line`，解析 `init=` 并提供 `get_init_process()`。
+- `init/version.c`：提供 `linux_banner`，用于启动期打印版本信息。
+- `kernel/time.c`：`jiffies` 与 `time_get_uptime()`，`HZ` 为默认节拍，PIT 驱动更新。
 - `include/linux/syscalls.h`：对内的 syscall 实现入口声明（`sys_read/sys_write/...`），用于把实现放在对应子系统文件里。
-- `include/linux/uaccess.h`：用户指针访问封装（`copy_to_user/copy_from_user/strncpy_from_user`），对齐 Linux 的 uaccess 习惯。
+- `include/linux/uaccess.h`：用户指针访问封装（`copy_to_user/copy_from_user/strncpy_from_user`），未映射但处于合法 VMA 的用户地址允许通过校验以触发缺页分配，内核访问用户地址时按用户缺页语义处理。
 - `fs/procfs/base.c`：`/proc` 基础导出（cwd 相关、fd 相关、通用格式化）。
 - `fs/procfs/array.c`：`/proc` 基础信息导出（tasks/stat/cmdline/status）。
 - `fs/procfs/task_mmu.c`：`/proc` 与地址空间相关导出（maps）。
 - 头文件对齐 Linux 2.6：不再提供 `include/*.h` 的扁平聚合头，按职责拆到 `include/linux/{sched,mm,wait,fork,exit,binfmts,fdtable,cred,pid,syscall,fs,file,...}.h` 与 `include/asm/{processor,ptrace,irqflags,unistd,multiboot,gdt,idt}.h`。
 - `mm/mmap.c`：用户态地址空间管理相关（`mm_create/mm_destroy`、`sys_mmap/sys_munmap/sys_brk`、VMA/heap/brk 逻辑）。
+- `mm/mmap.c`：补充 `sys_mprotect/sys_mremap` 的最小语义（权限变更与 in-place 扩缩）。
 - `fs/fdtable.c`：文件描述符表管理（`get_unused_fd/fget/close_fd`、stdio 安装、clone/close_all）。
 - `arch/x86/kernel/irq.c`：中断开关封装（`irq_save/irq_restore`）。
 - `kernel/pid.c`：按 pid 查找 task（精简版）。
 - `kernel/cred.c`：uid/gid/umask 等“凭据/权限”相关接口（精简版）。
 - `include/linux/sched.h`：task 结构与调度相关常量/全局（对齐 Linux 习惯的头文件命名）。
 - `include/linux/mm.h`：`mm_struct`/`vm_area_struct` 与 VMA 标志位定义。
-- `include/linux/wait.h`：wait queue 类型与接口声明。
+- `include/linux/wait.h`：wait queue 类型与接口声明（`wait_queue_head_t/init_waitqueue_head/wake_up_all`）。
 
 ## 9. 内存管理初始化流程
 
-- **入口**：`init_mm()` 负责早期内存与分页初始化，当前顺序是 `bootmem_init → init_zones → build_all_zonelists → free_area_init → paging_init → mem_init → kswapd_init → kmem_cache_init`，启动期低端恒等映射在 trampoline 中清理，内核主体 VMA 为 `PAGE_OFFSET + 0x00100000 + sizeof(.text.boot)`。
+- **入口**：`init_mm()` 负责早期内存与分页初始化，当前顺序是 `bootmem_init → init_zones → build_all_zonelists → free_area_init → paging_init → mem_init → kswapd_init → kmem_cache_init`，启动期低端恒等映射覆盖前 4MB 并在 trampoline 中清理，内核主体 VMA 为 `PAGE_OFFSET + 0x00100000 + sizeof(.text.boot)`。
 - **bootmem**：只用于早期线性分配与保留内存范围，为 page/zone 数据结构提供可用空间。
 - **zone/page**：建立最小 `struct page` 数组与 `zone_dma/zone_normal`，并初始化 `free_area` 与 `zonelist` 作为 buddy 的挂接点，managed_pages 在 mem_init 中收敛。
 - **free_area_init/free_area_init_core**：物理页分配主路径初始化，建立 buddy 元数据并标记 `PG_RESERVED`，准备 free_area。

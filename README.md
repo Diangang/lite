@@ -20,13 +20,14 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - PS/2 键盘驱动。
   - **PIT 可编程定时器**（提供系统 Tick 和 uptime 支持）。
   - 调度以 Tick 驱动时间片递减，时间片耗尽触发一次抢占式切换。
+  - 启动期打印 Linux 风格版本 banner。
   - **物理内存管理 (page_alloc/buddy)**：
     - Multiboot E820 内存地图解析与 bootmem 早期保留。
     - **Buddy 框架**：支持按页 (4KB) 及按 order 的物理页分配与释放，并挂接到 zone/free_area 与 zonelist。
   - **虚拟内存管理 (paging/pgtable)**：
     - **分页机制 (Paging)**：开启 x86 保护模式分页，设置 CR3 和 CR0 寄存器。
     - **内核线性映射**：将物理内存前 128MB 映射到 `PAGE_OFFSET` 起始的高半区。
-    - **启动 trampoline**：开启分页后跳转到高半区并清理低端恒等映射。
+    - **启动 trampoline**：开启分页后跳转到高半区并清理低端恒等映射（当前覆盖前 4MB）。
     - **缺页异常处理**：捕获 `#PF` (Interrupt 14)，支持最小按需映射（not-present 缺页自动分配并映射），并基于用户 VMA 范围校验合法性。
     - **映射查询**：提供虚拟地址是否已映射与虚实地址转换的辅助接口。
     - **独立页目录**：支持克隆内核页目录并在任务间切换。
@@ -39,6 +40,8 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
 - **Initramfs (CPIO newc)**：
   - 通过 Multiboot module 加载 cpio 归档，并在内核早期解包到 rootfs（ramfs）。
   - 支持目录与常规文件的创建，形成 `/sbin/init`、`/bin/smoke` 等用户态镜像。
+- **启动参数**：
+  - 支持 `init=` 覆盖 PID 1 启动路径，失败时按 `/sbin/init`、`/etc/init`、`/bin/init`、`/bin/sh` 回退。
 - **procfs（最小可观测接口）**：
   - `/proc/tasks`：任务列表与状态（`cat proc/tasks`）。
   - `/proc/sched`：tick 与上下文切换统计（`cat proc/sched`）。
@@ -67,9 +70,10 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - **初始化解耦**：将内核的“早期打印控制台（Early Console，无中断、轮询输出）”与“完整设备驱动（中断使能、队列管理）”彻底分离。核心初始化（CPU/内存/中断）在 `start_kernel` 中完成，而完整的驱动初始化被延迟到 `PID=1` 的内核 `init` 线程中，通过 `do_initcalls` 安全加载，完美符合 Linux 规范。
   - **kobject/kref 基础**：提供最小对象生命周期管理与引用计数，为 sysfs 与 driver core 提供一致化底座。
   - **kset/kobj_type 骨架**：提供最小聚合与类型钩子结构，为后续 sysfs 自动映射做准备。
-- **用户态交互**：完全移除内核态 Shell，由 1号进程 (`/sbin/init`) 挂载文件系统并 fork 执行真正的用户态 Shell (`/sbin/sh`)，实现彻底的特权级分离。内置提供基于 C 语言编写的集成测试程序 `/bin/smoke`。
-- **PID 1 对齐 Linux**：PID 1 在完成 initcall 与挂载后会直接“exec”为用户态 `/sbin/init`（不再额外创建一个新 pid），语义更接近 Linux 2.6 的 `kernel_init -> execve(init)`。
+- **用户态交互**：完全移除内核态 Shell，由 1号进程（`init=` 指定或默认 `/sbin/init`）挂载文件系统并 fork 执行真正的用户态 Shell (`/sbin/sh`)，实现彻底的特权级分离。内置提供基于 C 语言编写的集成测试程序 `/bin/smoke`。
+- **PID 1 对齐 Linux**：PID 1 在完成 initcall 与挂载后会直接“exec”为用户态 init（不再额外创建一个新 pid），语义更接近 Linux 2.6 的 `kernel_init -> execve(init)`。
 - **调度自测（用户态 smoke）**：调度相关的演示/自测已迁移到用户态 `/bin/smoke`，通过 `fork + sleep + yield` 验证 Tick 驱动的时间片递减、阻塞/让出与上下文切换路径。
+- **系统调用自测（用户态 smoke）**：`/bin/smoke` 覆盖 `fork/waitpid/mmap/mprotect/mremap` 等最小语义验证。
 - **文件系统 (VFS)**：结构体 (`i_ino`, `i_mode`, `i_size`) 和全局动态 inode 分配器 (`get_next_ino`) 完美对齐 Linux 2.6 标准，支持虚拟文件系统如 `ramfs`、`devtmpfs`、`procfs`、`sysfs`。
 - **系统调用 (int 0x80)**：
   - 用户态 syscall 会进行用户指针校验，避免非法地址导致内核崩溃。
@@ -80,10 +84,12 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `SYS_CHDIR/SYS_GETCWD/SYS_GETDENTS/SYS_MKDIR` 支持用户态 shell 做路径切换、目录遍历与创建目录。
   - `SYS_GETUID/SYS_GETGID/SYS_UMASK/SYS_CHMOD` 提供最小权限与掩码接口。
   - `SYS_EXECVE` 支持在用户态替换当前进程映像（最小 exec）。
-  - `SYS_WAITPID` 支持用户态等待子进程退出并获取退出信息。
+  - `SYS_WAITPID` 支持用户态等待子进程退出并获取退出信息，返回被回收的子进程 PID。
   - `SYS_IOCTL` 提供最小设备控制入口（`/dev/console` 支持获取/设置 tty flags）。
   - `SYS_KILL` 提供最小信号投递入口（当前支持 SIGINT 中断前台任务）。
   - `SYS_MMAP/SYS_MUNMAP` 提供匿名映射与回收（缺页按 VMA 规则处理，`/proc/<pid>/maps` 可观测）。
+  - `SYS_MPROTECT/SYS_MREMAP` 提供最小权限变更与 in-place 重映射。
+  - 用户态栈默认 8 页，按固定 VMA 初始化。
   - 缺页处理支持将 VMA 允许的 supervisor 映射修正为用户页。
   - 用户态地址与内核高半区线性映射区隔离，缺页按 VMA 规则修正。
   - `SYS_FORK` 提供最小 fork，与 COW 页引用计数配合实现写时复制。

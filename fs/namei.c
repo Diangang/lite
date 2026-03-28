@@ -169,7 +169,6 @@ int vfs_mkdir(const char *path)
         return -1;
     strcpy(tmp, path);
 
-    // simple dirname/basename split
     uint32_t slash = len;
     int found_slash = 0;
     while (slash > 0) {
@@ -238,7 +237,6 @@ int vfs_unlink(const char *path)
         return -1;
     strcpy(tmp, path);
 
-    // simple dirname/basename split
     uint32_t slash = len;
     int found_slash = 0;
     while (slash > 0) {

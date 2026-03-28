@@ -6,8 +6,7 @@ typedef int (*initcall_t)(void);
 #define __stringify_1(x) #x
 #define __stringify(x) __stringify_1(x)
 
-#define __define_initcall(fn, level) \
-    static initcall_t __initcall_##fn __attribute__((__used__, __section__(".initcall" __stringify(level) ".init"))) = fn;
+#define __define_initcall(fn, level) static initcall_t __initcall_##fn __attribute__((__used__, __section__(".initcall" __stringify(level) ".init"))) = fn;
 
 #define early_initcall(fn) __define_initcall(fn, 0)
 #define core_initcall(fn) __define_initcall(fn, 1)
