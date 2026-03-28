@@ -80,18 +80,20 @@ static uint32_t align_up(uint32_t value)
 static void ensure_private_table(pgd_t* dir, uint32_t pde_idx)
 {
     if (dir[pde_idx] & PTE_PRESENT) {
-        pte_t* old_table = (pte_t*)(dir[pde_idx] & ~0xFFF);
-        pte_t* new_table = (pte_t*)alloc_page(GFP_KERNEL);
-        if (!new_table)
+        pte_t* old_table = (pte_t*)phys_to_virt(dir[pde_idx] & ~0xFFF);
+        uint32_t new_table_phys = (uint32_t)alloc_page(GFP_KERNEL);
+        if (!new_table_phys)
             return;
+        pte_t* new_table = (pte_t*)phys_to_virt(new_table_phys);
         memcpy(new_table, old_table, 4096);
-        dir[pde_idx] = ((uint32_t)new_table) | PTE_PRESENT | PTE_READ_WRITE | PTE_USER;
+        dir[pde_idx] = new_table_phys | PTE_PRESENT | PTE_READ_WRITE | PTE_USER;
     } else {
-        pte_t* new_table = (pte_t*)alloc_page(GFP_KERNEL);
-        if (!new_table)
+        uint32_t new_table_phys = (uint32_t)alloc_page(GFP_KERNEL);
+        if (!new_table_phys)
             return;
+        pte_t* new_table = (pte_t*)phys_to_virt(new_table_phys);
         memset(new_table, 0, 4096);
-        dir[pde_idx] = ((uint32_t)new_table) | PTE_PRESENT | PTE_READ_WRITE | PTE_USER;
+        dir[pde_idx] = new_table_phys | PTE_PRESENT | PTE_READ_WRITE | PTE_USER;
     }
 }
 

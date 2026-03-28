@@ -25,12 +25,13 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
     - **Buddy 框架**：支持按页 (4KB) 及按 order 的物理页分配与释放，并挂接到 zone/free_area 与 zonelist。
   - **虚拟内存管理 (paging/pgtable)**：
     - **分页机制 (Paging)**：开启 x86 保护模式分页，设置 CR3 和 CR0 寄存器。
-    - **恒等映射**：将物理内存前 128MB 映射到相同的虚拟地址，保证内核与低端内存可访问。
+    - **内核线性映射**：将物理内存前 128MB 映射到 `PAGE_OFFSET` 起始的高半区。
+    - **启动 trampoline**：开启分页后跳转到高半区并清理低端恒等映射。
     - **缺页异常处理**：捕获 `#PF` (Interrupt 14)，支持最小按需映射（not-present 缺页自动分配并映射），并基于用户 VMA 范围校验合法性。
     - **映射查询**：提供虚拟地址是否已映射与虚实地址转换的辅助接口。
     - **独立页目录**：支持克隆内核页目录并在任务间切换。
     - **用户态回收**：用户进程退出后基于 VMA 回收用户页，并释放非内核共享的页表页与页目录页。
-  - **vmalloc/ioremap/kmap 骨架**：预留高端映射与设备映射入口。
+  - **vmalloc/ioremap/kmap**：提供最小内核映射入口，用于高端与设备映射路径。
   - **内核对象分配 (SLUB 框架)**：
     - 实现了 `kmem_cache` 框架与 `kmalloc/kfree`，支持小对象缓存与大对象按页分配。
     - 初始化流程为 `bootmem → zones → build_all_zonelists → free_area_init → paging → mem_init → kswapd_init → slab`，为后续对齐 Linux 2.6 留出替换接口。
@@ -84,7 +85,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
   - `SYS_KILL` 提供最小信号投递入口（当前支持 SIGINT 中断前台任务）。
   - `SYS_MMAP/SYS_MUNMAP` 提供匿名映射与回收（缺页按 VMA 规则处理，`/proc/<pid>/maps` 可观测）。
   - 缺页处理支持将 VMA 允许的 supervisor 映射修正为用户页。
-  - 低端恒等映射区域的用户访问已通过缺页修正兼容（避免 present fault）。
+  - 用户态地址与内核高半区线性映射区隔离，缺页按 VMA 规则修正。
   - `SYS_FORK` 提供最小 fork，与 COW 页引用计数配合实现写时复制。
   - `SYS_BRK` 提供最小用户堆扩展接口（基于堆 VMA 与按需缺页分配）。
   - syscall 入口使用 trap gate，不会隐式关闭中断，内核态具备可抢占的基础语义。

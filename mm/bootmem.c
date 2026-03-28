@@ -73,10 +73,12 @@ void bootmem_init(struct multiboot_info *mbi)
         bootmem.total_pages = ((mbi->mem_lower + mbi->mem_upper) * 1024) / PAGE_SIZE;
 
     uint32_t kernel_end = (uint32_t)&end;
+    if (kernel_end >= PAGE_OFFSET)
+        kernel_end -= PAGE_OFFSET;
     uint32_t mods_struct_end = mbi->mods_addr + mbi->mods_count * sizeof(struct multiboot_module);
     if (mods_struct_end > kernel_end)
         kernel_end = mods_struct_end;
-    struct multiboot_module* mod = (struct multiboot_module*)mbi->mods_addr;
+    struct multiboot_module* mod = (struct multiboot_module*)phys_to_virt(mbi->mods_addr);
     for (uint32_t i = 0; i < mbi->mods_count; i++)
         if (mod[i].mod_end > kernel_end)
             kernel_end = mod[i].mod_end;
@@ -88,15 +90,18 @@ void bootmem_init(struct multiboot_info *mbi)
     bootmem_reserve(0, kernel_end);
 
     if (mbi->flags & (1 << 6)) {
-        struct multiboot_memory_map* mmap = (struct multiboot_memory_map*)mbi->mmap_addr;
-        while ((uint32_t)mmap < mbi->mmap_addr + mbi->mmap_length) {
+        uint32_t mmap_phys = mbi->mmap_addr;
+        uint32_t mmap_end = mmap_phys + mbi->mmap_length;
+        struct multiboot_memory_map* mmap = (struct multiboot_memory_map*)phys_to_virt(mmap_phys);
+        while (mmap_phys < mmap_end) {
             if (mmap->type == MULTIBOOT_MEMORY_AVAILABLE) {
                 bootmem_add_available(mmap->addr_low, mmap->len_low);
                 uint32_t region_end = mmap->addr_low + mmap->len_low;
                 if (region_end > bootmem.end)
                     bootmem.end = region_end;
             }
-            mmap = (struct multiboot_memory_map*) ((uint32_t)mmap + mmap->size + sizeof(mmap->size));
+            mmap_phys += mmap->size + sizeof(mmap->size);
+            mmap = (struct multiboot_memory_map*)phys_to_virt(mmap_phys);
         }
     }
     if (bootmem.end == 0)

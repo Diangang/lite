@@ -30,6 +30,17 @@
 - **定位**：开启分页的瞬间，CPU 期望 EIP（指令指针）所在的地址必须在页表中有效。如果没有建立恒等映射（Identity Mapping），CPU 取下一条指令时会触发缺页异常（Page Fault），由于 IDT 尚未完全接管，直接导致 Triple Fault。
 - **解决**：在开启分页前，强制将物理地址 `0x000000` - `0x400000`（前 4MB）映射到相同的虚拟地址。
 
+### 2.3 高半区切换后无输出或 Multiboot magic 错误
+- **现象**：切换为高半区线性映射后，QEMU 无输出卡死，或出现 `Invalid Multiboot magic number!`。
+- **定位**：
+  1. 内核主体 VMA 未追加 `.text.boot` 偏移，导致 `VA != PA + PAGE_OFFSET`，跳转到高半区时取指失效。
+  2. 进入 C 入口前未通过 trampoline 清理低端恒等映射，可能继续以低端执行路径依赖，导致异常不可见。
+  3. 早期调试输出使用 `outb` 写入 `AL`，覆盖了 Multiboot magic 的低字节，导致 magic 校验失败。
+- **解决**：
+  1. 在链接脚本中将内核主体 VMA 设置为 `PAGE_OFFSET + 0x00100000 + sizeof(.text.boot)`。
+  2. 在启动汇编中开启分页后跳转到高半区 trampoline，切换高半区栈并清理 PDE0，再进入 `kernel_entry`。
+  3. 启动早期调试打点必须保存/恢复 `EAX`（或避免使用 `AL`），确保 magic 不被破坏。
+
 ---
 
 ## 3. 中断与外设驱动阶段问题

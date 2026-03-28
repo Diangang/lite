@@ -9,33 +9,45 @@ ENTRY(_start)
 
 SECTIONS
 {
-	/* The kernel will live at 1MB (conventional for Multiboot kernels) */
-	. = 1M;
+	KERNEL_BASE = 0xC0000000;
+	VMLINUX_LMA = 0x00100000;
+	. = VMLINUX_LMA;
 
-	/* First put the multiboot header, as it is required to be put very early
-	   early in the image or the bootloader won't recognize the file format.
-	   Next we'll put the .text section. */
-	.text BLOCK(4K) : ALIGN(4K)
+	. = ALIGN(4K);
+	.text.boot :
 	{
 		*(.multiboot)
+		*(.text.boot)
+	}
+	VMLINUX_LMA_OFFSET = SIZEOF(.text.boot);
+
+	VMLINUX_VMA = KERNEL_BASE + VMLINUX_LMA + VMLINUX_LMA_OFFSET;
+	. = VMLINUX_VMA;
+
+	. = ALIGN(4K);
+	.text : AT(ADDR(.text) - KERNEL_BASE)
+	{
 		*(.text)
 		*(.text.*)
 	}
 
-	.usertext BLOCK(4K) : ALIGN(4K)
+	. = ALIGN(4K);
+	.usertext : AT(ADDR(.usertext) - KERNEL_BASE)
 	{
 		*(.usertext)
 	}
 
 	/* Read-only data. */
-	.rodata BLOCK(4K) : ALIGN(4K)
+	. = ALIGN(4K);
+	.rodata : AT(ADDR(.rodata) - KERNEL_BASE)
 	{
 		*(.rodata)
 		*(.rodata.*)
 	}
 
 	/* Linux-style initcalls */
-	.initcall.init BLOCK(4K) : ALIGN(4K)
+	. = ALIGN(4K);
+	.initcall.init : AT(ADDR(.initcall.init) - KERNEL_BASE)
 	{
 		__initcall_start = .;
 
@@ -50,14 +62,16 @@ SECTIONS
 	}
 
 	/* Read-write data (initialized) */
-	.data BLOCK(4K) : ALIGN(4K)
+	. = ALIGN(4K);
+	.data : AT(ADDR(.data) - KERNEL_BASE)
 	{
 		*(.data)
 		*(.data.*)
 	}
 
 	/* Read-write data (uninitialized) and stack */
-	.bss BLOCK(4K) : ALIGN(4K)
+	. = ALIGN(4K);
+	.bss : AT(ADDR(.bss) - KERNEL_BASE)
 	{
 		*(COMMON)
 		*(.bss)

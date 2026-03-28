@@ -1,6 +1,7 @@
 #include "linux/console.h"
 #include "linux/libc.h"
 #include "linux/tty.h"
+#include "asm/page.h"
 
 static const size_t VGA_WIDTH = 80;
 static const size_t VGA_HEIGHT = 25;
@@ -92,7 +93,7 @@ void init_vga(void)
     vga_row = 0;
     vga_column = 0;
     vga_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    vga_buffer = (uint16_t*) 0xB8000;
+    vga_buffer = (uint16_t*)phys_to_virt(0xB8000);
     for (size_t y = 0; y < VGA_HEIGHT; y++) {
         for (size_t x = 0; x < VGA_WIDTH; x++) {
             const size_t index = y * VGA_WIDTH + x;

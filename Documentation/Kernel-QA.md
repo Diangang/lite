@@ -138,7 +138,7 @@ PIC 芯片内部有一个“服务中寄存器 (In-Service Register)”。当它
 在开启分页**之前**，CPU 的指令指针（EIP）指向的是**物理地址**（例如 `0x101234`）。
 在设置 `CR0` 开启分页的**瞬间**，CPU 解释地址的方式立刻改变：所有地址都被视为**虚拟地址**，必须经过页表转换。
 此时 EIP 依然是 `0x101234`。如果页表中没有告诉 CPU “虚拟地址 `0x101234` 对应哪个物理地址”，CPU 就会触发缺页异常。由于刚开启分页，环境极其脆弱，这通常会导致死机。
-**解决方法**：在开启分页前，我们在页表中把前几 MB（如 0-4MB）的虚拟地址直接映射到**完全相同**的物理地址上（即 1 对 1 映射，恒等映射）。这样开启分页后，CPU 取下一条指令时，虚拟地址 `0x101234` 会被成功转换为物理地址 `0x101234`，代码得以平滑过渡。
+**解决方法**：在开启分页前，先建立一小段低端临时映射（通常是 0-4MB 的恒等映射），保证打开分页这一瞬间的取指与数据访问不失败；随后进入内核高半区线性映射并切换页表，低端临时映射不再作为常态依赖。
 
 ### Q3.3: 用户态进程是“每个都有 4GB 地址空间（用户可用 3GB）”吗？启动时堆/栈/代码段是谁分配的，还是靠缺页？
 **问题背景**：看到用户态地址上界是 `TASK_SIZE`，想确认每个用户任务的地址空间隔离方式，以及进程启动时各段是否“预先分配”。
@@ -161,7 +161,7 @@ PIC 芯片内部有一个“服务中寄存器 (In-Service Register)”。当它
 **回答**：
 1.  **内核虚拟布局不同**：
     - Linux 2.6（x86 32 位常见配置）更偏“高半区内核 + 线性映射（lowmem）+ 高端内存（highmem）临时映射”的体系化模型。
-    - 当前实现为了简化，先对 `0~128MB` 做了 supervisor-only 的恒等映射（VA==PA），再在 `PAGE_OFFSET` 起构建内核堆映射，属于混合布局（[paging_init](file:///data25/lidg/lite/mm/memory.c#L411-L455)、[slab.c](file:///data25/lidg/lite/mm/slab.c#L1-L80)）。
+    - 当前实现采用高半区线性映射（`PAGE_OFFSET` 起映射物理低端内存），不再长期保留低端恒等映射，布局更接近 Linux 2.6 的 lowmem 语义（[paging_init](file:///data25/lidg/lite/mm/memory.c#L430-L492)、[slab.c](file:///data25/lidg/lite/mm/slab.c#L1-L80)）。
 2.  **exec/ELF 装载方式不同（最关键）**：
     - Linux 2.6 主要通过 **file-backed VMA + page cache** 实现按需装载：访问到某个 text/data 页才触发缺页，从页缓存回填并映射；写时再 COW。
     - 当前实现缺少 page cache/file-backed VMA，因此对 PT_LOAD 段采用“预分配物理页 + memcpy 拷贝段内容”的方式完成装载（[exec.c](file:///data25/lidg/lite/fs/exec.c#L102-L262)）。
@@ -178,11 +178,11 @@ PIC 芯片内部有一个“服务中寄存器 (In-Service Register)”。当它
 需要区分三层：**ELF 的 section（链接组织）**、**ELF 的 PT_LOAD 段（装载单位）**、以及 **运行时的虚拟内存区域（堆/栈）**。
 
 1.  **内核镜像的 `.text/.rodata/.data/.bss`（链接脚本决定的布局）**：
-    - 内核链接基址固定为 `0x00100000`（1MB），并按顺序布局 `.text → .rodata → .data → .bss`（见 [linker.ld](file:///data25/lidg/lite/linker.ld#L10-L54)）。
-    - `.text`：内核代码与 `.multiboot` 头；CPU 取指执行的就是这段内容（见 [linker.ld](file:///data25/lidg/lite/linker.ld#L18-L23)）。
-    - `.rodata`：只读常量数据（字符串、只读表等），语义上只读，但当前页表未对其强制只读（见 [paging_init](file:///data25/lidg/lite/mm/memory.c#L411-L455) 的恒等映射属性）。
+    - 内核镜像 LMA 位于 `0x00100000`（1MB），`boot` 段占用前部；内核主体 VMA 切到 `PAGE_OFFSET + 0x00100000 + sizeof(.text.boot)` 的高半区，并按顺序布局 `.text → .rodata → .data → .bss`（见 [linker.ld](file:///data25/lidg/lite/arch/x86/kernel/linker.ld#L10-L79)）。
+    - `.text`：内核代码与 `.multiboot` 头；CPU 取指执行的是高半区虚拟地址映射（见 [linker.ld](file:///data25/lidg/lite/arch/x86/kernel/linker.ld#L18-L33)）。
+    - `.rodata`：只读常量数据（字符串、只读表等），语义上只读，但当前页表未对其强制只读（见 [paging_init](file:///data25/lidg/lite/mm/memory.c#L430-L492)）。
     - `.data`：带初值的全局/静态变量，文件中携带初始内容，装载后即可直接使用。
-    - `.bss`：未初始化的全局/静态变量，装载时需要清零；同时 `boot.s` 的 `.bootstrap_stack` 也被链接进 `.bss`（见 [boot.s](file:///data25/lidg/lite/arch/x86/boot/boot.s#L22-L27)、[linker.ld](file:///data25/lidg/lite/linker.ld#L44-L53)）。
+    - `.bss`：未初始化的全局/静态变量，装载时需要清零；同时 `boot.s` 的 `.bootstrap_stack` 也被链接进 `.bss`（见 [boot.s](file:///data25/lidg/lite/arch/x86/boot/boot.s#L22-L27)、[linker.ld](file:///data25/lidg/lite/arch/x86/kernel/linker.ld#L63-L79)）。
     - `end`：链接脚本导出的内核末尾符号，页面分配器用它把 bitmap/refcount 放到内核与模块之后（见 [page_alloc.c](file:///data25/lidg/lite/mm/page_alloc.c#L149-L207)）。
 
 2.  **用户进程的 `.text/.rodata/.data/.bss`（由 ulinker.ld + loader 决定）**：

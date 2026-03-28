@@ -11,7 +11,7 @@ static int32_t* buddy_next = NULL;
 static unsigned int buddy_max_order = 0;
 static int buddy_ready = 0;
 
-static unsigned long zone_free_pages(struct zone *zone)
+unsigned long zone_free_pages(struct zone *zone)
 {
     unsigned long free_pages = 0;
     if (!zone)
@@ -195,7 +195,7 @@ unsigned long get_zeroed_page(gfp_t gfp)
 {
     unsigned long p = __get_free_pages(gfp, 0);
     if (p)
-        memset((void*)p, 0, PAGE_SIZE);
+        memset(phys_to_virt(p), 0, PAGE_SIZE);
     return p;
 }
 
@@ -270,9 +270,11 @@ void show_mem(void)
 
     if (cached_mbi->flags & (1 << 6)) {
         printf("Memory Map provided by BIOS:\n");
-        struct multiboot_memory_map* mmap = (struct multiboot_memory_map*)cached_mbi->mmap_addr;
+        uint32_t mmap_phys = cached_mbi->mmap_addr;
+        uint32_t mmap_end = mmap_phys + cached_mbi->mmap_length;
+        struct multiboot_memory_map* mmap = (struct multiboot_memory_map*)phys_to_virt(mmap_phys);
 
-        while ((uint32_t)mmap < cached_mbi->mmap_addr + cached_mbi->mmap_length) {
+        while (mmap_phys < mmap_end) {
             const char* type_str = "Unknown";
             switch (mmap->type) {
             case MULTIBOOT_MEMORY_AVAILABLE:
@@ -299,7 +301,8 @@ void show_mem(void)
                    mmap->addr_low + mmap->len_low - 1,
                    size_kb, type_str);
 
-            mmap = (struct multiboot_memory_map*) ((uint32_t)mmap + mmap->size + sizeof(mmap->size));
+            mmap_phys += mmap->size + sizeof(mmap->size);
+            mmap = (struct multiboot_memory_map*)phys_to_virt(mmap_phys);
         }
     } else {
         printf("BIOS did not provide a memory map.\n");
@@ -344,7 +347,7 @@ void free_area_init_core(struct multiboot_info* mbi)
     if (!meta)
         panic("PAGE_ALLOC PANIC: bootmem_alloc failed");
 
-    buddy_next = (int32_t*)meta;
+    buddy_next = (int32_t*)phys_to_virt((uint32_t)meta);
     buddy_max_order = MAX_ORDER - 1;
     while (buddy_max_order > 0 && (1u << buddy_max_order) > total_pages)
         buddy_max_order--;
@@ -361,8 +364,10 @@ void mem_init(void)
     if (!cached_mbi || !(cached_mbi->flags & (1 << 6)))
         panic("PMM PANIC: BIOS did not provide a memory map!");
 
-    struct multiboot_memory_map* mmap = (struct multiboot_memory_map*)cached_mbi->mmap_addr;
-    while ((uint32_t)mmap < cached_mbi->mmap_addr + cached_mbi->mmap_length) {
+    uint32_t mmap_phys = cached_mbi->mmap_addr;
+    uint32_t mmap_end = mmap_phys + cached_mbi->mmap_length;
+    struct multiboot_memory_map* mmap = (struct multiboot_memory_map*)phys_to_virt(mmap_phys);
+    while (mmap_phys < mmap_end) {
         if (mmap->type != MULTIBOOT_MEMORY_AVAILABLE)
             goto next;
 
@@ -386,18 +391,24 @@ void mem_init(void)
         }
 
 next:
-        mmap = (struct multiboot_memory_map*) ((uint32_t)mmap + mmap->size + sizeof(mmap->size));
+        mmap_phys += mmap->size + sizeof(mmap->size);
+        mmap = (struct multiboot_memory_map*)phys_to_virt(mmap_phys);
     }
+    contig_page_data.zone_dma.managed_pages = 0;
+    contig_page_data.zone_normal.managed_pages = 0;
     for (uint32_t i = 0; i < total_pages; i++) {
         struct page *pg = pfn_to_page(i);
         if (!pg)
             continue;
         if (pg->flags & PG_RESERVED)
             continue;
+        struct zone *zone = pfn_to_zone(i);
+        if (zone)
+            zone->managed_pages++;
         if (pg->flags & PG_BUDDY)
             continue;
-        struct zone *zone = pfn_to_zone(i);
         buddy_free_block(zone, i, 0);
     }
+    refresh_zone_watermarks();
     buddy_ready = 1;
 }

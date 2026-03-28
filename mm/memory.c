@@ -26,12 +26,13 @@ void map_page_ex(pgd_t* pgd, void* phys_addr, void* virt_addr, pteval_t flags)
     uint32_t pte_idx = pte_index(va);
 
     if (!pgd_present(pgd[pde_idx])) {
-        pte_t* new_table = (pte_t*)alloc_page(GFP_KERNEL);
-        if (!new_table)
+        uint32_t new_table_phys = (uint32_t)alloc_page(GFP_KERNEL);
+        if (!new_table_phys)
             return (void)printf("VMM: Failed to allocate Page Table for 0x%x\n", virt_addr);
 
+        pte_t* new_table = (pte_t*)phys_to_virt(new_table_phys);
         memset(new_table, 0, PAGE_SIZE);
-        pgd[pde_idx] = ((uint32_t)new_table) | PTE_READ_WRITE | PTE_PRESENT;
+        pgd[pde_idx] = new_table_phys | PTE_READ_WRITE | PTE_PRESENT;
         if (flags & PTE_USER)
             pgd[pde_idx] |= PTE_USER;
 
@@ -42,7 +43,7 @@ void map_page_ex(pgd_t* pgd, void* phys_addr, void* virt_addr, pteval_t flags)
         pgd[pde_idx] |= PTE_USER;
     }
 
-    pte_t* table = (pte_t*)(pgd[pde_idx] & ~(PAGE_SIZE - 1));
+    pte_t* table = (pte_t*)phys_to_virt(pgd[pde_idx] & ~(PAGE_SIZE - 1));
     table[pte_idx] = ((uint32_t)phys_addr) | flags;
 
     __asm__ volatile("invlpg (%0)" :: "r" (virt_addr) : "memory");
@@ -66,7 +67,7 @@ int page_mapped(void* virt_addr)
     if (!pgd_present(pde))
         return 0;
 
-    pte_t* table = (pte_t*)(pde & ~(PAGE_SIZE - 1));
+    pte_t* table = (pte_t*)phys_to_virt(pde & ~(PAGE_SIZE - 1));
     pteval_t pte = table[pte_idx];
 
     return pte_present(pte) ? 1 : 0;
@@ -85,7 +86,7 @@ uint32_t virt_to_phys(void* virt_addr)
     if (!pgd_present(pde))
         return 0xFFFFFFFF;
 
-    pte_t* table = (pte_t*)(pde & ~(PAGE_SIZE - 1));
+    pte_t* table = (pte_t*)phys_to_virt(pde & ~(PAGE_SIZE - 1));
     pteval_t pte = table[pte_idx];
     if (!pte_present(pte))
         return 0xFFFFFFFF;
@@ -106,7 +107,7 @@ uint32_t virt_to_phys_pgd(pgd_t* pgd, void* virt_addr)
     if (!pgd_present(pde))
         return 0xFFFFFFFF;
 
-    pte_t* table = (pte_t*)(pde & ~(PAGE_SIZE - 1));
+    pte_t* table = (pte_t*)phys_to_virt(pde & ~(PAGE_SIZE - 1));
     pteval_t pte = table[pte_idx];
     if (!pte_present(pte))
         return 0xFFFFFFFF;
@@ -127,7 +128,7 @@ pteval_t get_pte_flags(pgd_t* pgd, void* virt_addr)
     if (!pgd_present(pde))
         return 0;
 
-    pte_t* table = (pte_t*)(pde & ~(PAGE_SIZE - 1));
+    pte_t* table = (pte_t*)phys_to_virt(pde & ~(PAGE_SIZE - 1));
     pteval_t pte = table[pte_idx];
     if (!pte_present(pte))
         return 0;
@@ -151,7 +152,7 @@ void set_pte_flags(pgd_t* pgd, void* virt_addr, pteval_t flags)
     if (flags & PTE_USER)
         pgd[pde_idx] |= PTE_USER;
 
-    pte_t* table = (pte_t*)(pde & ~(PAGE_SIZE - 1));
+    pte_t* table = (pte_t*)phys_to_virt(pde & ~(PAGE_SIZE - 1));
     pteval_t pte = table[pte_idx];
     if (!pte_present(pte))
         return;
@@ -178,7 +179,7 @@ void set_page_user_pgd(pgd_t* pgd, void* virt_addr)
     if (!pgd_present(pde))
         return;
 
-    pte_t* table = (pte_t*)(pde & ~(PAGE_SIZE - 1));
+    pte_t* table = (pte_t*)phys_to_virt(pde & ~(PAGE_SIZE - 1));
     pteval_t pte = table[pte_idx];
     if (!pte_present(pte))
         return;
@@ -202,7 +203,7 @@ void set_page_readonly_pgd(pgd_t* pgd, void* virt_addr)
     if (!pgd_present(pde))
         return;
 
-    pte_t* table = (pte_t*)(pde & ~(PAGE_SIZE - 1));
+    pte_t* table = (pte_t*)phys_to_virt(pde & ~(PAGE_SIZE - 1));
     pteval_t pte = table[pte_idx];
     if (!pte_present(pte))
         return;
@@ -215,9 +216,10 @@ pgd_t* pgd_clone_kernel(void)
 {
     if (!kernel_directory)
         return NULL;
-    pgd_t* new_dir = (pgd_t*)alloc_page(GFP_KERNEL);
-    if (!new_dir)
+    uint32_t new_dir_phys = (uint32_t)alloc_page(GFP_KERNEL);
+    if (!new_dir_phys)
         return NULL;
+    pgd_t* new_dir = (pgd_t*)phys_to_virt(new_dir_phys);
     memset(new_dir, 0, PAGE_SIZE);
 
     for (int i = 0; i < 1024; i++)
@@ -231,7 +233,8 @@ void switch_pgd(pgd_t* pgd)
     if (!pgd)
         return;
     page_directory = pgd;
-    __asm__ volatile("mov %0, %%cr3" :: "r"(pgd));
+    uint32_t pgd_phys = virt_to_phys_addr(pgd);
+    __asm__ volatile("mov %0, %%cr3" :: "r"(pgd_phys));
 }
 
 pgd_t* get_pgd_current(void)
@@ -255,7 +258,7 @@ static int get_pte(pgd_t* pgd, uint32_t va, pgdval_t* out_pde, pteval_t* out_pte
     if (!pgd_present(pde))
         return 0;
 
-    pte_t* table = (pte_t*)(pde & ~(PAGE_SIZE - 1));
+    pte_t* table = (pte_t*)phys_to_virt(pde & ~(PAGE_SIZE - 1));
     pteval_t pte = table[pte_idx];
     if (!pte_present(pte))
         return 0;
@@ -476,17 +479,20 @@ struct pt_regs *do_page_fault(struct pt_regs *regs)
 
 void paging_init(void)
 {
-    page_directory = (pgd_t*)alloc_page(GFP_KERNEL);
-    if (!page_directory)
+    uint32_t pgd_phys = (uint32_t)alloc_page(GFP_KERNEL);
+    if (!pgd_phys)
         return (void)printf("PAGING: Failed to allocate Page Directory!\n");
 
+    page_directory = (pgd_t*)phys_to_virt(pgd_phys);
     memset(page_directory, 0, PAGE_SIZE);
 
+    uint32_t kernel_pde_base = pgd_index(PAGE_OFFSET);
     uint32_t low_pdes = (128 * 1024 * 1024) / PGDIR_SIZE;
     for (uint32_t pde_idx = 0; pde_idx < low_pdes; pde_idx++) {
-        pte_t* pt = (pte_t*)alloc_page(GFP_KERNEL);
-        if (!pt)
+        uint32_t pt_phys = (uint32_t)alloc_page(GFP_KERNEL);
+        if (!pt_phys)
             panic("PAGING PANIC: Failed to allocate Page Table!");
+        pte_t* pt = (pte_t*)phys_to_virt(pt_phys);
         memset(pt, 0, PAGE_SIZE);
 
         for (uint32_t i = 0; i < PTRS_PER_PTE; i++) {
@@ -494,18 +500,13 @@ void paging_init(void)
             pt[i] = addr | PTE_READ_WRITE | PTE_PRESENT;
         }
 
-        page_directory[pde_idx] = ((uint32_t)pt) | PTE_READ_WRITE | PTE_PRESENT;
+        page_directory[kernel_pde_base + pde_idx] = pt_phys | PTE_READ_WRITE | PTE_PRESENT;
     }
 
     register_interrupt_handler(14, do_page_fault);
 
-    __asm__ volatile("mov %0, %%cr3" :: "r"(page_directory));
+    __asm__ volatile("mov %0, %%cr3" :: "r"(pgd_phys));
     kernel_directory = page_directory;
 
-    uint32_t cr0;
-    __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
-    cr0 |= 0x80000000;
-    __asm__ volatile("mov %0, %%cr0" :: "r"(cr0));
-
-    printf("PAGING: Enabled! Identity mapped 0-128MB.\n");
+    printf("PAGING: Kernel mapped at PAGE_OFFSET (0-128MB).\n");
 }

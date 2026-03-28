@@ -36,6 +36,7 @@ struct zone {
     uint32_t start_pfn;
     uint32_t spanned_pages;
     uint32_t present_pages;
+    uint32_t managed_pages;
     struct page *mem_map;
     uint32_t watermark[NR_WMARK];
     struct free_area free_area[MAX_ORDER];
@@ -63,6 +64,7 @@ extern struct zonelist dma_zonelist;
 
 void init_zones(void);
 void build_all_zonelists(void);
+void refresh_zone_watermarks(void);
 struct page *pfn_to_page(uint32_t pfn);
 uint32_t page_to_pfn(struct page *page);
 struct zone *pfn_to_zone(uint32_t pfn);

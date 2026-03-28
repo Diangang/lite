@@ -158,13 +158,17 @@ static uint32_t proc_read_maps(struct inode *node, uint32_t offset, uint32_t siz
 static uint32_t proc_read_meminfo(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
-    static char tmp[256];
+    static char tmp[512];
     uint32_t off = 0;
     uint32_t total_kb = (uint32_t)(totalram_pages() * (PAGE_SIZE / 1024));
     uint32_t free_kb = (uint32_t)(freeram_pages() * (PAGE_SIZE / 1024));
     uint32_t min_kb = 0;
     uint32_t low_kb = 0;
     uint32_t high_kb = 0;
+    uint32_t zone_dma_total_kb = contig_page_data.zone_dma.present_pages * (PAGE_SIZE / 1024);
+    uint32_t zone_dma_free_kb = (uint32_t)(zone_free_pages(&contig_page_data.zone_dma) * (PAGE_SIZE / 1024));
+    uint32_t zone_normal_total_kb = contig_page_data.zone_normal.present_pages * (PAGE_SIZE / 1024);
+    uint32_t zone_normal_free_kb = (uint32_t)(zone_free_pages(&contig_page_data.zone_normal) * (PAGE_SIZE / 1024));
     if (contig_page_data.zone_dma.spanned_pages) {
         min_kb += contig_page_data.zone_dma.watermark[WMARK_MIN] * (PAGE_SIZE / 1024);
         low_kb += contig_page_data.zone_dma.watermark[WMARK_LOW] * (PAGE_SIZE / 1024);
@@ -187,6 +191,14 @@ static uint32_t proc_read_meminfo(struct inode *node, uint32_t offset, uint32_t 
     buf_append_u32(tmp, &off, sizeof(tmp), high_kb);
     buf_append(tmp, &off, sizeof(tmp), " kB\nKswapdWakeups: ");
     buf_append_u32(tmp, &off, sizeof(tmp), kswapd_wakeup_count());
+    buf_append(tmp, &off, sizeof(tmp), "\nZoneDMATotal: ");
+    buf_append_u32(tmp, &off, sizeof(tmp), zone_dma_total_kb);
+    buf_append(tmp, &off, sizeof(tmp), " kB\nZoneDMAFree: ");
+    buf_append_u32(tmp, &off, sizeof(tmp), zone_dma_free_kb);
+    buf_append(tmp, &off, sizeof(tmp), " kB\nZoneNormalTotal: ");
+    buf_append_u32(tmp, &off, sizeof(tmp), zone_normal_total_kb);
+    buf_append(tmp, &off, sizeof(tmp), " kB\nZoneNormalFree: ");
+    buf_append_u32(tmp, &off, sizeof(tmp), zone_normal_free_kb);
     buf_append(tmp, &off, sizeof(tmp), "\n");
     if (off < sizeof(tmp)) tmp[off] = 0;
     if (offset >= off)

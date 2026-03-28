@@ -110,7 +110,6 @@ void start_kernel(struct multiboot_info* mbi, uint32_t magic)
 __attribute__((section(".text.entry")))
 void kernel_entry(uint32_t magic, struct multiboot_info* mbi)
 {
-    outb(0xE9, 'K');
     start_kernel(mbi, magic);
     panic(NULL);
 }

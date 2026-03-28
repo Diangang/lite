@@ -1,20 +1,102 @@
 #include "linux/vmalloc.h"
+#include "linux/page_alloc.h"
+#include "linux/slab.h"
+#include "asm/page.h"
+#include "asm/pgtable.h"
+#include "linux/libc.h"
+
+#define VMALLOC_START 0xD0000000
+#define VMALLOC_END   0xF0000000
+#define KMAP_START    0xF0000000
+
+struct vmalloc_block {
+    uint32_t vaddr;
+    uint32_t size;
+    struct vmalloc_block *next;
+};
+
+static struct vmalloc_block *vmalloc_list = NULL;
+static uint32_t vmalloc_base = VMALLOC_START;
 
 void *vmalloc(uint32_t size)
 {
-    (void)size;
-    return 0;
+    if (size == 0)
+        return 0;
+    uint32_t aligned = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    if (vmalloc_base + aligned < vmalloc_base)
+        return 0;
+    if (vmalloc_base + aligned > VMALLOC_END)
+        return 0;
+    uint32_t vaddr = vmalloc_base;
+    uint32_t pages = aligned / PAGE_SIZE;
+    for (uint32_t i = 0; i < pages; i++) {
+        void *phys = alloc_page(GFP_KERNEL);
+        if (!phys) {
+            for (uint32_t j = 0; j < i; j++) {
+                uint32_t p = virt_to_phys((void*)(vaddr + j * PAGE_SIZE));
+                if (p != 0xFFFFFFFF)
+                    free_page(p);
+            }
+            return 0;
+        }
+        map_page_ex(get_pgd_kernel(), phys, (void*)(vaddr + i * PAGE_SIZE), PTE_PRESENT | PTE_READ_WRITE);
+    }
+    vmalloc_base += aligned;
+    struct vmalloc_block *blk = (struct vmalloc_block*)kmalloc(sizeof(*blk));
+    if (!blk)
+        return (void*)vaddr;
+    blk->vaddr = vaddr;
+    blk->size = aligned;
+    blk->next = vmalloc_list;
+    vmalloc_list = blk;
+    return (void*)vaddr;
 }
 
 void vfree(void *addr)
 {
-    (void)addr;
+    if (!addr)
+        return;
+    uint32_t vaddr = (uint32_t)addr;
+    struct vmalloc_block *prev = NULL;
+    struct vmalloc_block *cur = vmalloc_list;
+    while (cur) {
+        if (cur->vaddr == vaddr) {
+            uint32_t pages = cur->size / PAGE_SIZE;
+            for (uint32_t i = 0; i < pages; i++) {
+                uint32_t phys = virt_to_phys((void*)(vaddr + i * PAGE_SIZE));
+                if (phys != 0xFFFFFFFF)
+                    free_page(phys);
+            }
+            if (prev)
+                prev->next = cur->next;
+            else
+                vmalloc_list = cur->next;
+            kfree(cur);
+            return;
+        }
+        prev = cur;
+        cur = cur->next;
+    }
 }
 
 void *ioremap(uint32_t phys, uint32_t size)
 {
-    (void)size;
-    return (void*)(uintptr_t)phys;
+    if (size == 0)
+        return 0;
+    uint32_t aligned = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    if (vmalloc_base + aligned < vmalloc_base)
+        return 0;
+    if (vmalloc_base + aligned > VMALLOC_END)
+        return 0;
+    uint32_t vaddr = vmalloc_base;
+    uint32_t pages = aligned / PAGE_SIZE;
+    for (uint32_t i = 0; i < pages; i++) {
+        void *paddr = (void*)(phys + i * PAGE_SIZE);
+        map_page_ex(get_pgd_kernel(), paddr, (void*)(vaddr + i * PAGE_SIZE),
+                    PTE_PRESENT | PTE_READ_WRITE | PTE_CACHE_DISABLE);
+    }
+    vmalloc_base += aligned;
+    return (void*)vaddr;
 }
 
 void iounmap(void *addr)
@@ -24,7 +106,11 @@ void iounmap(void *addr)
 
 void *kmap(uint32_t pfn)
 {
-    return (void*)((uintptr_t)pfn << 12);
+    uint32_t phys = pfn << PAGE_SHIFT;
+    if (phys < (128 * 1024 * 1024))
+        return phys_to_virt(phys);
+    map_page_ex(get_pgd_kernel(), (void*)phys, (void*)KMAP_START, PTE_PRESENT | PTE_READ_WRITE);
+    return (void*)KMAP_START;
 }
 
 void kunmap(void *addr)

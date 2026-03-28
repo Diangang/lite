@@ -95,14 +95,15 @@
 
 ## 9. 内存管理初始化流程
 
-- **入口**：`init_mm()` 负责早期内存与分页初始化，当前顺序是 `bootmem_init → init_zones → build_all_zonelists → free_area_init → paging_init → mem_init → kswapd_init → kmem_cache_init`。
+- **入口**：`init_mm()` 负责早期内存与分页初始化，当前顺序是 `bootmem_init → init_zones → build_all_zonelists → free_area_init → paging_init → mem_init → kswapd_init → kmem_cache_init`，启动期低端恒等映射在 trampoline 中清理，内核主体 VMA 为 `PAGE_OFFSET + 0x00100000 + sizeof(.text.boot)`。
 - **bootmem**：只用于早期线性分配与保留内存范围，为 page/zone 数据结构提供可用空间。
-- **zone/page**：建立最小 `struct page` 数组与 `zone_dma/zone_normal`，并初始化 `free_area` 与 `zonelist` 作为 buddy 的挂接点。
+- **zone/page**：建立最小 `struct page` 数组与 `zone_dma/zone_normal`，并初始化 `free_area` 与 `zonelist` 作为 buddy 的挂接点，managed_pages 在 mem_init 中收敛。
 - **free_area_init/free_area_init_core**：物理页分配主路径初始化，建立 buddy 元数据并标记 `PG_RESERVED`，准备 free_area。
-- **watermarks**：`__alloc_pages_nodemask` 依据 HIGH/LOW/MIN 水位选择分配并触发最小回收唤醒点。
+- **watermarks**：`__alloc_pages_nodemask` 依据 HIGH/LOW/MIN 水位选择分配并触发最小回收唤醒点，水位根据 managed_pages 刷新。
 - **GFP_DMA**：通过 DMA-only zonelist 将分配限制在 ZONE_DMA。
 - **vmscan/kswapd**：预留最小回收线程入口与唤醒路径，并通过 `/proc/meminfo` 输出 watermarks 与唤醒计数。
-- **vmalloc/ioremap/kmap**：提供最小骨架入口，后续接入高端映射与设备映射路径。
+- **meminfo 分区统计**：`/proc/meminfo` 增加 DMA/Normal 的总量与空闲量输出。
+- **vmalloc/ioremap/kmap**：提供最小映射路径，vmalloc/ioremap 通过内核页表建立映射，kmap 对低端内存走高半区线性映射。
 
 ## 10. kobject/kref 最小实现
 

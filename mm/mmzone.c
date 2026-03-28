@@ -15,9 +15,10 @@ void init_zones(void)
     if (total == 0)
         return;
     mem_map_pages = total;
-    mem_map = (struct page*)bootmem_alloc(sizeof(struct page) * total, PAGE_SIZE);
-    if (!mem_map)
+    uint32_t mem_map_phys = (uint32_t)bootmem_alloc(sizeof(struct page) * total, PAGE_SIZE);
+    if (!mem_map_phys)
         return;
+    mem_map = (struct page*)phys_to_virt(mem_map_phys);
     memset(mem_map, 0, sizeof(struct page) * total);
     for (uint32_t i = 0; i < total; i++)
         mem_map[i].flags = PG_RESERVED;
@@ -35,6 +36,7 @@ void init_zones(void)
     contig_page_data.zone_dma.start_pfn = 0;
     contig_page_data.zone_dma.spanned_pages = dma_pages;
     contig_page_data.zone_dma.present_pages = dma_pages;
+    contig_page_data.zone_dma.managed_pages = dma_pages;
     contig_page_data.zone_dma.mem_map = mem_map;
     contig_page_data.zone_dma.watermark[WMARK_MIN] = dma_pages / 64;
     contig_page_data.zone_dma.watermark[WMARK_LOW] = dma_pages / 32;
@@ -48,6 +50,7 @@ void init_zones(void)
     contig_page_data.zone_normal.start_pfn = dma_pages;
     contig_page_data.zone_normal.spanned_pages = total - dma_pages;
     contig_page_data.zone_normal.present_pages = total - dma_pages;
+    contig_page_data.zone_normal.managed_pages = total - dma_pages;
     contig_page_data.zone_normal.mem_map = mem_map;
     contig_page_data.zone_normal.watermark[WMARK_MIN] = (total - dma_pages) / 64;
     contig_page_data.zone_normal.watermark[WMARK_LOW] = (total - dma_pages) / 32;
@@ -72,6 +75,19 @@ void build_all_zonelists(void)
     if (contig_page_data.zone_dma.spanned_pages)
         dma_zonelist.zones[dma_zonelist.nr_zones++] = &contig_page_data.zone_dma;
     dma_zonelist.highest_zone = dma_zonelist.nr_zones ? dma_zonelist.zones[dma_zonelist.nr_zones - 1]->type : ZONE_DMA;
+}
+
+void refresh_zone_watermarks(void)
+{
+    uint32_t dma = contig_page_data.zone_dma.managed_pages;
+    contig_page_data.zone_dma.watermark[WMARK_MIN] = dma / 64;
+    contig_page_data.zone_dma.watermark[WMARK_LOW] = dma / 32;
+    contig_page_data.zone_dma.watermark[WMARK_HIGH] = dma / 16;
+
+    uint32_t normal = contig_page_data.zone_normal.managed_pages;
+    contig_page_data.zone_normal.watermark[WMARK_MIN] = normal / 64;
+    contig_page_data.zone_normal.watermark[WMARK_LOW] = normal / 32;
+    contig_page_data.zone_normal.watermark[WMARK_HIGH] = normal / 16;
 }
 
 struct page *pfn_to_page(uint32_t pfn)
