@@ -19,6 +19,18 @@ static inline uint8_t inb(uint16_t port)
     return ret;
 }
 
+static inline void outl(uint16_t port, uint32_t value)
+{
+    __asm__ volatile ("outl %0, %1" : : "a"(value), "Nd"(port));
+}
+
+static inline uint32_t inl(uint16_t port)
+{
+    uint32_t ret;
+    __asm__ volatile ("inl %1, %0" : "=a"(ret) : "Nd"(port));
+    return ret;
+}
+
 void *memset(void *s, int c, size_t n);
 void *memcpy(void *dest, const void *src, size_t n);
 char *strcpy(char *dest, const char *src);

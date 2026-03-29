@@ -15,11 +15,13 @@ static struct dirent sys_dirent;
 static struct inode sys_kernel;
 static struct inode sys_devices;
 static struct inode sys_bus;
+static struct inode sys_class;
 static struct inode sys_bus_platform;
 static struct inode sys_bus_platform_devices;
 static struct inode sys_bus_platform_drivers;
 static struct inode sys_kernel_version;
 static struct inode sys_kernel_uptime;
+static struct inode sys_kernel_uevent;
 typedef struct sysfs_dev_entry {
     int used;
     struct device *dev;
@@ -38,6 +40,13 @@ typedef struct sysfs_drv_entry {
     struct inode f_unbind;
 } sysfs_drv_entry_t;
 static sysfs_drv_entry_t sys_drv_entries[16];
+typedef struct sysfs_class_entry {
+    int used;
+    struct class *cls;
+    struct inode dir;
+} sysfs_class_entry_t;
+static sysfs_class_entry_t sys_class_entries[16];
+static struct file_operations sys_class_dir_ops;
 
 static uint32_t sys_read_kernel_version(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
@@ -70,6 +79,12 @@ static uint32_t sys_read_kernel_uptime(struct inode *node, uint32_t offset, uint
     if (size > remain) size = remain;
     memcpy(buffer, tmp + offset, size);
     return size;
+}
+
+static uint32_t sys_read_kernel_uevent(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+{
+    (void)node;
+    return device_uevent_read(offset, size, buffer);
 }
 
 static uint32_t sys_read_device_type(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
@@ -400,6 +415,32 @@ static sysfs_drv_entry_t *sysfs_get_driver_entry(struct device_driver *drv)
     return NULL;
 }
 
+static sysfs_class_entry_t *sysfs_get_class_entry(struct class *cls)
+{
+    if (!cls)
+        return NULL;
+    for (int i = 0; i < 16; i++) {
+        if (sys_class_entries[i].used && sys_class_entries[i].cls == cls)
+            return &sys_class_entries[i];
+    }
+    for (int i = 0; i < 16; i++) {
+        if (!sys_class_entries[i].used) {
+            sysfs_class_entry_t *e = &sys_class_entries[i];
+            memset(e, 0, sizeof(*e));
+            e->used = 1;
+            e->cls = cls;
+            e->dir.flags = FS_DIRECTORY;
+            e->dir.i_ino = 0x8800 + i;
+            e->dir.uid = 0;
+            e->dir.gid = 0;
+            e->dir.i_mode = 0555;
+            e->dir.impl = (uint32_t)(uintptr_t)e;
+            return e;
+        }
+    }
+    return NULL;
+}
+
 static struct dirent *sys_devdir_readdir(struct file *file, uint32_t index)
 {
     struct inode *node = file->dentry->inode;
@@ -508,6 +549,11 @@ static struct dirent *sys_kernel_readdir(struct file *file, uint32_t index)
         sys_dirent.ino = sys_kernel_uptime.i_ino;
         return &sys_dirent;
     }
+    if (index == 2) {
+        strcpy(sys_dirent.name, "uevent");
+        sys_dirent.ino = sys_kernel_uevent.i_ino;
+        return &sys_dirent;
+    }
     return NULL;
 }
 
@@ -520,6 +566,8 @@ static struct inode *sys_kernel_finddir(struct inode *node, const char *name)
         return &sys_kernel_version;
     if (!strcmp(name, "uptime"))
         return &sys_kernel_uptime;
+    if (!strcmp(name, "uevent"))
+        return &sys_kernel_uevent;
     return NULL;
 }
 
@@ -630,6 +678,85 @@ static struct dirent *sys_bus_platform_drivers_readdir(struct file *file, uint32
     return NULL;
 }
 
+static struct dirent *sys_class_readdir(struct file *file, uint32_t index)
+{
+    struct inode *node = file->dentry->inode;
+    (void)node;
+    struct kset *kset = device_model_classes_kset();
+    if (!kset)
+        return NULL;
+    struct kobject *cur = kset->list;
+    uint32_t i = 0;
+    while (cur) {
+        if (i == index) {
+            strcpy(sys_dirent.name, cur->name);
+            sys_dirent.ino = 0x8700 + index;
+            return &sys_dirent;
+        }
+        i++;
+        cur = cur->next;
+    }
+    return NULL;
+}
+
+static struct inode *sys_class_finddir(struct inode *node, const char *name)
+{
+    (void)node;
+    if (!name)
+        return NULL;
+    struct class *cls = class_find(name);
+    if (!cls)
+        return NULL;
+    sysfs_class_entry_t *e = sysfs_get_class_entry(cls);
+    if (!e)
+        return NULL;
+    e->dir.f_ops = &sys_class_dir_ops;
+    return &e->dir;
+}
+
+static struct dirent *sys_class_dir_readdir(struct file *file, uint32_t index)
+{
+    struct inode *node = file->dentry->inode;
+    if (!node)
+        return NULL;
+    sysfs_class_entry_t *e = (sysfs_class_entry_t*)(uintptr_t)node->impl;
+    if (!e || !e->cls)
+        return NULL;
+    struct device *cur = e->cls->devices;
+    uint32_t i = 0;
+    while (cur) {
+        if (i == index) {
+            strcpy(sys_dirent.name, cur->kobj.name);
+            sys_dirent.ino = 0x8900 + index;
+            return &sys_dirent;
+        }
+        i++;
+        cur = cur->class_next;
+    }
+    return NULL;
+}
+
+static struct inode *sys_class_dir_finddir(struct inode *node, const char *name)
+{
+    if (!node || !name)
+        return NULL;
+    sysfs_class_entry_t *e = (sysfs_class_entry_t*)(uintptr_t)node->impl;
+    if (!e || !e->cls)
+        return NULL;
+    struct device *cur = e->cls->devices;
+    while (cur) {
+        if (!strcmp(cur->kobj.name, name)) {
+            sysfs_dev_entry_t *de = sysfs_get_device_entry(cur);
+            if (!de)
+                return NULL;
+            de->dir.f_ops = &sys_devdir_ops;
+            return &de->dir;
+        }
+        cur = cur->class_next;
+    }
+    return NULL;
+}
+
 static struct inode *sys_bus_platform_drivers_finddir(struct inode *node, const char *name)
 {
     (void)node;
@@ -672,6 +799,11 @@ static struct dirent *sys_readdir(struct file *file, uint32_t index)
         sys_dirent.ino = sys_bus.i_ino;
         return &sys_dirent;
     }
+    if (index == 3) {
+        strcpy(sys_dirent.name, "class");
+        sys_dirent.ino = sys_class.i_ino;
+        return &sys_dirent;
+    }
     return NULL;
 }
 
@@ -686,6 +818,8 @@ static struct inode *sys_finddir(struct inode *node, const char *name)
         return &sys_devices;
     if (!strcmp(name, "bus"))
         return &sys_bus;
+    if (!strcmp(name, "class"))
+        return &sys_class;
     return NULL;
 }
 
@@ -726,6 +860,26 @@ static struct file_operations sys_bus_dir_ops = {
     .close = NULL,
     .readdir = sys_bus_readdir,
     .finddir = sys_bus_finddir,
+    .ioctl = NULL
+};
+
+static struct file_operations sys_class_dir_ops = {
+    .read = NULL,
+    .write = NULL,
+    .open = NULL,
+    .close = NULL,
+    .readdir = sys_class_dir_readdir,
+    .finddir = sys_class_dir_finddir,
+    .ioctl = NULL
+};
+
+static struct file_operations sys_class_root_ops = {
+    .read = NULL,
+    .write = NULL,
+    .open = NULL,
+    .close = NULL,
+    .readdir = sys_class_readdir,
+    .finddir = sys_class_finddir,
     .ioctl = NULL
 };
 
@@ -779,6 +933,16 @@ static struct file_operations sys_read_kernel_uptime_ops = {
     .ioctl = NULL
 };
 
+static struct file_operations sys_read_kernel_uevent_ops = {
+    .read = sys_read_kernel_uevent,
+    .write = NULL,
+    .open = NULL,
+    .close = NULL,
+    .readdir = NULL,
+    .finddir = NULL,
+    .ioctl = NULL
+};
+
 void init_sysfs(void)
 {
     vfs_mount_fs("/sys", "sysfs");
@@ -795,6 +959,7 @@ static int sysfs_fill_super(struct super_block *sb, void *data, int silent)
 
     memset(sys_dev_entries, 0, sizeof(sys_dev_entries));
     memset(sys_drv_entries, 0, sizeof(sys_drv_entries));
+    memset(sys_class_entries, 0, sizeof(sys_class_entries));
     memset(sys_root, 0, sizeof(struct inode));
     sys_root->flags = FS_DIRECTORY;
     sys_root->i_ino = 1;
@@ -827,9 +992,17 @@ static int sysfs_fill_super(struct super_block *sb, void *data, int silent)
     sys_bus.gid = 0;
     sys_bus.i_mode = 0555;
 
+    memset(&sys_class, 0, sizeof(sys_class));
+    sys_class.flags = FS_DIRECTORY;
+    sys_class.i_ino = 5;
+    sys_class.f_ops = &sys_class_root_ops;
+    sys_class.uid = 0;
+    sys_class.gid = 0;
+    sys_class.i_mode = 0555;
+
     memset(&sys_bus_platform, 0, sizeof(sys_bus_platform));
     sys_bus_platform.flags = FS_DIRECTORY;
-    sys_bus_platform.i_ino = 5;
+    sys_bus_platform.i_ino = 6;
     sys_bus_platform.f_ops = &sys_bus_platform_dir_ops;
     sys_bus_platform.uid = 0;
     sys_bus_platform.gid = 0;
@@ -837,7 +1010,7 @@ static int sysfs_fill_super(struct super_block *sb, void *data, int silent)
 
     memset(&sys_bus_platform_devices, 0, sizeof(sys_bus_platform_devices));
     sys_bus_platform_devices.flags = FS_DIRECTORY;
-    sys_bus_platform_devices.i_ino = 6;
+    sys_bus_platform_devices.i_ino = 7;
     sys_bus_platform_devices.f_ops = &sys_bus_platform_devices_ops;
     sys_bus_platform_devices.uid = 0;
     sys_bus_platform_devices.gid = 0;
@@ -845,7 +1018,7 @@ static int sysfs_fill_super(struct super_block *sb, void *data, int silent)
 
     memset(&sys_bus_platform_drivers, 0, sizeof(sys_bus_platform_drivers));
     sys_bus_platform_drivers.flags = FS_DIRECTORY;
-    sys_bus_platform_drivers.i_ino = 7;
+    sys_bus_platform_drivers.i_ino = 8;
     sys_bus_platform_drivers.f_ops = &sys_bus_platform_drivers_ops;
     sys_bus_platform_drivers.uid = 0;
     sys_bus_platform_drivers.gid = 0;
@@ -853,7 +1026,7 @@ static int sysfs_fill_super(struct super_block *sb, void *data, int silent)
 
     memset(&sys_kernel_version, 0, sizeof(sys_kernel_version));
     sys_kernel_version.flags = FS_FILE;
-    sys_kernel_version.i_ino = 8;
+    sys_kernel_version.i_ino = 9;
     sys_kernel_version.i_size = 64;
     sys_kernel_version.f_ops = &sys_read_kernel_version_ops;
     sys_kernel_version.uid = 0;
@@ -862,12 +1035,21 @@ static int sysfs_fill_super(struct super_block *sb, void *data, int silent)
 
     memset(&sys_kernel_uptime, 0, sizeof(sys_kernel_uptime));
     sys_kernel_uptime.flags = FS_FILE;
-    sys_kernel_uptime.i_ino = 9;
+    sys_kernel_uptime.i_ino = 10;
     sys_kernel_uptime.i_size = 64;
     sys_kernel_uptime.f_ops = &sys_read_kernel_uptime_ops;
     sys_kernel_uptime.uid = 0;
     sys_kernel_uptime.gid = 0;
     sys_kernel_uptime.i_mode = 0444;
+
+    memset(&sys_kernel_uevent, 0, sizeof(sys_kernel_uevent));
+    sys_kernel_uevent.flags = FS_FILE;
+    sys_kernel_uevent.i_ino = 11;
+    sys_kernel_uevent.i_size = 512;
+    sys_kernel_uevent.f_ops = &sys_read_kernel_uevent_ops;
+    sys_kernel_uevent.uid = 0;
+    sys_kernel_uevent.gid = 0;
+    sys_kernel_uevent.i_mode = 0444;
 
     sb->s_root = d_alloc(NULL, "/");
     if (!sb->s_root)

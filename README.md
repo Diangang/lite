@@ -60,16 +60,30 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
 - **devtmpfs（最小设备节点）**：
   - `/dev/console`：内核控制台输出通道（字符设备），用于内核日志与紧急输出落点。
   - `/dev/tty`：用户态终端 I/O 入口（字符设备），走 tty 行规程与回显/规范模式。
+  - `/dev/ttyS0`：串口控制台入口（最小映射到 tty 读写路径）。
   - 设备节点由设备模型的注册结果驱动生成，行为更接近 Linux 的 devtmpfs。
 - **sysfs（最小自描述接口）**：
   - `/sys/kernel/version`、`/sys/kernel/uptime`。
+  - `/sys/kernel/uevent`：设备注册/注销的最小事件流。
   - `/sys/devices/<dev>/{type,bus,driver}`：设备模型最小视图（目前默认注册 console 并自动绑定同名 driver）。
   - `/sys/bus/platform/{devices,drivers}`：基于 kset 的最小总线视图，drivers 支持 `bind/unbind`。
+  - `/sys/class`：设备类视图（当前包含 `console`、`tty`）。
 - **驱动模型与设备树**：
   - 引入类 Linux 2.6 的 `driver_init`、分级 initcall 段收集与 `module_init` 宏自动加载机制（分级条目最终被链接到连续的 initcall 段，内核通过 `__initcall_start..__initcall_end` 统一遍历；级别顺序由链接脚本中各 `.initcallN.init` 的排列保证）。
   - **初始化解耦**：将内核的“早期打印控制台（Early Console，无中断、轮询输出）”与“完整设备驱动（中断使能、队列管理）”彻底分离。核心初始化（CPU/内存/中断）在 `start_kernel` 中完成，而完整的驱动初始化被延迟到 `PID=1` 的内核 `init` 线程中，通过 `do_initcalls` 安全加载，完美符合 Linux 规范。
   - **kobject/kref 基础**：提供最小对象生命周期管理与引用计数，为 sysfs 与 driver core 提供一致化底座。
   - **kset/kobj_type 骨架**：提供最小聚合与类型钩子结构，为后续 sysfs 自动映射做准备。
+  - **PCI 最小枚举**：扫描 bus0 设备并注册为 `pci` 设备，形成基础 match/attach 路径。
+  - **PCI BAR 解析**：探测 BAR 基本地址与资源大小，提供驱动使用的最小资源信息。
+  - **PCI 桥扫描**：识别桥设备并递归扫描 secondary bus。
+  - **PCI 桥窗口**：解析 IO/MEM/Prefetch 资源窗口信息。
+  - **PCI BAR 分配**：为设备分配 BAR 基址并写回配置空间。
+  - **PCI 资源约束**：分配过程受桥窗口约束，空间不足会触发失败事件。
+  - **PCI 对齐规则**：BAR 分配要求 2 的幂对齐，不满足时触发失败事件。
+  - **PCI 命令寄存器**：启用 IO/MEM/BUS MASTER 并发出 enable 事件。
+  - **PCIe 框架占位**：提供 `drivers/pci/pcie` 的最小入口，后续扩展 PCIe 端口与能力结构。
+  - **PCIe 能力扫描**：遍历 PCI capability list，识别 PCIe capability。
+  - **NVMe 驱动占位**：最小 NVMe class 绑定入口，完成 BAR0 MMIO 映射并读取 CAP/VS（位于 drivers/nvme）。
 - **用户态交互**：完全移除内核态 Shell，由 1号进程（`init=` 指定或默认 `/sbin/init`）挂载文件系统并 fork 执行真正的用户态 Shell (`/sbin/sh`)，实现彻底的特权级分离。内置提供基于 C 语言编写的集成测试程序 `/bin/smoke`。
 - **PID 1 对齐 Linux**：PID 1 在完成 initcall 与挂载后会直接“exec”为用户态 init（不再额外创建一个新 pid），语义更接近 Linux 2.6 的 `kernel_init -> execve(init)`。
 - **调度自测（用户态 smoke）**：调度相关的演示/自测已迁移到用户态 `/bin/smoke`，通过 `fork + sleep + yield` 验证 Tick 驱动的时间片递减、阻塞/让出与上下文切换路径。
@@ -120,6 +134,10 @@ qemu-system-i386 -kernel out/myos.bin -initrd out/initramfs.cpio -m 512M
 
 # [推荐] 使用无头模式 + 串口交互启动
 qemu-system-i386 -kernel out/myos.bin -initrd out/initramfs.cpio -m 512M -serial stdio -display none
+
+# 添加 NVMe 设备（用于验证 PCIe 枚举）
+qemu-img create -f raw nvme.img 64M
+qemu-system-i386 -machine q35 -kernel out/myos.bin -initrd out/initramfs.cpio -m 512M -serial stdio -display none -drive file=nvme.img,format=raw,if=none,id=nvme0 -device nvme,drive=nvme0,serial=NVME0001
 ```
 
 *提示：启动后，您可以在当前终端直接与 OS Shell 交互。支持直接输入路径（如 `/bin/smoke`）执行用户态程序。按 `Ctrl+A` 然后按 `X` 退出 QEMU。*

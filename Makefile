@@ -5,17 +5,25 @@ AS = as
 LD = ld
 
 CFLAGS = -m32 -ffreestanding -O2 -Wall -Wextra -fno-pie -fno-builtin
-CFLAGS += -Iinclude -Ikernel -Ilib -Iarch/x86 -Imm -Ifs -Idrivers -Idrivers/base -Idrivers/input -Idrivers/tty -Idrivers/tty/serial -Idrivers/clocksource -Idrivers/video -Idrivers/video/console -Iinit
+CFLAGS += -Iinclude -Ikernel -Iinit -Ilib -Iarch/x86 -Imm -Ifs -Idrivers \
+			-Idrivers/base -Idrivers/pci -Idrivers/pci/pcie -Idrivers/nvme -Idrivers/input -Idrivers/tty \
+			-Idrivers/tty/serial -Idrivers/clocksource -Idrivers/video -Idrivers/video/console
 LDFLAGS = -m elf_i386 -T arch/x86/kernel/linker.ld -nostdlib
 
 SOURCES_S = arch/x86/boot/boot.s arch/x86/kernel/interrupt.s
-SOURCES_C = init/main.c init/version.c kernel/syscall.c kernel/fork.c kernel/pid.c kernel/cred.c kernel/sched.c kernel/exit.c kernel/ksysfs.c kernel/panic.c kernel/printk.c kernel/params.c kernel/time.c kernel/signal.c kernel/wait.c
+SOURCES_C = init/main.c init/version.c kernel/syscall.c kernel/fork.c kernel/pid.c kernel/cred.c kernel/sched.c \
+			kernel/exit.c kernel/ksysfs.c kernel/panic.c kernel/printk.c kernel/params.c kernel/time.c \
+			kernel/signal.c kernel/wait.c
 SOURCES_C += arch/x86/kernel/gdt.c arch/x86/kernel/idt.c arch/x86/kernel/isr.c arch/x86/kernel/setup.c
 SOURCES_C += arch/x86/kernel/irq.c
-SOURCES_C += mm/mm.c mm/bootmem.c mm/mmzone.c mm/mmap.c mm/page_alloc.c mm/vmscan.c mm/memory.c mm/vmalloc.c mm/slab.c mm/filemap.c mm/rmap.c mm/swap.c lib/libc.c lib/kref.c lib/kobject.c
-SOURCES_C += fs/file.c fs/fdtable.c fs/exec.c fs/inode.c fs/dentry.c fs/namei.c fs/read_write.c fs/open.c fs/readdir.c fs/ioctl.c fs/namespace.c fs/ramfs/ramfs.c fs/procfs/procfs.c fs/procfs/base.c fs/procfs/array.c fs/procfs/task_mmu.c fs/devtmpfs/devtmpfs.c
+SOURCES_C += mm/mm.c mm/bootmem.c mm/mmzone.c mm/mmap.c mm/page_alloc.c mm/vmscan.c mm/memory.c mm/vmalloc.c \
+				mm/slab.c mm/filemap.c mm/rmap.c mm/swap.c lib/libc.c lib/kref.c lib/kobject.c
+SOURCES_C += fs/file.c fs/fdtable.c fs/exec.c fs/inode.c fs/dentry.c fs/namei.c fs/read_write.c fs/open.c \
+				fs/readdir.c fs/ioctl.c fs/namespace.c fs/ramfs/ramfs.c fs/procfs/procfs.c fs/procfs/base.c \
+				fs/procfs/array.c fs/procfs/task_mmu.c fs/devtmpfs/devtmpfs.c
 SOURCES_C += fs/sysfs/sysfs.c init/initramfs.c
-SOURCES_C += drivers/base/core.c drivers/base/bus.c drivers/base/driver.c drivers/base/init.c drivers/input/keyboard.c
+SOURCES_C += drivers/base/core.c drivers/base/bus.c drivers/base/driver.c drivers/base/init.c drivers/pci/pci.c \
+				drivers/pci/pcie/pcie.c drivers/nvme/nvme.c drivers/input/keyboard.c
 SOURCES_C += drivers/clocksource/timer.c drivers/tty/tty.c drivers/tty/serial/serial.c
 SOURCES_C += drivers/video/console/vga.c drivers/video/console/console.c drivers/video/console/console_driver.c
 OBJECTS = $(SOURCES_S:.s=.o) $(SOURCES_C:.c=.o)
@@ -81,6 +89,10 @@ $(SMOKE_ELF): $(SMOKE_OBJS) usr/ulinker.ld
 
 run: $(KERNEL) $(INITRAMFS)
 	qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -serial stdio
+
+run-nvme: $(KERNEL) $(INITRAMFS)
+	qemu-system-i386 -machine q35 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M \
+		-serial stdio -drive file=nvme.img,format=raw,if=none,id=nvme0 -device nvme,drive=nvme0,serial=NVME0001
 
 debug: $(KERNEL) $(INITRAMFS)
 	qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -s -S -serial stdio

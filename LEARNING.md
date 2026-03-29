@@ -103,6 +103,27 @@
 - `fs/file.c`：`vfs_open` 在 `O_TRUNC` 时清理文件映射并更新大小。
 - `fs/namei.c`：新增 `vfs_rmdir/sys_rmdir`，与 `ramfs` 的空目录删除语义对齐，禁止对 `.`/`..` 删除。
 - `fs/ramfs/ramfs.c`：`unlink/rmdir` 同步释放 dentry 与 inode，避免目录树脏节点。
+- `drivers/base/init.c`：注册 `console/tty` 类并导出 `/sys/class` 视图。
+- `drivers/base/core.c`：最小 uevent 事件流（add/remove）并导出 `/sys/kernel/uevent`。
+- `drivers/base/driver.c`：绑定/解绑驱动时补充 uevent。
+- `drivers/base/bus.c`：match 语义支持 `device_id` 表（按 name/type 匹配）。
+- `drivers/base/driver.c`：新增 `driver_unregister`，解除驱动并解绑设备。
+- `drivers/base/driver.c`：驱动注册与绑定增加重复保护。
+- `drivers/pci/pci.c`：最小 PCI 总线扫描与设备注册、配置空间读接口。
+- `drivers/pci/pci.c`：BAR 探测与基础资源大小解析。
+- `drivers/pci/pci.c`：桥设备识别与递归扫描 secondary bus。
+- `drivers/pci/pci.c`：桥设备资源窗口解析（IO/MEM/Prefetch）。
+- `drivers/pci/pci.c`：为设备 BAR 分配基址并写回配置空间。
+- `drivers/pci/pci.c`：分配过程受桥窗口约束，失败触发 barfail 事件。
+- `drivers/pci/pci.c`：BAR 分配要求 2 的幂对齐，否则直接失败。
+- `drivers/pci/pci.c`：启用 PCI 命令寄存器（IO/MEM/BUS MASTER）并发出 enable 事件。
+- `drivers/pci/pcie/pcie.c`：PCIe 框架占位入口。
+- `drivers/pci/pcie/pcie.c`：扫描 capability list 并识别 PCIe capability。
+- `usr/smoke.c`：新增 PCIe capability 识别自测。
+- `usr/smoke.c`：PCIe 识别失败时输出 uevent 内容。
+- `drivers/pci/pci.c`：桥设备自动分配 secondary bus，并发出 busnum 事件。
+- `drivers/pci/pci.c`：识别 NVMe class 设备并发出 nvme 事件。
+- `drivers/nvme/nvme.c`：NVMe class 设备绑定入口，映射 BAR0 并读取 CAP/VS。
 - `arch/x86/kernel/irq.c`：中断开关封装（`irq_save/irq_restore`）。
 - `kernel/pid.c`：按 pid 查找 task（精简版）。
 - `kernel/cred.c`：uid/gid/umask 等“凭据/权限”相关接口（精简版）。

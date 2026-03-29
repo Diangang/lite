@@ -218,6 +218,32 @@ static int contains(const char *hay, int hay_len, const char *needle)
     return 0;
 }
 
+static int count_substr(const char *hay, int hay_len, const char *needle)
+{
+    if (!hay || !needle)
+        return 0;
+    int nlen = 0;
+    while (needle[nlen])
+        nlen++;
+    if (nlen == 0)
+        return 0;
+    int count = 0;
+    for (int i = 0; i + nlen <= hay_len; i++) {
+        int ok = 1;
+        for (int j = 0; j < nlen; j++) {
+            if (hay[i + j] != needle[j]) {
+                ok = 0;
+                break;
+            }
+        }
+        if (ok) {
+            count++;
+            i += nlen - 1;
+        }
+    }
+    return count;
+}
+
 void test_mounts() {
     print("\n--- Test 9: /proc/mounts ---\n");
     int fd = open("/proc/mounts", 0);
@@ -287,6 +313,77 @@ void test_rmdir() {
         print("FAIL: rmdir /\n");
 }
 
+void test_pci_uevent() {
+    print("\n--- Test 10: PCI uevent ---\n");
+    int fd = open("/sys/kernel/uevent", 0);
+    if (fd < 0) {
+        print("FAIL: Could not open /sys/kernel/uevent\n");
+        return;
+    }
+    char buf[512];
+    int n = read(fd, buf, 511);
+    close(fd);
+    if (n <= 0) {
+        print("FAIL: Could not read /sys/kernel/uevent\n");
+        return;
+    }
+    buf[n] = 0;
+    int count = count_substr(buf, n, "add pci");
+    if (count > 0) {
+        print("PCI uevent add count=");
+        print_int(count);
+        print("\n");
+    } else {
+        print("WARN: No PCI add events found.\n");
+    }
+    int bar_count = count_substr(buf, n, "bar pci");
+    if (bar_count > 0) {
+        print("PCI bar event count=");
+        print_int(bar_count);
+        print("\n");
+    } else {
+        print("WARN: No PCI bar events found.\n");
+    }
+    int bar_fail = count_substr(buf, n, "barfail pci");
+    if (bar_fail > 0) {
+        print("WARN: PCI bar fail count=");
+        print_int(bar_fail);
+        print("\n");
+    }
+    int bridge_count = count_substr(buf, n, "pci01:");
+    if (bridge_count > 0) {
+        print("PCI secondary bus detected count=");
+        print_int(bridge_count);
+        print("\n");
+    }
+    int enable_count = count_substr(buf, n, "enable pci");
+    if (enable_count > 0) {
+        print("PCI enable event count=");
+        print_int(enable_count);
+        print("\n");
+    }
+    int pcie_count = count_substr(buf, n, "pciecap pci");
+    if (pcie_count > 0) {
+        print("PCIe capability count=");
+        print_int(pcie_count);
+        print("\n");
+    } else {
+        print("FAIL: No PCIe capability detected.\n");
+        print("uevent dump:\n");
+        print(buf);
+    }
+    int nvme_count = count_substr(buf, n, "nvme pci");
+    if (nvme_count > 0) {
+        print("NVMe class device count=");
+        print_int(nvme_count);
+        print("\n");
+    } else if (pcie_count > 0) {
+        print("WARN: No NVMe class device detected.\n");
+        print("uevent dump:\n");
+        print(buf);
+    }
+}
+
 int main() {
     print("================================\n");
     print("  Lite OS Automated Test Suite  \n");
@@ -301,6 +398,7 @@ int main() {
     test_sched();
     test_rmdir();
     test_mounts();
+    test_pci_uevent();
 
     print("\n================================\n");
     print("  All tests completed!          \n");

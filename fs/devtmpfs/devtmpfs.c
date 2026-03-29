@@ -173,6 +173,10 @@ static void devtmpfs_add_for_device(struct device *dev)
         return;
     if (!strcmp(dev->kobj.name, "console"))
         devtmpfs_add_node("console", &dev_console);
+    if (!strcmp(dev->kobj.name, "tty"))
+        devtmpfs_add_node("tty", &dev_tty);
+    if (!strcmp(dev->kobj.name, "ttyS0"))
+        devtmpfs_add_node("ttyS0", &dev_tty);
 }
 
 void devtmpfs_register_device(struct device *dev)
@@ -188,6 +192,10 @@ void devtmpfs_unregister_device(struct device *dev)
         return;
     if (!strcmp(dev->kobj.name, "console"))
         devtmpfs_remove_node("console");
+    if (!strcmp(dev->kobj.name, "tty"))
+        devtmpfs_remove_node("tty");
+    if (!strcmp(dev->kobj.name, "ttyS0"))
+        devtmpfs_remove_node("ttyS0");
 }
 
 static int devtmpfs_fill_super(struct super_block *sb, void *data, int silent)

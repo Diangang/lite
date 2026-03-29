@@ -17,7 +17,11 @@ static int x86_platform_devices_init(void)
         return -1;
 
     // Register static hardware devices that exist on this "board"
-    device_register_simple("console", "console", platform, NULL);
+    struct class *cls = device_model_console_class();
+    device_register_simple_class("console", "console", platform, cls, NULL);
+    struct class *tty_cls = device_model_tty_class();
+    device_register_simple_class("tty", "tty", platform, tty_cls, NULL);
+    device_register_simple_class("ttyS0", "serial", platform, tty_cls, NULL);
 
     return 0;
 }
