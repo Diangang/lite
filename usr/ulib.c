@@ -84,6 +84,14 @@ int unlink(const char *pathname) {
     return syscall1(SYS_UNLINK, (int)pathname);
 }
 
+int mkdir(const char *pathname) {
+    return syscall1(SYS_MKDIR, (int)pathname);
+}
+
+int rmdir(const char *pathname) {
+    return syscall1(SYS_RMDIR, (int)pathname);
+}
+
 void *mmap(void *addr, int length, int prot, int flags, int fd, int offset) {
     // Note: Our mmap only took addr, length, prot currently in assembly. Let's see...
     // In mmaptest.s: ebx=addr (0), ecx=length (0x2000), edx=prot (3)

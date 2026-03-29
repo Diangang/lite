@@ -197,6 +197,8 @@ int vfs_mkdir(const char *path)
     }
     if (!*name)
         return -1;
+    if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+        return -1;
 
     struct inode *pnode = vfs_resolve(parent);
     if (!pnode || (pnode->flags & 0x7) != FS_DIRECTORY)
@@ -265,6 +267,8 @@ int vfs_unlink(const char *path)
     }
     if (!*name)
         return -1;
+    if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+        return -1;
 
     struct dentry *pdentry = path_walk(parent);
     if (!pdentry)
@@ -278,6 +282,59 @@ int vfs_unlink(const char *path)
 
     if (pnode->f_ops && pnode->f_ops->unlink)
         return pnode->f_ops->unlink(pdentry, name);
+
+    return -1;
+}
+
+int vfs_rmdir(const char *path)
+{
+    if (!path || !*path)
+        return -1;
+
+    char tmp[256];
+    uint32_t len = (uint32_t)strlen(path);
+    if (len >= sizeof(tmp))
+        return -1;
+    strcpy(tmp, path);
+
+    uint32_t slash = len;
+    int found_slash = 0;
+    while (slash > 0) {
+        if (tmp[slash - 1] == '/') {
+            found_slash = 1;
+            break;
+        }
+        slash--;
+    }
+
+    char parent[256];
+    const char *name;
+    if (!found_slash) {
+        strcpy(parent, ".");
+        name = tmp;
+    } else if (slash == 1) {
+        strcpy(parent, "/");
+        name = tmp + 1;
+    } else {
+        memcpy(parent, tmp, slash - 1);
+        parent[slash - 1] = 0;
+        name = tmp + slash;
+    }
+    if (!*name)
+        return -1;
+
+    struct dentry *pdentry = path_walk(parent);
+    if (!pdentry)
+        return -1;
+    struct inode *pnode = pdentry->inode;
+
+    if (!pnode || (pnode->flags & 0x7) != FS_DIRECTORY)
+        return -1;
+    if (!vfs_check_access(pnode, 0, 1, 1))
+        return -1;
+
+    if (pnode->f_ops && pnode->f_ops->rmdir)
+        return pnode->f_ops->rmdir(pdentry, name);
 
     return -1;
 }
@@ -308,4 +365,18 @@ int sys_unlink(const char *pathname, int from_user)
         strcpy(tmp, pathname);
     }
     return vfs_unlink(tmp);
+}
+
+int sys_rmdir(const char *pathname, int from_user)
+{
+    char tmp[128];
+    if (from_user) {
+        if (strncpy_from_user(tmp, sizeof(tmp), pathname) != 0)
+            return -1;
+    } else {
+        if (!pathname)
+            return -1;
+        strcpy(tmp, pathname);
+    }
+    return vfs_rmdir(tmp);
 }

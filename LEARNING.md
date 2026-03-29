@@ -96,7 +96,13 @@
 - 头文件对齐 Linux 2.6：不再提供 `include/*.h` 的扁平聚合头，按职责拆到 `include/linux/{sched,mm,wait,fork,exit,binfmts,fdtable,cred,pid,syscall,fs,file,...}.h` 与 `include/asm/{processor,ptrace,irqflags,unistd,multiboot,gdt,idt}.h`。
 - `mm/mmap.c`：用户态地址空间管理相关（`mm_create/mm_destroy`、`sys_mmap/sys_munmap/sys_brk`、VMA/heap/brk 逻辑）。
 - `mm/mmap.c`：补充 `sys_mprotect/sys_mremap` 的最小语义（权限变更与 in-place 扩缩）。
+- `mm/rmap.c`：最小 rmap 骨架（按页 mapcount 与多映射链表记录），为回收/换出预留接口。
+- `mm/swap.c`：最小 swap 出入路径（内存后备，支持缺页换入）。
+- `mm/filemap.c`：最小 page cache 数据结构与内存路径，保留简化读写逻辑。
 - `fs/fdtable.c`：文件描述符表管理（`get_unused_fd/fget/close_fd`、stdio 安装、clone/close_all）。
+- `fs/file.c`：`vfs_open` 在 `O_TRUNC` 时清理文件映射并更新大小。
+- `fs/namei.c`：新增 `vfs_rmdir/sys_rmdir`，与 `ramfs` 的空目录删除语义对齐，禁止对 `.`/`..` 删除。
+- `fs/ramfs/ramfs.c`：`unlink/rmdir` 同步释放 dentry 与 inode，避免目录树脏节点。
 - `arch/x86/kernel/irq.c`：中断开关封装（`irq_save/irq_restore`）。
 - `kernel/pid.c`：按 pid 查找 task（精简版）。
 - `kernel/cred.c`：uid/gid/umask 等“凭据/权限”相关接口（精简版）。
@@ -106,13 +112,13 @@
 
 ## 9. 内存管理初始化流程
 
-- **入口**：`init_mm()` 负责早期内存与分页初始化，当前顺序是 `bootmem_init → init_zones → build_all_zonelists → free_area_init → paging_init → mem_init → kswapd_init → kmem_cache_init`，启动期低端恒等映射覆盖前 4MB 并在 trampoline 中清理，内核主体 VMA 为 `PAGE_OFFSET + 0x00100000 + sizeof(.text.boot)`。
+- **入口**：`init_mm()` 负责早期内存与分页初始化，当前顺序是 `bootmem_init → init_zones → build_all_zonelists → free_area_init → paging_init → mem_init → kswapd_init → swap_init → kmem_cache_init`，启动期低端恒等映射覆盖前 4MB 并在 trampoline 中清理，内核主体 VMA 为 `PAGE_OFFSET + 0x00100000 + sizeof(.text.boot)`。
 - **bootmem**：只用于早期线性分配与保留内存范围，为 page/zone 数据结构提供可用空间。
 - **zone/page**：建立最小 `struct page` 数组与 `zone_dma/zone_normal`，并初始化 `free_area` 与 `zonelist` 作为 buddy 的挂接点，managed_pages 在 mem_init 中收敛。
 - **free_area_init/free_area_init_core**：物理页分配主路径初始化，建立 buddy 元数据并标记 `PG_RESERVED`，准备 free_area。
 - **watermarks**：`__alloc_pages_nodemask` 依据 HIGH/LOW/MIN 水位选择分配并触发最小回收唤醒点，水位根据 managed_pages 刷新。
 - **GFP_DMA**：通过 DMA-only zonelist 将分配限制在 ZONE_DMA。
-- **vmscan/kswapd**：预留最小回收线程入口与唤醒路径，并通过 `/proc/meminfo` 输出 watermarks 与唤醒计数。
+- **vmscan/kswapd**：预留最小回收入口与唤醒路径。
 - **meminfo 分区统计**：`/proc/meminfo` 增加 DMA/Normal 的总量与空闲量输出。
 - **vmalloc/ioremap/kmap**：提供最小映射路径，vmalloc/ioremap 通过内核页表建立映射，kmap 对低端内存走高半区线性映射。
 

@@ -149,8 +149,11 @@ void do_rm(char *path) {
     }
 
     int ret = unlink(path);
-    if (ret < 0)
-        print("rm: failed to remove file\n");
+    if (ret < 0) {
+        ret = rmdir(path);
+        if (ret < 0)
+            print("rm: failed to remove path\n");
+    }
 }
 
 int main() {

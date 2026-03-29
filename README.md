@@ -74,7 +74,8 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
 - **PID 1 对齐 Linux**：PID 1 在完成 initcall 与挂载后会直接“exec”为用户态 init（不再额外创建一个新 pid），语义更接近 Linux 2.6 的 `kernel_init -> execve(init)`。
 - **调度自测（用户态 smoke）**：调度相关的演示/自测已迁移到用户态 `/bin/smoke`，通过 `fork + sleep + yield` 验证 Tick 驱动的时间片递减、阻塞/让出与上下文切换路径。
 - **系统调用自测（用户态 smoke）**：`/bin/smoke` 覆盖 `fork/waitpid/mmap/mprotect/mremap` 等最小语义验证。
-- **文件系统 (VFS)**：结构体 (`i_ino`, `i_mode`, `i_size`) 和全局动态 inode 分配器 (`get_next_ino`) 完美对齐 Linux 2.6 标准，支持虚拟文件系统如 `ramfs`、`devtmpfs`、`procfs`、`sysfs`。
+- **文件系统 (VFS)**：结构体 (`i_ino`, `i_mode`, `i_size`) 和全局动态 inode 分配器 (`get_next_ino`) 完美对齐 Linux 2.6 标准，支持虚拟文件系统如 `ramfs`、`devtmpfs`、`procfs`、`sysfs`，`O_TRUNC` 会清理文件映射并更新大小。
+- **用户态 Shell**：`rm` 同时支持文件与空目录删除（内部区分 unlink/rmdir）。
 - **系统调用 (int 0x80)**：
   - 用户态 syscall 会进行用户指针校验，避免非法地址导致内核崩溃。
   - `SYS_WRITE/SYS_READ` 在内核侧通过 `copy_from_user/copy_to_user` 分段拷贝访问用户缓冲区。

@@ -11,6 +11,7 @@
 #include "linux/page_alloc.h"
 #include "linux/mmzone.h"
 #include "linux/vmscan.h"
+#include "linux/pagemap.h"
 #include "asm/pgtable.h"
 
 static struct dirent proc_dirent;

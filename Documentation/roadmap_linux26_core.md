@@ -37,10 +37,12 @@
 - rmap 与匿名页管理
 - swap 基础闭环
 - page cache/writeback 最小闭环
+- 状态：已闭环
 
 ### P3 VFS（以内存文件系统为主）
 - ramfs/devtmpfs/procfs/sysfs 语义补齐
 - VFS 与 page cache 内存路径贯通
+- 状态：进行中
 
 ### P4 driver core 完整化
 - class/uevent/kset 语义对齐

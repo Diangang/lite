@@ -29,6 +29,7 @@ struct file_operations {
     struct inode * (*finddir)(struct inode*, const char *name);
     int (*ioctl)(struct inode*, uint32_t, uint32_t);
     int (*unlink)(struct dentry *dir_dentry, const char *name);
+    int (*rmdir)(struct dentry *dir_dentry, const char *name);
 };
 
 struct inode {
@@ -110,6 +111,7 @@ int vfs_mount_fs(const char *path, const char *fs_name);
 int vfs_chdir(const char *path);
 int vfs_mkdir(const char *path);
 int vfs_unlink(const char *path);
+int vfs_rmdir(const char *path);
 struct inode *vfs_resolve(const char *path);
 int vfs_chmod(const char *path, uint32_t mode);
 int vfs_check_access(struct inode *node, int want_read, int want_write, int want_exec);
@@ -135,5 +137,6 @@ struct dentry *path_walk(const char *path);
 
 struct dentry *vfs_dentry_get(struct inode *node, const char *name);
 void vfs_dentry_put(struct dentry *d);
+void vfs_dentry_detach(struct dentry *d);
 
 #endif

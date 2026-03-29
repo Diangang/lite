@@ -24,6 +24,8 @@ int execve(const char *path);
 int open(const char *path, int flags);
 int close(int fd);
 int unlink(const char *pathname);
+int mkdir(const char *pathname);
+int rmdir(const char *pathname);
 void *mmap(void *addr, int length, int prot, int flags, int fd, int offset);
 int munmap(void *addr, int length);
 

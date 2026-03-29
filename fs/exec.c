@@ -14,6 +14,7 @@
 #include "linux/devtmpfs.h"
 #include "linux/fs.h"
 #include "linux/console.h"
+#include "linux/rmap.h"
 
 static void enter_user_mode(uint32_t entry, uint32_t user_stack)
 {
@@ -225,6 +226,7 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
             if (!phys)
                 return printf("User program page alloc failed.\n"), kfree(buf), -1;
             map_page_ex(user_dir, phys, (void*)va, PTE_PRESENT | PTE_READ_WRITE | PTE_USER);
+            rmap_add(current->mm, va, (uint32_t)phys);
         }
     }
     mm_add_vma(current->mm, user_stack_base, USER_STACK_TOP, VMA_READ | VMA_WRITE);
@@ -236,6 +238,7 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
             return printf("User stack alloc failed.\n"), kfree(buf), -1;
         map_page_ex(user_dir, stack_phys, (void*)va,
                         PTE_PRESENT | PTE_READ_WRITE | PTE_USER);
+        rmap_add(current->mm, va, (uint32_t)stack_phys);
     }
 
     uint32_t entry_point = ehdr->e_entry;

@@ -10,6 +10,7 @@
 #include "linux/fs.h"
 #include "linux/console.h"
 #include "linux/irqflags.h"
+#include "linux/rmap.h"
 
 static struct vm_area_struct *vma_clone_list(struct vm_area_struct *src)
 {
@@ -81,6 +82,7 @@ static struct mm_struct *mm_clone_cow(struct mm_struct *src)
                 set_pte_flags(src->pgd, (void*)va, flags);
             }
             map_page_ex(new_dir, (void*)phys, (void*)va, flags);
+            rmap_dup(src, mm, va, phys);
             get_page((unsigned long)phys);
         }
         v = v->vm_next;

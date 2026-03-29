@@ -3,6 +3,7 @@
 #include "linux/libc.h"
 #include "linux/fs.h"
 #include "linux/ramfs.h"
+#include "linux/pagemap.h"
 
 struct file *vfs_open(const char *path, uint32_t flags)
 {
@@ -61,8 +62,11 @@ struct file *vfs_open(const char *path, uint32_t flags)
     struct file *f = vfs_open_dentry(dentry, flags);
     if (!f)
         return NULL;
-    if ((flags & VFS_O_TRUNC) && (node->flags & 0x7) == FS_FILE)
+    if ((flags & VFS_O_TRUNC) && (node->flags & 0x7) == FS_FILE) {
         node->i_size = 0;
+        if (node->i_mapping)
+            truncate_inode_pages(node->i_mapping, 0);
+    }
     return f;
 }
 

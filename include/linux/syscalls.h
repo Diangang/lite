@@ -11,6 +11,7 @@ int sys_chdir(const char *path, int from_user);
 int sys_getcwd(char *buf, uint32_t cap, int from_user);
 int sys_unlink(const char *pathname, int from_user);
 int sys_mkdir(const char *pathname, int from_user);
+int sys_rmdir(const char *pathname, int from_user);
 int sys_getdents(int fd, void *dirp, uint32_t count, int from_user);
 int sys_ioctl(int fd, uint32_t request, uint32_t arg);
 int sys_waitpid(uint32_t pid, void *status, uint32_t status_len, int from_user);

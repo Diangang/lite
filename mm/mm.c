@@ -3,6 +3,7 @@
 #include "linux/mmzone.h"
 #include "linux/page_alloc.h"
 #include "linux/vmscan.h"
+#include "linux/swap.h"
 #include "asm/pgtable.h"
 #include "linux/slab.h"
 
@@ -31,6 +32,9 @@ void init_mm(struct multiboot_info* mbi)
 
     kswapd_init();
     printf("VMSCAN initialized.\n");
+
+    swap_init();
+    printf("SWAP initialized.\n");
 
     kmem_cache_init();
     printf("SLAB initialized.\n");

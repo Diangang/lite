@@ -28,7 +28,8 @@ enum {
     SYS_UMASK = 24,
     SYS_CHMOD = 25,
     SYS_GETUID = 26,
-    SYS_GETGID = 27
+    SYS_GETGID = 27,
+    SYS_RMDIR = 28
 };
 
 #endif

@@ -6,13 +6,14 @@
 #include "linux/page_alloc.h"
 #include "asm/page.h"
 #include "linux/irqflags.h"
+#include "linux/rmap.h"
 
 static uint32_t align_up(uint32_t value)
 {
     return (value + 0xFFF) & ~0xFFF;
 }
 
-static int task_free_user_page_mapped(pgd_t *dir, uint32_t va_page)
+static int task_free_user_page_mapped(struct mm_struct *mm, pgd_t *dir, uint32_t va_page)
 {
     if (!dir)
         return 0;
@@ -30,6 +31,8 @@ static int task_free_user_page_mapped(pgd_t *dir, uint32_t va_page)
 
     uint32_t phys = pte_pfn(pte);
     table[pte_idx] = 0;
+    if (mm)
+        rmap_remove(mm, va_page, phys);
     free_page((unsigned long)phys);
     return 1;
 }
@@ -79,7 +82,7 @@ void mm_destroy(struct mm_struct *mm)
         uint32_t end = (v->vm_end + 0xFFF) & ~0xFFF;
         if (end > start) {
             for (uint32_t va = start; va < end; va += 4096)
-                task_free_user_page_mapped(mm->pgd, va);
+                task_free_user_page_mapped(mm, mm->pgd, va);
         }
         v = v->vm_next;
     }
@@ -215,7 +218,7 @@ int do_munmap(struct mm_struct *mm, uint32_t addr, uint32_t length)
     uint32_t page_start = addr & ~0xFFF;
     uint32_t page_end = (end + 0xFFF) & ~0xFFF;
     for (uint32_t va = page_start; va < page_end; va += 4096)
-        task_free_user_page_mapped(mm->pgd, va);
+        task_free_user_page_mapped(mm, mm->pgd, va);
     return 0;
 }
 
@@ -330,7 +333,7 @@ uint32_t do_mremap(struct mm_struct *mm, uint32_t addr, uint32_t old_length, uin
         uint32_t page_start = v->vm_end & ~0xFFF;
         uint32_t page_end = (old_end + 0xFFF) & ~0xFFF;
         for (uint32_t va = page_start; va < page_end; va += 4096)
-            task_free_user_page_mapped(mm->pgd, va);
+            task_free_user_page_mapped(mm, mm->pgd, va);
         return addr;
     }
 

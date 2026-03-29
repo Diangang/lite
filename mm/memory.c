@@ -7,6 +7,8 @@
 #include "linux/mm.h"
 #include "linux/exit.h"
 #include "linux/slab.h"
+#include "linux/rmap.h"
+#include "linux/swap.h"
 
 static pgd_t* page_directory = NULL;
 static pgd_t* kernel_directory = NULL;
@@ -158,6 +160,28 @@ void set_pte_flags(pgd_t* pgd, void* virt_addr, pteval_t flags)
         return;
 
     table[pte_idx] = (pte & ~(PAGE_SIZE - 1)) | (flags & (PAGE_SIZE - 1));
+    __asm__ volatile("invlpg (%0)" :: "r" (virt_addr) : "memory");
+}
+
+void unmap_page_pgd(pgd_t* pgd, void* virt_addr)
+{
+    if (!pgd)
+        return;
+
+    uint32_t va = (uint32_t)virt_addr;
+    uint32_t pde_idx = pgd_index(va);
+    uint32_t pte_idx = pte_index(va);
+
+    pgdval_t pde = pgd[pde_idx];
+    if (!pgd_present(pde))
+        return;
+
+    pte_t* table = (pte_t*)phys_to_virt(pde & ~(PAGE_SIZE - 1));
+    pteval_t pte = table[pte_idx];
+    if (!pte_present(pte))
+        return;
+
+    table[pte_idx] = 0;
     __asm__ volatile("invlpg (%0)" :: "r" (virt_addr) : "memory");
 }
 
@@ -339,6 +363,10 @@ static int resolve_cow(uint32_t page_base)
     }
     memcpy(tmp, (void*)page_base, PAGE_SIZE);
     map_page_ex(page_directory, new_phys, (void*)page_base, PTE_PRESENT | PTE_USER | PTE_READ_WRITE);
+    if (current && current->mm) {
+        rmap_remove(current->mm, page_base, phys);
+        rmap_add(current->mm, page_base, (uint32_t)new_phys);
+    }
     memcpy((void*)page_base, tmp, PAGE_SIZE);
     kfree(tmp);
     free_page((unsigned long)phys);
@@ -435,6 +463,8 @@ struct pt_regs *do_page_fault(struct pt_regs *regs)
                 if (vma_allows(current ? current->mm : NULL, page_base, 1, 0))
                     flags |= PTE_READ_WRITE;
                 map_page_ex(page_directory, phys, (void*)page_base, flags);
+                if (current && current->mm)
+                    rmap_add(current->mm, page_base, (uint32_t)phys);
                 memset((void*)page_base, 0, PAGE_SIZE);
                 return regs;
             }
@@ -468,6 +498,12 @@ struct pt_regs *do_page_fault(struct pt_regs *regs)
         return task_schedule(regs);
     }
 
+    if (user_access && current && current->mm) {
+        int swap_res = swap_in_mm(current->mm, page_base);
+        if (swap_res > 0)
+            return regs;
+    }
+
     void *phys = alloc_page(GFP_KERNEL);
     if (!phys)
         panic("KERNEL PANIC: Out of physical memory in Page Fault handler.");
@@ -481,6 +517,8 @@ struct pt_regs *do_page_fault(struct pt_regs *regs)
         flags |= PTE_READ_WRITE;
     }
     map_page_ex(page_directory, phys, (void*)page_base, flags);
+    if (user_access && current && current->mm)
+        rmap_add(current->mm, page_base, (uint32_t)phys);
 
     memset((void*)page_base, 0, PAGE_SIZE);
     return regs;

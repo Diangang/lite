@@ -20,10 +20,17 @@ enum zone_type {
     ZONE_NORMAL = 1
 };
 
+struct mm_struct;
+struct rmap_item;
+
 struct page {
     uint32_t flags;
     uint16_t refcount;
     uint16_t order;
+    uint16_t mapcount;
+    struct mm_struct *map_mm;
+    uint32_t map_vaddr;
+    struct rmap_item *rmap_list;
 };
 
 struct free_area {

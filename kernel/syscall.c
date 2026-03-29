@@ -76,6 +76,9 @@ static struct pt_regs *syscall_handler(struct pt_regs *regs)
         case SYS_MKDIR:
             regs->eax = (uint32_t)sys_mkdir((const char*)regs->ebx, from_user);
             break;
+        case SYS_RMDIR:
+            regs->eax = (uint32_t)sys_rmdir((const char*)regs->ebx, from_user);
+            break;
         case SYS_GETDENTS:
             regs->eax = (uint32_t)sys_getdents((int)regs->ebx, (void*)regs->ecx, regs->edx, from_user);
             break;

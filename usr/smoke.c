@@ -219,7 +219,7 @@ static int contains(const char *hay, int hay_len, const char *needle)
 }
 
 void test_mounts() {
-    print("\n--- Test 8: /proc/mounts ---\n");
+    print("\n--- Test 9: /proc/mounts ---\n");
     int fd = open("/proc/mounts", 0);
     if (fd < 0) {
         print("FAIL: Could not open /proc/mounts\n");
@@ -253,6 +253,40 @@ void test_mounts() {
         print("FAIL: Mount table missing entries.\n");
 }
 
+void test_rmdir() {
+    print("\n--- Test 8: rmdir/unlink ---\n");
+    int ret = mkdir("/d");
+    if (ret < 0) {
+        print("FAIL: mkdir /d\n");
+        return;
+    }
+    int fd = open("/d/f", O_CREAT);
+    if (fd < 0) {
+        print("FAIL: create /d/f\n");
+        return;
+    }
+    close(fd);
+
+    ret = rmdir("/d");
+    if (ret == 0)
+        print("FAIL: rmdir non-empty dir\n");
+    ret = unlink("/d");
+    if (ret == 0)
+        print("FAIL: unlink dir\n");
+
+    ret = unlink("/d/f");
+    if (ret < 0)
+        print("FAIL: unlink /d/f\n");
+
+    ret = rmdir("/d");
+    if (ret < 0)
+        print("FAIL: rmdir /d\n");
+
+    ret = rmdir("/");
+    if (ret == 0)
+        print("FAIL: rmdir /\n");
+}
+
 int main() {
     print("================================\n");
     print("  Lite OS Automated Test Suite  \n");
@@ -265,6 +299,7 @@ int main() {
     test_mprotect_mremap();
     test_bad_ptr();
     test_sched();
+    test_rmdir();
     test_mounts();
 
     print("\n================================\n");

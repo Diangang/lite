@@ -158,6 +158,7 @@ struct page *__alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
             }
             if (pass == 2 && !zone_watermark_ok(zone, order, WMARK_MIN)) {
                 wakeup_kswapd(zone);
+                try_to_free_pages(zone, order);
                 continue;
             }
             int frame = buddy_alloc(zone, order);

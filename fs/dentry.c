@@ -50,3 +50,21 @@ void vfs_dentry_put(struct dentry *d)
     // Simple dcache: we never actually free them to keep tree intact,
     // unless system is out of memory.
 }
+
+void vfs_dentry_detach(struct dentry *d)
+{
+    if (!d)
+        return;
+    if (!d->parent)
+        return;
+    struct dentry *parent = d->parent;
+    if (parent->children == d) {
+        parent->children = d->sibling;
+        return;
+    }
+    struct dentry *curr = parent->children;
+    while (curr && curr->sibling != d)
+        curr = curr->sibling;
+    if (curr)
+        curr->sibling = d->sibling;
+}

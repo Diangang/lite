@@ -69,6 +69,8 @@ static int ramfs_unlink(struct dentry *dir_dentry, const char *name)
 {
     if (!dir_dentry || !name)
         return -1;
+    if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+        return -1;
     struct inode *dir = dir_dentry->inode;
     if (!dir || (dir->flags & 0x7) != FS_DIRECTORY)
         return -1;
@@ -99,22 +101,55 @@ static int ramfs_unlink(struct dentry *dir_dentry, const char *name)
     if (target->i_mapping)
         truncate_inode_pages(target->i_mapping, 0);
 
-    target->flags = 0; // Mark as deleted/invalid
-    target->i_size = 0;
+    if (target->i_mapping)
+        kfree(target->i_mapping);
+    vfs_dentry_detach(found);
+    if (found->name)
+        kfree((void*)found->name);
+    kfree(found);
+    kfree(target);
 
-    // Explicitly detach from parent dcache to ensure it disappears
-    if (found->parent) {
-        if (found->parent->children == found) {
-            found->parent->children = found->sibling;
-        } else {
-            struct dentry *curr = found->parent->children;
-            while (curr && curr->sibling != found)
-                curr = curr->sibling;
+    return 0;
+}
 
-            if (curr)
-                curr->sibling = found->sibling;
+static int ramfs_rmdir(struct dentry *dir_dentry, const char *name)
+{
+    if (!dir_dentry || !name)
+        return -1;
+    if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+        return -1;
+    struct inode *dir = dir_dentry->inode;
+    if (!dir || (dir->flags & 0x7) != FS_DIRECTORY)
+        return -1;
+
+    struct dentry *child = dir_dentry->children;
+    struct dentry *found = NULL;
+    while (child) {
+        if (strcmp(child->name, name) == 0) {
+            found = child;
+            break;
         }
+        child = child->sibling;
     }
+
+    if (!found)
+        return -1;
+
+    struct inode *target = found->inode;
+    if (!target)
+        return -1;
+    if ((target->flags & 0x7) != FS_DIRECTORY)
+        return -1;
+    if (found->children)
+        return -1;
+
+    if (target->i_mapping)
+        kfree(target->i_mapping);
+    vfs_dentry_detach(found);
+    if (found->name)
+        kfree((void*)found->name);
+    kfree(found);
+    kfree(target);
 
     return 0;
 }
@@ -127,7 +162,8 @@ static struct file_operations ramfs_dir_ops = {
     .readdir = generic_readdir,
     .finddir = NULL,
     .ioctl = NULL,
-    .unlink = ramfs_unlink
+    .unlink = ramfs_unlink,
+    .rmdir = ramfs_rmdir
 };
 
 static struct file_operations ramfs_file_ops = {
