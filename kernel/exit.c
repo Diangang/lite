@@ -18,37 +18,35 @@ static void task_free_user_memory(struct task_struct *task)
 
 static int reparent_children(struct task_struct *reaper)
 {
-    if (!task_head || !reaper || !current)
+    if (list_empty(&task_list_head) || !reaper || !current)
         return 0;
 
     int wake = 0;
-    struct task_struct *t = task_head;
-    do {
+    struct task_struct *t;
+    list_for_each_entry(t, &task_list_head, tasks) {
         if (t->parent == current && t != current) {
             t->parent = reaper;
             if (t->state == TASK_ZOMBIE)
                 wake = 1;
         }
-        t = t->next;
-    } while (t && t != task_head);
+    }
 
     return wake;
 }
 
-void task_destroy(struct task_struct *prev, struct task_struct *task)
+void task_destroy(struct task_struct *task)
 {
-    if (!prev || !task)
+    if (!task)
         return;
-    if (!task_head || !current)
+    if (!current || list_empty(&task_list_head))
         return;
     if (task == current)
         return;
+    if (task->pid == 0)
+        return;
 
     uint32_t flags = irq_save();
-    struct task_struct *next = task->next;
-    if (task == task_head)
-        task_head = next;
-    prev->next = next;
+    list_del(&task->tasks);
     irq_restore(flags);
 
     files_close_all(task);
@@ -79,8 +77,12 @@ void do_exit_reason(int code, int reason, uint32_t info0, uint32_t info1)
         wait_queue_remove(current->waitq, current);
 
     struct task_struct *reaper = find_task_by_pid(1);
-    if (!reaper)
-        reaper = task_head;
+    if (!reaper) {
+        if (!list_empty(&task_list_head))
+            reaper = list_first_entry(&task_list_head, struct task_struct, tasks);
+        else
+            reaper = current;
+    }
     uint32_t flags = irq_save();
     int wake = reparent_children(reaper);
     irq_restore(flags);

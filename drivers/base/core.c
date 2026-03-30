@@ -10,13 +10,65 @@ static int devmodel_ready = 0;
 static struct kset devices_kset;
 static struct kset drivers_kset;
 static struct kset classes_kset;
-static char uevent_buf[512];
+static char uevent_buf[4096];
 static uint32_t uevent_len = 0;
+static struct device *platform_root_dev = NULL;
+
+struct device *device_model_platform_root(void)
+{
+    return platform_root_dev;
+}
+
+void device_model_set_platform_root(struct device *dev)
+{
+    platform_root_dev = dev;
+}
 
 static void device_release_kobj(struct kobject *kobj)
 {
     struct device *dev = CONTAINER_OF(kobj, struct device, kobj);
     kfree(dev);
+}
+
+static void kobject_child_add(struct kobject *parent, struct kobject *child)
+{
+    if (!parent || !child)
+        return;
+    child->next = parent->children;
+    parent->children = child;
+}
+
+static void kobject_child_del(struct kobject *parent, struct kobject *child)
+{
+    if (!parent || !child)
+        return;
+    if (parent->children == child) {
+        parent->children = child->next;
+        child->next = NULL;
+        return;
+    }
+    struct kobject *prev = parent->children;
+    while (prev && prev->next) {
+        if (prev->next == child) {
+            prev->next = child->next;
+            child->next = NULL;
+            return;
+        }
+        prev = prev->next;
+    }
+}
+
+int device_set_parent(struct device *dev, struct device *parent)
+{
+    if (!dev)
+        return -1;
+
+    if (dev->kobj.parent)
+        kobject_child_del(dev->kobj.parent, &dev->kobj);
+    dev->kobj.parent = parent ? &parent->kobj : NULL;
+    if (dev->kobj.parent)
+        kobject_child_add(dev->kobj.parent, &dev->kobj);
+    return 0;
 }
 
 int device_unbind(struct device *dev)
@@ -38,19 +90,17 @@ int device_rebind(struct device *dev)
     if (!dev || !dev->bus)
         return -1;
     device_unbind(dev);
-    struct device_driver *drv = dev->bus->drivers;
-    while (drv) {
+    struct device_driver *drv;
+    list_for_each_entry(drv, &dev->bus->drivers, bus_list) {
         if (dev->bus->match && dev->bus->match(dev, drv)) {
             dev->driver = drv;
             if (drv->probe && drv->probe(dev) != 0) {
                 dev->driver = NULL;
-                drv = drv->next;
                 continue;
             }
             device_uevent_emit("bind", dev);
             return 0;
         }
-        drv = drv->next;
     }
     return 0;
 }
@@ -60,11 +110,18 @@ int device_register(struct device *dev)
     if (!dev || !dev->bus)
         return -1;
     kset_add(device_model_devices_kset(), &dev->kobj);
-    dev->kobj.next = (struct kobject*)dev->bus->devices;
-    dev->bus->devices = dev;
-    if (dev->class) {
-        dev->class_next = dev->class->devices;
-        dev->class->devices = dev;
+    INIT_LIST_HEAD(&dev->bus_list);
+    INIT_LIST_HEAD(&dev->class_list);
+    list_add_tail(&dev->bus_list, &dev->bus->devices);
+    if (dev->class)
+        list_add_tail(&dev->class_list, &dev->class->devices);
+    if (!dev->kobj.parent) {
+        struct device *root = device_model_platform_root();
+        if (root && dev != root) {
+            struct bus_type *platform = device_model_platform_bus();
+            if (platform && dev->bus == platform)
+                device_set_parent(dev, root);
+        }
     }
     devtmpfs_register_device(dev);
     device_uevent_emit("add", dev);
@@ -77,39 +134,17 @@ int device_unregister(struct device *dev)
     if (!dev || !dev->bus)
         return -1;
     device_unbind(dev);
-    struct device *prev = NULL;
-    struct device *cur = dev->bus->devices;
-    while (cur) {
-        if (cur == dev) {
-            if (prev)
-                prev->kobj.next = cur->kobj.next;
-            else
-                dev->bus->devices = (struct device*)cur->kobj.next;
-            if (dev->class) {
-                struct device *cprev = NULL;
-                struct device *ccur = dev->class->devices;
-                while (ccur) {
-                    if (ccur == dev) {
-                        if (cprev)
-                            cprev->class_next = ccur->class_next;
-                        else
-                            dev->class->devices = ccur->class_next;
-                        break;
-                    }
-                    cprev = ccur;
-                    ccur = ccur->class_next;
-                }
-            }
-            devtmpfs_unregister_device(dev);
-            device_uevent_emit("remove", dev);
-            kset_remove(&devices_kset, &dev->kobj);
-            kobject_put(&dev->kobj);
-            return 0;
-        }
-        prev = cur;
-        cur = (struct device*)cur->kobj.next;
-    }
-    return -1;
+    if (dev->bus_list.next && dev->bus_list.prev)
+        list_del(&dev->bus_list);
+    if (dev->class && dev->class_list.next && dev->class_list.prev)
+        list_del(&dev->class_list);
+    if (dev->kobj.parent)
+        kobject_child_del(dev->kobj.parent, &dev->kobj);
+    devtmpfs_unregister_device(dev);
+    device_uevent_emit("remove", dev);
+    kset_remove(&devices_kset, &dev->kobj);
+    kobject_put(&dev->kobj);
+    return 0;
 }
 
 struct device *device_register_simple(const char *name, const char *type, struct bus_type *bus, void *data)
@@ -188,11 +223,12 @@ uint32_t device_model_device_count(void)
     if (!devmodel_ready)
         return 0;
     uint32_t n = 0;
-    struct device *d = device_model_platform_bus()->devices;
-    while (d) {
+    struct kset *kset = device_model_devices_kset();
+    if (!kset)
+        return 0;
+    struct kobject *kobj;
+    list_for_each_entry(kobj, &kset->list, entry)
         n++;
-        d = (struct device*)d->kobj.next;
-    }
     return n;
 }
 
@@ -200,13 +236,15 @@ struct device *device_model_device_at(uint32_t index)
 {
     if (!devmodel_ready)
         return NULL;
+    struct kset *kset = device_model_devices_kset();
+    if (!kset)
+        return NULL;
     uint32_t i = 0;
-    struct device *d = device_model_platform_bus()->devices;
-    while (d) {
+    struct kobject *kobj;
+    list_for_each_entry(kobj, &kset->list, entry) {
         if (i == index)
-            return d;
+            return CONTAINER_OF(kobj, struct device, kobj);
         i++;
-        d = (struct device*)d->kobj.next;
     }
     return NULL;
 }
@@ -215,12 +253,13 @@ struct device *device_model_find_device(const char *name)
 {
     if (!devmodel_ready || !name)
         return NULL;
-    struct device *d = device_model_platform_bus()->devices;
-    while (d) {
-        if (!strcmp(d->kobj.name, name))
-            return d;
-        d = (struct device*)d->kobj.next;
-    }
+    struct kset *kset = device_model_devices_kset();
+    if (!kset)
+        return NULL;
+    struct kobject *kobj;
+    list_for_each_entry(kobj, &kset->list, entry)
+        if (!strcmp(kobj->name, name))
+            return CONTAINER_OF(kobj, struct device, kobj);
     return NULL;
 }
 
@@ -266,11 +305,10 @@ struct class *class_find(const char *name)
 {
     if (!devmodel_ready || !name)
         return NULL;
-    struct kobject *cur = classes_kset.list;
-    while (cur) {
+    struct kobject *cur;
+    list_for_each_entry(cur, &classes_kset.list, entry) {
         if (!strcmp(cur->name, name))
             return CONTAINER_OF(cur, struct class, kobj);
-        cur = cur->next;
     }
     return NULL;
 }
@@ -298,8 +336,19 @@ void device_uevent_emit(const char *action, struct device *dev)
     off += name_len;
     tmp[off++] = '\n';
     tmp[off] = 0;
-    if (off + uevent_len >= sizeof(uevent_buf))
-        uevent_len = 0;
+    if (off >= sizeof(uevent_buf))
+        return;
+    if (off + uevent_len > sizeof(uevent_buf)) {
+        uint32_t need = (off + uevent_len) - (uint32_t)sizeof(uevent_buf);
+        if (need >= uevent_len) {
+            uevent_len = 0;
+        } else {
+            uint32_t new_len = uevent_len - need;
+            for (uint32_t i = 0; i < new_len; i++)
+                uevent_buf[i] = uevent_buf[need + i];
+            uevent_len = new_len;
+        }
+    }
     memcpy(uevent_buf + uevent_len, tmp, off);
     uevent_len += off;
 }

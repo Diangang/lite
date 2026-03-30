@@ -7,7 +7,7 @@
 #include "linux/fs.h"
 #include "linux/irqflags.h"
 
-struct task_struct *task_head = NULL;
+struct list_head task_list_head = LIST_HEAD_INIT(task_list_head);
 struct task_struct *current = NULL;
 uint32_t next_task_id = 1;
 wait_queue_t exit_waitq = {0};
@@ -110,17 +110,16 @@ void wait_queue_remove(wait_queue_t *q, struct task_struct *task)
 void task_tick(void)
 {
     uint32_t now = timer_get_ticks();
-    struct task_struct *t = task_head;
-    if (!t)
+    if (list_empty(&task_list_head))
         return;
 
-    do {
+    struct task_struct *t;
+    list_for_each_entry(t, &task_list_head, tasks) {
         if (t->state == TASK_SLEEPING) {
             if ((int32_t)(now - t->wake_jiffies) >= 0)
                 t->state = TASK_RUNNABLE;
         }
-        t = t->next;
-    } while (t && t != task_head);
+    }
 
     if (!current)
         return;
@@ -146,12 +145,16 @@ struct pt_regs *task_schedule(struct pt_regs *regs)
 
     need_resched = 0;
 
-    struct task_struct *candidate = current->next;
-    while (candidate) {
-        if (candidate->state == TASK_RUNNABLE) {
-            if (candidate != current)
+    struct task_struct *next = current;
+    struct list_head *pos = current->tasks.next;
+    if (pos == &task_list_head)
+        pos = pos->next;
+    while (pos != &current->tasks) {
+        next = list_entry(pos, struct task_struct, tasks);
+        if (next->state == TASK_RUNNABLE) {
+            if (next != current)
                 sched_switch_count++;
-            current = candidate;
+            current = next;
             if (current->mm && current->mm->pgd) {
                 if (current->mm->pgd != get_pgd_current())
                     switch_pgd(current->mm->pgd);
@@ -166,9 +169,9 @@ struct pt_regs *task_schedule(struct pt_regs *regs)
             return current->thread.regs;
         }
 
-        candidate = candidate->next;
-        if (candidate == current)
-            break;
+        pos = pos->next;
+        if (pos == &task_list_head)
+            pos = pos->next;
     }
 
     return current->thread.regs;
@@ -231,12 +234,12 @@ int task_current_is_user(void)
 
 void task_list(void)
 {
-    if (!task_head)
+    if (list_empty(&task_list_head))
         return (void)printf("No tasks.\n");
 
     printf("PID   STATE     WAKE    CURRENT\n");
-    struct task_struct *task = task_head;
-    do {
+    struct task_struct *task;
+    list_for_each_entry(task, &task_list_head, tasks) {
         const char *state = "RUNNABLE";
         if (task->state == TASK_SLEEPING)
         state = "SLEEPING"; else if (task->state == TASK_BLOCKED)
@@ -247,8 +250,7 @@ void task_list(void)
                state,
                task->wake_jiffies,
                task == current ? "yes" : "no");
-        task = task->next;
-    } while (task && task != task_head);
+    }
 }
 
 static void init_task(void)
@@ -263,6 +265,7 @@ static void init_task(void)
     task->parent = NULL;
     task->thread.regs = copy_thread(stack, task_idle, NULL);
     task->thread.sp0 = (uint32_t*)((uint32_t)stack + THREAD_SIZE);
+    INIT_LIST_HEAD(&task->tasks);
     task->wake_jiffies = 0;
     task->state = TASK_RUNNABLE;
     task->time_slice = TASK_TIMESLICE_TICKS;
@@ -284,9 +287,8 @@ static void init_task(void)
     files_init(task);
     task->waitq = NULL;
     task->wait_next = NULL;
-    task->next = task;
 
-    task_head = task;
+    list_add(&task->tasks, &task_list_head);
     current = task;
     wait_queue_init(&exit_waitq);
     tss_set_kernel_stack((uint32_t)current->thread.sp0);

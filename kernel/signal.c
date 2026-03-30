@@ -11,7 +11,7 @@ int sys_kill(uint32_t id, int sig)
         return -1;
     if (id == 0)
         return -1;
-    if (!task_head)
+    if (list_empty(&task_list_head))
         return -1;
     uint32_t flags = irq_save();
     struct task_struct *t = find_task_by_pid(id);

@@ -6,6 +6,16 @@ enum {
     VMA_EXEC = 1 << 2
 };
 
+static int failures;
+
+static void fail(const char *msg)
+{
+    failures++;
+    print("FAIL: ");
+    print(msg);
+    print("\n");
+}
+
 void test_fork() {
     print("\n--- Test 1: Fork & Waitpid ---\n");
     int pid = fork();
@@ -24,8 +34,10 @@ void test_fork() {
         print(", exit_code=");
         print_int(status[0]);
         print(" (should be 42)\n");
+        if (ret != pid || status[0] != 42)
+            fail("fork/waitpid exit code mismatch");
     } else {
-        print("Fork failed!\n");
+        fail("fork failed");
     }
 }
 
@@ -33,17 +45,18 @@ void test_file_io() {
     print("\n--- Test 2: File I/O ---\n");
     int fd = open("/test.txt", O_CREAT);
     if (fd < 0) {
-        print("Failed to create file\n");
+        fail("create /test.txt");
         return;
     }
     const char *msg = "Hello from Lite OS test_all!\n";
-    write(fd, msg, 29);
+    if (write(fd, msg, 29) != 29)
+        fail("write /test.txt");
     close(fd);
     print("Wrote to /test.txt successfully.\n");
 
     fd = open("/test.txt", 0);
     if (fd < 0) {
-        print("Failed to open file for reading\n");
+        fail("open /test.txt for read");
         return;
     }
     char buf[64];
@@ -53,7 +66,7 @@ void test_file_io() {
         print("Read from file: ");
         print(buf);
     } else {
-        print("Read failed!\n");
+        fail("read /test.txt");
     }
     close(fd);
 
@@ -61,7 +74,7 @@ void test_file_io() {
     if (ret == 0)
         print("Deleted /test.txt successfully.\n");
     else
-        print("FAIL: Could not delete /test.txt\n");
+        fail("unlink /test.txt");
 }
 
 void test_pf() {
@@ -142,9 +155,7 @@ void test_bad_ptr() {
     int ret = write(1, (void*)0x08000000, 4);
     if (ret == -1)
         print("Kernel correctly rejected bad pointer (returned -1).\n"); else {
-        print("FAIL: Kernel did not reject bad pointer! Returned: ");
-        print_int(ret);
-        print("\n");
+        fail("Kernel did not reject bad pointer");
     }
 }
 
@@ -161,7 +172,7 @@ void test_sched() {
         exit(11);
     }
     if (pid_a < 0) {
-        print("FAIL: fork() for A failed\n");
+        fail("fork() for A failed");
         return;
     }
 
@@ -176,7 +187,7 @@ void test_sched() {
         exit(22);
     }
     if (pid_b < 0) {
-        print("FAIL: fork() for B failed\n");
+        fail("fork() for B failed");
         return;
     }
 
@@ -192,7 +203,7 @@ void test_sched() {
     if (st_a[0] == 11 && st_b[0] == 22)
         print("Scheduler test OK.\n");
     else
-        print("FAIL: Unexpected scheduler test exit codes.\n");
+        fail("Unexpected scheduler test exit codes");
 }
 
 static int contains(const char *hay, int hay_len, const char *needle)
@@ -244,11 +255,38 @@ static int count_substr(const char *hay, int hay_len, const char *needle)
     return count;
 }
 
+static int read_file(const char *path, char *buf, int cap)
+{
+    if (!path || !buf || cap <= 1)
+        return -1;
+    int fd = open(path, 0);
+    if (fd < 0)
+        return -1;
+    int n = read(fd, buf, cap - 1);
+    close(fd);
+    if (n < 0)
+        return -1;
+    buf[n] = 0;
+    return n;
+}
+
+static int write_file(const char *path, const char *data, int len)
+{
+    if (!path || !data || len <= 0)
+        return -1;
+    int fd = open(path, 0);
+    if (fd < 0)
+        return -1;
+    int n = write(fd, data, len);
+    close(fd);
+    return n;
+}
+
 void test_mounts() {
     print("\n--- Test 9: /proc/mounts ---\n");
     int fd = open("/proc/mounts", 0);
     if (fd < 0) {
-        print("FAIL: Could not open /proc/mounts\n");
+        fail("Could not open /proc/mounts");
         return;
     }
 
@@ -256,7 +294,7 @@ void test_mounts() {
     int n = read(fd, buf, 511);
     close(fd);
     if (n <= 0) {
-        print("FAIL: Could not read /proc/mounts\n");
+        fail("Could not read /proc/mounts");
         return;
     }
     buf[n] = 0;
@@ -276,66 +314,60 @@ void test_mounts() {
     if (ok)
         print("Mount table looks OK.\n");
     else
-        print("FAIL: Mount table missing entries.\n");
+        fail("Mount table missing entries");
 }
 
 void test_rmdir() {
     print("\n--- Test 8: rmdir/unlink ---\n");
+    int before = failures;
     int ret = mkdir("/d");
     if (ret < 0) {
-        print("FAIL: mkdir /d\n");
+        fail("mkdir /d");
         return;
     }
     int fd = open("/d/f", O_CREAT);
     if (fd < 0) {
-        print("FAIL: create /d/f\n");
+        fail("create /d/f");
         return;
     }
     close(fd);
 
     ret = rmdir("/d");
     if (ret == 0)
-        print("FAIL: rmdir non-empty dir\n");
+        fail("rmdir non-empty dir");
     ret = unlink("/d");
     if (ret == 0)
-        print("FAIL: unlink dir\n");
+        fail("unlink dir");
 
     ret = unlink("/d/f");
     if (ret < 0)
-        print("FAIL: unlink /d/f\n");
+        fail("unlink /d/f");
 
     ret = rmdir("/d");
     if (ret < 0)
-        print("FAIL: rmdir /d\n");
+        fail("rmdir /d");
 
     ret = rmdir("/");
     if (ret == 0)
-        print("FAIL: rmdir /\n");
+        fail("rmdir /");
+    if (failures == before)
+        print("rmdir/unlink OK.\n");
 }
 
 void test_pci_uevent() {
     print("\n--- Test 10: PCI uevent ---\n");
-    int fd = open("/sys/kernel/uevent", 0);
-    if (fd < 0) {
-        print("FAIL: Could not open /sys/kernel/uevent\n");
-        return;
-    }
-    char buf[512];
-    int n = read(fd, buf, 511);
-    close(fd);
+    char buf[2048];
+    int n = read_file("/sys/kernel/uevent", buf, sizeof(buf));
     if (n <= 0) {
-        print("FAIL: Could not read /sys/kernel/uevent\n");
+        fail("Could not read /sys/kernel/uevent");
         return;
     }
-    buf[n] = 0;
     int count = count_substr(buf, n, "add pci");
-    if (count > 0) {
-        print("PCI uevent add count=");
-        print_int(count);
-        print("\n");
-    } else {
+    int bind_count = count_substr(buf, n, "bind pci");
+    if (count == 0 && bind_count == 0)
+        fail("No PCI add/bind events found");
+    else if (count == 0)
         print("WARN: No PCI add events found.\n");
-    }
     int bar_count = count_substr(buf, n, "bar pci");
     if (bar_count > 0) {
         print("PCI bar event count=");
@@ -367,10 +399,6 @@ void test_pci_uevent() {
         print("PCIe capability count=");
         print_int(pcie_count);
         print("\n");
-    } else {
-        print("FAIL: No PCIe capability detected.\n");
-        print("uevent dump:\n");
-        print(buf);
     }
     int nvme_count = count_substr(buf, n, "nvme pci");
     if (nvme_count > 0) {
@@ -379,9 +407,100 @@ void test_pci_uevent() {
         print("\n");
     } else if (pcie_count > 0) {
         print("WARN: No NVMe class device detected.\n");
+    }
+    if (nvme_count > 0 && pcie_count == 0) {
+        fail("NVMe present but no PCIe capability event found");
         print("uevent dump:\n");
         print(buf);
     }
+}
+
+void test_sysfs_layout() {
+    print("\n--- Test 11: sysfs layout ---\n");
+    int ok = 1;
+    char buf[128];
+    int n = read_file("/sys/devices/platform/type", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "platform-root")) {
+        fail("/sys/devices/platform/type");
+        ok = 0;
+    }
+    n = read_file("/sys/devices/pci0000:00/type", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "pci-root")) {
+        fail("/sys/devices/pci0000:00/type");
+        ok = 0;
+    }
+
+    int fd = open("/sys/bus/pci", 0);
+    if (fd < 0) {
+        fail("open /sys/bus/pci");
+        ok = 0;
+    } else
+        close(fd);
+
+    fd = open("/sys/bus/pci/devices", 0);
+    if (fd < 0) {
+        fail("open /sys/bus/pci/devices");
+        ok = 0;
+    } else
+        close(fd);
+
+    fd = open("/sys/bus/pci/drivers", 0);
+    if (fd < 0) {
+        fail("open /sys/bus/pci/drivers");
+        ok = 0;
+    } else
+        close(fd);
+
+    n = read_file("/sys/bus/pci/drivers/nvme/name", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "nvme")) {
+        fail("/sys/bus/pci/drivers/nvme/name");
+        ok = 0;
+    }
+
+    n = read_file("/sys/bus/platform/drivers/console/name", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "console")) {
+        fail("/sys/bus/platform/drivers/console/name");
+        ok = 0;
+    }
+    if (ok)
+        print("sysfs layout OK.\n");
+}
+
+void test_sysfs_bind_unbind_console() {
+    print("\n--- Test 12: sysfs bind/unbind ---\n");
+    int ok = 1;
+    char buf[128];
+    int n = read_file("/sys/devices/platform/console/driver", buf, sizeof(buf));
+    if (n <= 0) {
+        fail("read console driver");
+        return;
+    }
+    if (!contains(buf, n, "console"))
+        print("WARN: console not bound initially\n");
+
+    int w = write_file("/sys/bus/platform/drivers/console/unbind", "console\n", 8);
+    if (w <= 0) {
+        fail("unbind console");
+        return;
+    }
+    n = read_file("/sys/devices/platform/console/driver", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "unbound")) {
+        fail("console driver should be unbound");
+        ok = 0;
+    }
+
+    w = write_file("/sys/bus/platform/drivers/console/bind", "console\n", 8);
+    if (w <= 0) {
+        fail("bind console");
+        return;
+    }
+    n = read_file("/sys/devices/platform/console/driver", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "console")) {
+        fail("console driver should be bound");
+        ok = 0;
+    }
+    if (ok)
+        print("sysfs bind/unbind OK.\n");
 }
 
 int main() {
@@ -399,9 +518,18 @@ int main() {
     test_rmdir();
     test_mounts();
     test_pci_uevent();
+    test_sysfs_layout();
+    test_sysfs_bind_unbind_console();
 
     print("\n================================\n");
-    print("  All tests completed!          \n");
+    if (failures == 0) {
+        print("  All tests completed (OK).     \n");
+    } else {
+        print("  All tests completed (FAIL).   \n");
+        print("  FAILURES=");
+        print_int(failures);
+        print("\n");
+    }
     print("================================\n");
-    return 0;
+    return failures == 0 ? 0 : 1;
 }

@@ -19,6 +19,9 @@ static struct inode sys_class;
 static struct inode sys_bus_platform;
 static struct inode sys_bus_platform_devices;
 static struct inode sys_bus_platform_drivers;
+static struct inode sys_bus_pci;
+static struct inode sys_bus_pci_devices;
+static struct inode sys_bus_pci_drivers;
 static struct inode sys_kernel_version;
 static struct inode sys_kernel_uptime;
 static struct inode sys_kernel_uevent;
@@ -187,7 +190,17 @@ static uint32_t sys_write_driver_bind(struct inode *node, uint32_t offset, uint3
             tmp[i] = 0;
     if (!tmp[0])
         return 0;
-    struct device *dev = device_model_find_device(tmp);
+    struct bus_type *bus = drv->bus;
+    if (!bus)
+        return 0;
+    struct device *dev = NULL;
+    struct device *cur;
+    list_for_each_entry(cur, &bus->devices, bus_list) {
+        if (!strcmp(cur->kobj.name, tmp)) {
+            dev = cur;
+            break;
+        }
+    }
     if (!dev)
         return 0;
     if (driver_bind_device(drv, dev) != 0)
@@ -213,7 +226,17 @@ static uint32_t sys_write_driver_unbind(struct inode *node, uint32_t offset, uin
             tmp[i] = 0;
     if (!tmp[0])
         return 0;
-    struct device *dev = device_model_find_device(tmp);
+    struct bus_type *bus = drv->bus;
+    if (!bus)
+        return 0;
+    struct device *dev = NULL;
+    struct device *cur;
+    list_for_each_entry(cur, &bus->devices, bus_list) {
+        if (!strcmp(cur->kobj.name, tmp)) {
+            dev = cur;
+            break;
+        }
+    }
     if (!dev || dev->driver != drv)
         return 0;
     device_unbind(dev);
@@ -464,6 +487,21 @@ static struct dirent *sys_devdir_readdir(struct file *file, uint32_t index)
         sys_dirent.ino = e->f_driver.i_ino;
         return &sys_dirent;
     }
+    struct kobject *child = e->dev ? e->dev->kobj.children : NULL;
+    uint32_t i = 0;
+    while (child) {
+        if (i == index - 3) {
+            struct device *child_dev = CONTAINER_OF(child, struct device, kobj);
+            sysfs_dev_entry_t *ce = sysfs_get_device_entry(child_dev);
+            if (!ce)
+                return NULL;
+            strcpy(sys_dirent.name, child->name);
+            sys_dirent.ino = ce->dir.i_ino;
+            return &sys_dirent;
+        }
+        i++;
+        child = child->next;
+    }
     return NULL;
 }
 
@@ -480,6 +518,17 @@ static struct inode *sys_devdir_finddir(struct inode *node, const char *name)
         return &e->f_bus;
     if (!strcmp(name, "driver"))
         return &e->f_driver;
+    struct kobject *child = e->dev ? e->dev->kobj.children : NULL;
+    while (child) {
+        if (!strcmp(child->name, name)) {
+            struct device *child_dev = CONTAINER_OF(child, struct device, kobj);
+            sysfs_dev_entry_t *ce = sysfs_get_device_entry(child_dev);
+            if (!ce)
+                return NULL;
+            return &ce->dir;
+        }
+        child = child->next;
+    }
     return NULL;
 }
 
@@ -578,16 +627,21 @@ static struct dirent *sys_devices_readdir(struct file *file, uint32_t index)
     struct kset *kset = device_model_devices_kset();
     if (!kset)
         return NULL;
-    struct kobject *cur = kset->list;
     uint32_t i = 0;
-    while (cur) {
+    struct kobject *cur;
+    list_for_each_entry(cur, &kset->list, entry) {
+        if (cur->parent)
+            continue;
         if (i == index) {
+            struct device *dev = CONTAINER_OF(cur, struct device, kobj);
+            sysfs_dev_entry_t *e = sysfs_get_device_entry(dev);
+            if (!e)
+                return NULL;
             strcpy(sys_dirent.name, cur->name);
-            sys_dirent.ino = 0x6000 + index;
+            sys_dirent.ino = e->dir.i_ino;
             return &sys_dirent;
         }
         i++;
-        cur = cur->next;
     }
     return NULL;
 }
@@ -597,13 +651,22 @@ static struct inode *sys_devices_finddir(struct inode *node, const char *name)
     (void)node;
     if (!name)
         return NULL;
-    struct device *dev = device_model_find_device(name);
-    if (!dev)
+    struct kset *kset = device_model_devices_kset();
+    if (!kset)
         return NULL;
-    sysfs_dev_entry_t *e = sysfs_get_device_entry(dev);
-    if (!e)
-        return NULL;
-    return &e->dir;
+    struct kobject *cur;
+    list_for_each_entry(cur, &kset->list, entry) {
+        if (cur->parent)
+            continue;
+        if (!strcmp(cur->name, name)) {
+            struct device *dev = CONTAINER_OF(cur, struct device, kobj);
+            sysfs_dev_entry_t *e = sysfs_get_device_entry(dev);
+            if (!e)
+                return NULL;
+            return &e->dir;
+        }
+    }
+    return NULL;
 }
 
 static struct dirent *sys_bus_readdir(struct file *file, uint32_t index)
@@ -613,6 +676,11 @@ static struct dirent *sys_bus_readdir(struct file *file, uint32_t index)
     if (index == 0) {
         strcpy(sys_dirent.name, "platform");
         sys_dirent.ino = sys_bus_platform.i_ino;
+        return &sys_dirent;
+    }
+    if (index == 1) {
+        strcpy(sys_dirent.name, "pci");
+        sys_dirent.ino = sys_bus_pci.i_ino;
         return &sys_dirent;
     }
     return NULL;
@@ -625,6 +693,8 @@ static struct inode *sys_bus_finddir(struct inode *node, const char *name)
         return NULL;
     if (!strcmp(name, "platform"))
         return &sys_bus_platform;
+    if (!strcmp(name, "pci"))
+        return &sys_bus_pci;
     return NULL;
 }
 
@@ -657,23 +727,159 @@ static struct inode *sys_bus_platform_finddir(struct inode *node, const char *na
     return NULL;
 }
 
+static struct dirent *sys_bus_pci_readdir(struct file *file, uint32_t index)
+{
+    struct inode *node = file->dentry->inode;
+    (void)node;
+    if (index == 0) {
+        strcpy(sys_dirent.name, "devices");
+        sys_dirent.ino = sys_bus_pci_devices.i_ino;
+        return &sys_dirent;
+    }
+    if (index == 1) {
+        strcpy(sys_dirent.name, "drivers");
+        sys_dirent.ino = sys_bus_pci_drivers.i_ino;
+        return &sys_dirent;
+    }
+    return NULL;
+}
+
+static struct inode *sys_bus_pci_finddir(struct inode *node, const char *name)
+{
+    (void)node;
+    if (!name)
+        return NULL;
+    if (!strcmp(name, "devices"))
+        return &sys_bus_pci_devices;
+    if (!strcmp(name, "drivers"))
+        return &sys_bus_pci_drivers;
+    return NULL;
+}
+
+static struct dirent *sys_bus_platform_devices_readdir(struct file *file, uint32_t index)
+{
+    struct inode *node = file->dentry->inode;
+    (void)node;
+    struct bus_type *bus = device_model_platform_bus();
+    if (!bus)
+        return NULL;
+    uint32_t i = 0;
+    struct device *dev;
+    list_for_each_entry(dev, &bus->devices, bus_list) {
+        if (dev->type && !strcmp(dev->type, "platform-root"))
+            continue;
+        if (i == index) {
+            strcpy(sys_dirent.name, dev->kobj.name);
+            sys_dirent.ino = 0x6100 + index;
+            return &sys_dirent;
+        }
+        i++;
+    }
+    return NULL;
+}
+
+static struct inode *sys_bus_platform_devices_finddir(struct inode *node, const char *name)
+{
+    (void)node;
+    if (!name)
+        return NULL;
+    struct bus_type *bus = device_model_platform_bus();
+    if (!bus)
+        return NULL;
+    struct device *dev;
+    list_for_each_entry(dev, &bus->devices, bus_list) {
+        if (dev->type && !strcmp(dev->type, "platform-root"))
+            continue;
+        if (!strcmp(dev->kobj.name, name)) {
+            sysfs_dev_entry_t *e = sysfs_get_device_entry(dev);
+            if (!e)
+                return NULL;
+            return &e->dir;
+        }
+    }
+    return NULL;
+}
+
+static struct dirent *sys_bus_pci_devices_readdir(struct file *file, uint32_t index)
+{
+    struct inode *node = file->dentry->inode;
+    (void)node;
+    struct bus_type *bus = device_model_pci_bus();
+    if (!bus)
+        return NULL;
+    uint32_t i = 0;
+    struct device *dev;
+    list_for_each_entry(dev, &bus->devices, bus_list) {
+        if (dev->type && !strcmp(dev->type, "pci-root"))
+            continue;
+        if (i == index) {
+            strcpy(sys_dirent.name, dev->kobj.name);
+            sys_dirent.ino = 0x6200 + index;
+            return &sys_dirent;
+        }
+        i++;
+    }
+    return NULL;
+}
+
+static struct inode *sys_bus_pci_devices_finddir(struct inode *node, const char *name)
+{
+    (void)node;
+    if (!name)
+        return NULL;
+    struct bus_type *bus = device_model_pci_bus();
+    if (!bus)
+        return NULL;
+    struct device *dev;
+    list_for_each_entry(dev, &bus->devices, bus_list) {
+        if (dev->type && !strcmp(dev->type, "pci-root"))
+            continue;
+        if (!strcmp(dev->kobj.name, name)) {
+            sysfs_dev_entry_t *e = sysfs_get_device_entry(dev);
+            if (!e)
+                return NULL;
+            return &e->dir;
+        }
+    }
+    return NULL;
+}
+
 static struct dirent *sys_bus_platform_drivers_readdir(struct file *file, uint32_t index)
 {
     struct inode *node = file->dentry->inode;
     (void)node;
-    struct kset *kset = device_model_drivers_kset();
-    if (!kset)
+    struct bus_type *bus = device_model_platform_bus();
+    if (!bus)
         return NULL;
-    struct kobject *cur = kset->list;
     uint32_t i = 0;
-    while (cur) {
+    struct device_driver *drv;
+    list_for_each_entry(drv, &bus->drivers, bus_list) {
         if (i == index) {
-            strcpy(sys_dirent.name, cur->name);
-            sys_dirent.ino = 0x7600 + index;
+            strcpy(sys_dirent.name, drv->kobj.name);
+            sys_dirent.ino = 0x7700 + index;
             return &sys_dirent;
         }
         i++;
-        cur = cur->next;
+    }
+    return NULL;
+}
+
+static struct dirent *sys_bus_pci_drivers_readdir(struct file *file, uint32_t index)
+{
+    struct inode *node = file->dentry->inode;
+    (void)node;
+    struct bus_type *bus = device_model_pci_bus();
+    if (!bus)
+        return NULL;
+    uint32_t i = 0;
+    struct device_driver *drv;
+    list_for_each_entry(drv, &bus->drivers, bus_list) {
+        if (i == index) {
+            strcpy(sys_dirent.name, drv->kobj.name);
+            sys_dirent.ino = 0x7a00 + index;
+            return &sys_dirent;
+        }
+        i++;
     }
     return NULL;
 }
@@ -685,16 +891,15 @@ static struct dirent *sys_class_readdir(struct file *file, uint32_t index)
     struct kset *kset = device_model_classes_kset();
     if (!kset)
         return NULL;
-    struct kobject *cur = kset->list;
     uint32_t i = 0;
-    while (cur) {
+    struct kobject *cur;
+    list_for_each_entry(cur, &kset->list, entry) {
         if (i == index) {
             strcpy(sys_dirent.name, cur->name);
             sys_dirent.ino = 0x8700 + index;
             return &sys_dirent;
         }
         i++;
-        cur = cur->next;
     }
     return NULL;
 }
@@ -722,16 +927,15 @@ static struct dirent *sys_class_dir_readdir(struct file *file, uint32_t index)
     sysfs_class_entry_t *e = (sysfs_class_entry_t*)(uintptr_t)node->impl;
     if (!e || !e->cls)
         return NULL;
-    struct device *cur = e->cls->devices;
     uint32_t i = 0;
-    while (cur) {
+    struct device *cur;
+    list_for_each_entry(cur, &e->cls->devices, class_list) {
         if (i == index) {
             strcpy(sys_dirent.name, cur->kobj.name);
             sys_dirent.ino = 0x8900 + index;
             return &sys_dirent;
         }
         i++;
-        cur = cur->class_next;
     }
     return NULL;
 }
@@ -743,8 +947,8 @@ static struct inode *sys_class_dir_finddir(struct inode *node, const char *name)
     sysfs_class_entry_t *e = (sysfs_class_entry_t*)(uintptr_t)node->impl;
     if (!e || !e->cls)
         return NULL;
-    struct device *cur = e->cls->devices;
-    while (cur) {
+    struct device *cur;
+    list_for_each_entry(cur, &e->cls->devices, class_list) {
         if (!strcmp(cur->kobj.name, name)) {
             sysfs_dev_entry_t *de = sysfs_get_device_entry(cur);
             if (!de)
@@ -752,7 +956,6 @@ static struct inode *sys_class_dir_finddir(struct inode *node, const char *name)
             de->dir.f_ops = &sys_devdir_ops;
             return &de->dir;
         }
-        cur = cur->class_next;
     }
     return NULL;
 }
@@ -762,20 +965,39 @@ static struct inode *sys_bus_platform_drivers_finddir(struct inode *node, const 
     (void)node;
     if (!name)
         return NULL;
-    struct kset *kset = device_model_drivers_kset();
-    if (!kset)
+    struct bus_type *bus = device_model_platform_bus();
+    if (!bus)
         return NULL;
-    struct kobject *cur = kset->list;
-    while (cur) {
-        if (!strcmp(cur->name, name)) {
-            struct device_driver *drv = CONTAINER_OF(cur, struct device_driver, kobj);
+    struct device_driver *drv;
+    list_for_each_entry(drv, &bus->drivers, bus_list) {
+        if (!strcmp(drv->kobj.name, name)) {
             sysfs_drv_entry_t *e = sysfs_get_driver_entry(drv);
             if (!e)
                 return NULL;
             e->dir.f_ops = &sys_drvdir_ops;
             return &e->dir;
         }
-        cur = cur->next;
+    }
+    return NULL;
+}
+
+static struct inode *sys_bus_pci_drivers_finddir(struct inode *node, const char *name)
+{
+    (void)node;
+    if (!name)
+        return NULL;
+    struct bus_type *bus = device_model_pci_bus();
+    if (!bus)
+        return NULL;
+    struct device_driver *drv;
+    list_for_each_entry(drv, &bus->drivers, bus_list) {
+        if (!strcmp(drv->kobj.name, name)) {
+            sysfs_drv_entry_t *e = sysfs_get_driver_entry(drv);
+            if (!e)
+                return NULL;
+            e->dir.f_ops = &sys_drvdir_ops;
+            return &e->dir;
+        }
     }
     return NULL;
 }
@@ -893,13 +1115,33 @@ static struct file_operations sys_bus_platform_dir_ops = {
     .ioctl = NULL
 };
 
+static struct file_operations sys_bus_pci_dir_ops = {
+    .read = NULL,
+    .write = NULL,
+    .open = NULL,
+    .close = NULL,
+    .readdir = sys_bus_pci_readdir,
+    .finddir = sys_bus_pci_finddir,
+    .ioctl = NULL
+};
+
 static struct file_operations sys_bus_platform_devices_ops = {
     .read = NULL,
     .write = NULL,
     .open = NULL,
     .close = NULL,
-    .readdir = sys_devices_readdir,
-    .finddir = sys_devices_finddir,
+    .readdir = sys_bus_platform_devices_readdir,
+    .finddir = sys_bus_platform_devices_finddir,
+    .ioctl = NULL
+};
+
+static struct file_operations sys_bus_pci_devices_ops = {
+    .read = NULL,
+    .write = NULL,
+    .open = NULL,
+    .close = NULL,
+    .readdir = sys_bus_pci_devices_readdir,
+    .finddir = sys_bus_pci_devices_finddir,
     .ioctl = NULL
 };
 
@@ -910,6 +1152,16 @@ static struct file_operations sys_bus_platform_drivers_ops = {
     .close = NULL,
     .readdir = sys_bus_platform_drivers_readdir,
     .finddir = sys_bus_platform_drivers_finddir,
+    .ioctl = NULL
+};
+
+static struct file_operations sys_bus_pci_drivers_ops = {
+    .read = NULL,
+    .write = NULL,
+    .open = NULL,
+    .close = NULL,
+    .readdir = sys_bus_pci_drivers_readdir,
+    .finddir = sys_bus_pci_drivers_finddir,
     .ioctl = NULL
 };
 
@@ -1024,6 +1276,30 @@ static int sysfs_fill_super(struct super_block *sb, void *data, int silent)
     sys_bus_platform_drivers.gid = 0;
     sys_bus_platform_drivers.i_mode = 0555;
 
+    memset(&sys_bus_pci, 0, sizeof(sys_bus_pci));
+    sys_bus_pci.flags = FS_DIRECTORY;
+    sys_bus_pci.i_ino = 12;
+    sys_bus_pci.f_ops = &sys_bus_pci_dir_ops;
+    sys_bus_pci.uid = 0;
+    sys_bus_pci.gid = 0;
+    sys_bus_pci.i_mode = 0555;
+
+    memset(&sys_bus_pci_devices, 0, sizeof(sys_bus_pci_devices));
+    sys_bus_pci_devices.flags = FS_DIRECTORY;
+    sys_bus_pci_devices.i_ino = 13;
+    sys_bus_pci_devices.f_ops = &sys_bus_pci_devices_ops;
+    sys_bus_pci_devices.uid = 0;
+    sys_bus_pci_devices.gid = 0;
+    sys_bus_pci_devices.i_mode = 0555;
+
+    memset(&sys_bus_pci_drivers, 0, sizeof(sys_bus_pci_drivers));
+    sys_bus_pci_drivers.flags = FS_DIRECTORY;
+    sys_bus_pci_drivers.i_ino = 14;
+    sys_bus_pci_drivers.f_ops = &sys_bus_pci_drivers_ops;
+    sys_bus_pci_drivers.uid = 0;
+    sys_bus_pci_drivers.gid = 0;
+    sys_bus_pci_drivers.i_mode = 0555;
+
     memset(&sys_kernel_version, 0, sizeof(sys_kernel_version));
     sys_kernel_version.flags = FS_FILE;
     sys_kernel_version.i_ino = 9;
@@ -1045,7 +1321,7 @@ static int sysfs_fill_super(struct super_block *sb, void *data, int silent)
     memset(&sys_kernel_uevent, 0, sizeof(sys_kernel_uevent));
     sys_kernel_uevent.flags = FS_FILE;
     sys_kernel_uevent.i_ino = 11;
-    sys_kernel_uevent.i_size = 512;
+    sys_kernel_uevent.i_size = 4096;
     sys_kernel_uevent.f_ops = &sys_read_kernel_uevent_ops;
     sys_kernel_uevent.uid = 0;
     sys_kernel_uevent.gid = 0;

@@ -1,13 +1,15 @@
 #ifndef LINUX_KOBJECT_H
 #define LINUX_KOBJECT_H
 
-#include "linux/kref.h"
+#include "kref.h"
+#include "list.h"
 
 struct kobject {
     char name[32];
     struct kobject *parent;
     struct kobject *children;
     struct kobject *next;
+    struct list_head entry;
     struct kref kref;
     struct kobj_type *ktype;
     void (*release)(struct kobject *kobj);
@@ -19,7 +21,7 @@ struct kobj_type {
 
 struct kset {
     struct kobject kobj;
-    struct kobject *list;
+    struct list_head list;
 };
 
 void kobject_init(struct kobject *kobj, const char *name, void (*release)(struct kobject *));

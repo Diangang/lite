@@ -2,6 +2,7 @@
 #define LINUX_SCHED_H
 
 #include <stdint.h>
+#include "linux/list.h"
 #include "linux/wait.h"
 #include "linux/mm.h"
 #include "linux/fs_struct.h"
@@ -14,6 +15,7 @@ struct task_struct {
     uint32_t pid;
     struct task_struct *parent;
     struct thread_struct thread;
+    struct list_head tasks;
     uint32_t wake_jiffies;
     int state;
     int time_slice;
@@ -30,7 +32,6 @@ struct task_struct {
     uint32_t umask;
     void *waitq;
     struct task_struct *wait_next;
-    struct task_struct *next;
 };
 
 enum { TASK_TIMESLICE_TICKS = 3 };
@@ -42,7 +43,7 @@ enum {
     TASK_ZOMBIE = 3
 };
 
-extern struct task_struct *task_head;
+extern struct list_head task_list_head;
 extern struct task_struct *current;
 extern uint32_t next_task_id;
 extern wait_queue_t exit_waitq;

@@ -191,10 +191,10 @@ int sys_fork(struct pt_regs *regs)
     task->umask = current->umask;
     task->waitq = NULL;
     task->wait_next = NULL;
+    INIT_LIST_HEAD(&task->tasks);
 
     uint32_t flags = irq_save();
-    task->next = task_head->next;
-    task_head->next = task;
+    list_add_tail(&task->tasks, &task_list_head);
     irq_restore(flags);
 
     return (int)task->pid;
@@ -256,10 +256,10 @@ static int task_create_internal(void (*entry)(void), const char *program)
     }
     task->waitq = NULL;
     task->wait_next = NULL;
+    INIT_LIST_HEAD(&task->tasks);
 
     uint32_t flags = irq_save();
-    task->next = task_head->next;
-    task_head->next = task;
+    list_add_tail(&task->tasks, &task_list_head);
     irq_restore(flags);
 
     return (int)task->pid;
@@ -277,6 +277,6 @@ int kernel_create_user(const char *program)
 
 void fork_init(void)
 {
-    if (!task_head || !current)
+    if (!current || list_empty(&task_list_head))
         panic("fork_init before sched_init.");
 }

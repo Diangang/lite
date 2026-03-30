@@ -5,7 +5,7 @@
 #define OFFSETOF(type, member) ((uint32_t)(&((type*)0)->member))
 #define CONTAINER_OF(ptr, type, member) ((type*)((uint8_t*)(ptr) - OFFSETOF(type, member)))
 
-static struct bus_type *bus_list = NULL;
+static LIST_HEAD(bus_list_head);
 
 static void bus_release_kobj(struct kobject *kobj)
 {
@@ -57,7 +57,9 @@ struct bus_type *bus_register(const char *name, int (*match)(struct device *, st
     memset(bus, 0, sizeof(*bus));
     kobject_init(&bus->kobj, name, bus_release_kobj);
     bus->match = match ? match : bus_default_match;
-    bus->next = bus_list;
-    bus_list = bus;
+    INIT_LIST_HEAD(&bus->list);
+    INIT_LIST_HEAD(&bus->devices);
+    INIT_LIST_HEAD(&bus->drivers);
+    list_add_tail(&bus->list, &bus_list_head);
     return bus;
 }

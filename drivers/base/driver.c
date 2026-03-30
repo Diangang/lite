@@ -7,19 +7,17 @@ static void try_bind_device(struct bus_type *bus, struct device *dev)
         return;
     if (dev->driver)
         return;
-    struct device_driver *drv = bus->drivers;
-    while (drv) {
+    struct device_driver *drv;
+    list_for_each_entry(drv, &bus->drivers, bus_list) {
         if (bus->match && bus->match(dev, drv)) {
             dev->driver = drv;
             if (drv->probe && drv->probe(dev) != 0) {
                 dev->driver = NULL;
-                drv = drv->next;
                 continue;
             }
             device_uevent_emit("bind", dev);
             return;
         }
-        drv = drv->next;
     }
 }
 
@@ -46,19 +44,17 @@ int driver_register(struct device_driver *drv)
 {
     if (!drv || !drv->bus)
         return -1;
-    struct device_driver *cur = drv->bus->drivers;
-    while (cur) {
+    struct device_driver *cur;
+    list_for_each_entry(cur, &drv->bus->drivers, bus_list) {
         if (!strcmp(cur->kobj.name, drv->kobj.name))
             return -1;
-        cur = cur->next;
     }
     kset_add(device_model_drivers_kset(), &drv->kobj);
-    drv->next = drv->bus->drivers;
-    drv->bus->drivers = drv;
-    struct device *dev = drv->bus->devices;
-    while (dev) {
+    INIT_LIST_HEAD(&drv->bus_list);
+    list_add_tail(&drv->bus_list, &drv->bus->drivers);
+    struct device *dev;
+    list_for_each_entry(dev, &drv->bus->devices, bus_list) {
         try_bind_device(drv->bus, dev);
-        dev = (struct device*)dev->kobj.next;
     }
     return 0;
 }
@@ -67,27 +63,15 @@ int driver_unregister(struct device_driver *drv)
 {
     if (!drv || !drv->bus)
         return -1;
-    struct device *dev = drv->bus->devices;
-    while (dev) {
+    struct device *dev;
+    list_for_each_entry(dev, &drv->bus->devices, bus_list) {
         if (dev->driver == drv)
             device_unbind(dev);
-        dev = (struct device*)dev->kobj.next;
     }
-    struct device_driver *prev = NULL;
-    struct device_driver *cur = drv->bus->drivers;
-    while (cur) {
-        if (cur == drv) {
-            if (prev)
-                prev->next = cur->next;
-            else
-                drv->bus->drivers = cur->next;
-            kset_remove(device_model_drivers_kset(), &drv->kobj);
-            return 0;
-        }
-        prev = cur;
-        cur = cur->next;
-    }
-    return -1;
+    if (drv->bus_list.next && drv->bus_list.prev)
+        list_del(&drv->bus_list);
+    kset_remove(device_model_drivers_kset(), &drv->kobj);
+    return 0;
 }
 
 void init_driver(struct device_driver *drv, const char *name, struct bus_type *bus, int (*probe)(struct device *))

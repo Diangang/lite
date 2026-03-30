@@ -2,7 +2,7 @@
 #define LINUX_RBTREE_H
 
 #include <stddef.h>
-#include "linux/kernel.h"
+#include <linux/kernel.h>
 
 struct rb_node {
 	struct rb_node *rb_parent;

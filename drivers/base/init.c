@@ -33,16 +33,23 @@ void driver_init(void)
     memset(&platform_bus, 0, sizeof(platform_bus));
     kobject_init(&platform_bus.kobj, "platform", NULL);
     platform_bus.match = bus_default_match;
-    platform_bus.devices = NULL;
-    platform_bus.drivers = NULL;
-    platform_bus.next = NULL;
+    INIT_LIST_HEAD(&platform_bus.list);
+    INIT_LIST_HEAD(&platform_bus.devices);
+    INIT_LIST_HEAD(&platform_bus.drivers);
     memset(&console_class, 0, sizeof(console_class));
     kobject_init(&console_class.kobj, "console", NULL);
     memset(&tty_class, 0, sizeof(tty_class));
     kobject_init(&tty_class.kobj, "tty", NULL);
+    INIT_LIST_HEAD(&console_class.list);
+    INIT_LIST_HEAD(&console_class.devices);
+    INIT_LIST_HEAD(&tty_class.list);
+    INIT_LIST_HEAD(&tty_class.devices);
     device_model_kset_init();
     class_register(&console_class);
     class_register(&tty_class);
     device_model_mark_inited();
+    struct device *root = device_register_simple_full("platform", "platform-root", &platform_bus, NULL, NULL, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    if (root)
+        device_model_set_platform_root(root);
     printf("Driver core initialized.\n");
 }

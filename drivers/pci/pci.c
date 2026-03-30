@@ -6,6 +6,7 @@
 
 static struct bus_type *pci_bus;
 static uint8_t pci_bus_scanned[256];
+static struct device *pci_bus_parent[256];
 static uint32_t pci_bus_io_base[256];
 static uint32_t pci_bus_io_limit[256];
 static uint32_t pci_bus_mem_base[256];
@@ -217,6 +218,8 @@ static uint8_t pci_assign_bridge_bus(struct device *pdev, uint8_t parent_bus)
         pci_config_write32_device(pdev, 0x18, new_reg);
         device_uevent_emit("busnum", pdev);
     }
+    if (secondary)
+        pci_bus_parent[secondary] = pdev;
     return secondary;
 }
 
@@ -237,6 +240,8 @@ static void pci_register_function(uint8_t bus, uint8_t dev, uint8_t func)
     struct device *pdev = device_register_simple_full(name, "pci", pci_bus, NULL, NULL, vendor, device, class_id, subclass_id, prog_if, revision, bus, dev, func);
     if (!pdev)
         return;
+    if (pci_bus_parent[bus])
+        device_set_parent(pdev, pci_bus_parent[bus]);
     if (class_id == 0x01 && subclass_id == 0x08)
         device_uevent_emit("nvme", pdev);
     if (header == 0) {
@@ -402,6 +407,7 @@ static int pci_init(void)
     if (!pci_bus)
         return -1;
     memset(pci_bus_scanned, 0, sizeof(pci_bus_scanned));
+    memset(pci_bus_parent, 0, sizeof(pci_bus_parent));
     memset(pci_bus_io_base, 0, sizeof(pci_bus_io_base));
     memset(pci_bus_io_limit, 0, sizeof(pci_bus_io_limit));
     memset(pci_bus_mem_base, 0, sizeof(pci_bus_mem_base));
@@ -409,6 +415,9 @@ static int pci_init(void)
     memset(pci_bus_pref_base, 0, sizeof(pci_bus_pref_base));
     memset(pci_bus_pref_limit, 0, sizeof(pci_bus_pref_limit));
     pci_next_bus = 1;
+    struct device *root = device_register_simple_full("pci0000:00", "pci-root", pci_bus, NULL, NULL, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    if (root)
+        pci_bus_parent[0] = root;
     pci_scan_bus(0);
     return 0;
 }

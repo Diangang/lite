@@ -26,6 +26,7 @@ void kobject_init(struct kobject *kobj, const char *name, void (*release)(struct
     kref_init(&kobj->kref);
     kobj->ktype = NULL;
     kobj->release = release;
+    INIT_LIST_HEAD(&kobj->entry);
 }
 
 struct kobject *kobject_get(struct kobject *kobj)
@@ -48,35 +49,22 @@ void kset_init(struct kset *kset, const char *name)
     if (!kset)
         return;
     kobject_init(&kset->kobj, name, NULL);
-    kset->list = NULL;
+    INIT_LIST_HEAD(&kset->list);
 }
 
 void kset_add(struct kset *kset, struct kobject *kobj)
 {
     if (!kset || !kobj)
         return;
-    kobj->parent = &kset->kobj;
-    kobj->next = kset->list;
-    kset->list = kobj;
+    if (!kobj->entry.next || !kobj->entry.prev)
+        INIT_LIST_HEAD(&kobj->entry);
+    list_add_tail(&kobj->entry, &kset->list);
 }
 
 void kset_remove(struct kset *kset, struct kobject *kobj)
 {
     if (!kset || !kobj)
         return;
-    struct kobject *prev = NULL;
-    struct kobject *cur = kset->list;
-    while (cur) {
-        if (cur == kobj) {
-            if (prev)
-                prev->next = cur->next;
-            else
-                kset->list = cur->next;
-            kobj->next = NULL;
-            kobj->parent = NULL;
-            return;
-        }
-        prev = cur;
-        cur = cur->next;
-    }
+    if (kobj->entry.next && kobj->entry.prev)
+        list_del(&kobj->entry);
 }

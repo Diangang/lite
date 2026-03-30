@@ -56,7 +56,7 @@ static int nvme_probe(struct device *dev)
     volatile uint32_t *reg = (volatile uint32_t *)mmio;
     uint64_t cap = ((uint64_t)reg[1] << 32) | reg[0];
     uint32_t vs = reg[2];
-    printf("nvme %s cap=0x%08x%08x vs=0x%08x\n",
+    printf("nvme %s cap_hi=0x%x cap_lo=0x%x vs=0x%x\n",
            dev->kobj.name, (uint32_t)(cap >> 32), (uint32_t)cap, vs);
     iounmap(mmio);
     device_uevent_emit("nvmebar", dev);

@@ -7,13 +7,13 @@ uint32_t task_dump_tasks(char *buf, uint32_t len)
 {
     if (!buf || len == 0)
         return 0;
-    if (!task_head)
+    if (list_empty(&task_list_head))
         return 0;
 
     uint32_t off = 0;
     proc_buf_append(buf, &off, len, "PID   STATE     WAKE    CURRENT  NAME\n");
-    struct task_struct *task = task_head;
-    do {
+    struct task_struct *task;
+    list_for_each_entry(task, &task_list_head, tasks) {
         const char *state = "RUNNABLE";
         if (task->state == 1)
             state = "SLEEPING";
@@ -34,8 +34,7 @@ uint32_t task_dump_tasks(char *buf, uint32_t len)
         proc_buf_append(buf, &off, len, "\n");
         if (off >= len)
             break;
-        task = task->next;
-    } while (task && task != task_head);
+    }
 
     if (off < len)
         buf[off] = 0;

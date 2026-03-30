@@ -7,10 +7,9 @@ int pcie_scan_device(struct device *dev)
 {
     if (!dev)
         return 0;
-    uint16_t status = pci_config_read16_device(dev, 0x06);
-    if (!(status & 0x10))
-        return 0;
     uint8_t cap = pci_config_read8_device(dev, 0x34);
+    if (!cap)
+        return 0;
     int limit = 0;
     while (cap && limit < 48) {
         uint8_t id = pci_config_read8_device(dev, cap);

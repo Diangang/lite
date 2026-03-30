@@ -10,18 +10,17 @@ int do_waitpid(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0,
     int want_any = (id == (uint32_t)-1);
     if (id == 0)
         return -1;
-    if (!task_head || !current)
+    if (list_empty(&task_list_head) || !current)
         return -1;
     if (!want_any && current->pid == id)
         return -1;
 
     for (;;) {
         uint32_t flags = irq_save();
-        struct task_struct *prev = task_head;
-        struct task_struct *t = task_head->next;
         int has_child = 0;
         int has_target = 0;
-        while (t && t != task_head) {
+        struct task_struct *t;
+        list_for_each_entry(t, &task_list_head, tasks) {
             if (t->parent == current) {
                 has_child = 1;
                 if (want_any || t->pid == id) {
@@ -33,15 +32,13 @@ int do_waitpid(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0,
                         if (out_info0) *out_info0 = t->exit_info0;
                         if (out_info1) *out_info1 = t->exit_info1;
                         int waited = (int)t->pid;
-                        task_destroy(prev, t);
+                        task_destroy(t);
                         return waited;
                     }
                     if (!want_any)
                         break;
                 }
             }
-            prev = t;
-            t = t->next;
         }
         if (!has_child || !has_target) {
             irq_restore(flags);
