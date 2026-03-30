@@ -12,6 +12,7 @@
 #include "linux/mmzone.h"
 #include "linux/vmscan.h"
 #include "linux/pagemap.h"
+#include "linux/bootmem.h"
 #include "asm/pgtable.h"
 
 static struct dirent proc_dirent;
@@ -170,6 +171,9 @@ static uint32_t proc_read_meminfo(struct inode *node, uint32_t offset, uint32_t 
     uint32_t zone_dma_free_kb = (uint32_t)(zone_free_pages(&contig_page_data.zone_dma) * (PAGE_SIZE / 1024));
     uint32_t zone_normal_total_kb = contig_page_data.zone_normal.present_pages * (PAGE_SIZE / 1024);
     uint32_t zone_normal_free_kb = (uint32_t)(zone_free_pages(&contig_page_data.zone_normal) * (PAGE_SIZE / 1024));
+    uint32_t e820_ram_kb = bootmem_ram_kb();
+    uint32_t e820_reserved_kb = bootmem_reserved_kb();
+    uint32_t lowmem_end_kb = bootmem_lowmem_end() / 1024;
     if (contig_page_data.zone_dma.spanned_pages) {
         min_kb += contig_page_data.zone_dma.watermark[WMARK_MIN] * (PAGE_SIZE / 1024);
         low_kb += contig_page_data.zone_dma.watermark[WMARK_LOW] * (PAGE_SIZE / 1024);
@@ -184,6 +188,12 @@ static uint32_t proc_read_meminfo(struct inode *node, uint32_t offset, uint32_t 
     buf_append_u32(tmp, &off, sizeof(tmp), total_kb);
     buf_append(tmp, &off, sizeof(tmp), " kB\nMemFree: ");
     buf_append_u32(tmp, &off, sizeof(tmp), free_kb);
+    buf_append(tmp, &off, sizeof(tmp), " kB\nE820Ram: ");
+    buf_append_u32(tmp, &off, sizeof(tmp), e820_ram_kb);
+    buf_append(tmp, &off, sizeof(tmp), " kB\nE820Reserved: ");
+    buf_append_u32(tmp, &off, sizeof(tmp), e820_reserved_kb);
+    buf_append(tmp, &off, sizeof(tmp), " kB\nLowMemEnd: ");
+    buf_append_u32(tmp, &off, sizeof(tmp), lowmem_end_kb);
     buf_append(tmp, &off, sizeof(tmp), " kB\nMinFree: ");
     buf_append_u32(tmp, &off, sizeof(tmp), min_kb);
     buf_append(tmp, &off, sizeof(tmp), " kB\nLowFree: ");

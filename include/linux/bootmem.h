@@ -12,5 +12,8 @@ int bootmem_is_reserved(uint32_t base, uint32_t size);
 uint32_t bootmem_start(void);
 uint32_t bootmem_end(void);
 uint32_t bootmem_total_pages(void);
+uint32_t bootmem_lowmem_end(void);
+uint32_t bootmem_ram_kb(void);
+uint32_t bootmem_reserved_kb(void);
 
 #endif

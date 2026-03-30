@@ -9,6 +9,7 @@
 #include "linux/slab.h"
 #include "linux/rmap.h"
 #include "linux/swap.h"
+#include "linux/bootmem.h"
 
 static pgd_t* page_directory = NULL;
 static pgd_t* kernel_directory = NULL;
@@ -534,7 +535,10 @@ void paging_init(void)
     memset(page_directory, 0, PAGE_SIZE);
 
     uint32_t kernel_pde_base = pgd_index(PAGE_OFFSET);
-    uint32_t low_pdes = (128 * 1024 * 1024) / PGDIR_SIZE;
+    uint32_t lowmem_end = bootmem_lowmem_end();
+    uint32_t low_pdes = (lowmem_end + PGDIR_SIZE - 1) / PGDIR_SIZE;
+    if (low_pdes > (1024 - kernel_pde_base))
+        low_pdes = 1024 - kernel_pde_base;
     for (uint32_t pde_idx = 0; pde_idx < low_pdes; pde_idx++) {
         uint32_t pt_phys = (uint32_t)alloc_page(GFP_KERNEL);
         if (!pt_phys)
@@ -555,5 +559,7 @@ void paging_init(void)
     __asm__ volatile("mov %0, %%cr3" :: "r"(pgd_phys));
     kernel_directory = page_directory;
 
-    printf("PAGING: Kernel mapped at PAGE_OFFSET (0-128MB).\n");
+    printf("PAGING: Kernel mapped at PAGE_OFFSET (0-");
+    printf("%d", low_pdes * (PGDIR_SIZE / (1024 * 1024)));
+    printf("MB).\n");
 }
