@@ -13,6 +13,7 @@
 #include "linux/vmscan.h"
 #include "linux/pagemap.h"
 #include "linux/bootmem.h"
+#include "linux/memlayout.h"
 #include "asm/pgtable.h"
 
 static struct dirent proc_dirent;
@@ -22,6 +23,7 @@ static struct inode proc_sched;
 static struct inode proc_irq;
 static struct inode proc_maps;
 static struct inode proc_meminfo;
+static struct inode proc_iomem;
 static struct inode proc_cow;
 static struct inode proc_mounts;
 
@@ -59,6 +61,14 @@ static void buf_append_u32(char *buf, uint32_t *off, uint32_t cap, uint32_t v)
 {
     char tmp[32];
     itoa((int)v, 10, tmp);
+    buf_append(buf, off, cap, tmp);
+}
+
+static void buf_append_hex(char *buf, uint32_t *off, uint32_t cap, uint32_t v)
+{
+    char tmp[32];
+    itoa((int)v, 16, tmp);
+    buf_append(buf, off, cap, "0x");
     buf_append(buf, off, cap, tmp);
 }
 
@@ -160,20 +170,26 @@ static uint32_t proc_read_maps(struct inode *node, uint32_t offset, uint32_t siz
 static uint32_t proc_read_meminfo(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
-    static char tmp[512];
+    static char tmp[1536];
     uint32_t off = 0;
     uint32_t total_kb = (uint32_t)(totalram_pages() * (PAGE_SIZE / 1024));
     uint32_t free_kb = (uint32_t)(freeram_pages() * (PAGE_SIZE / 1024));
     uint32_t min_kb = 0;
     uint32_t low_kb = 0;
     uint32_t high_kb = 0;
-    uint32_t zone_dma_total_kb = contig_page_data.zone_dma.present_pages * (PAGE_SIZE / 1024);
+    uint32_t zone_dma_total_kb = contig_page_data.zone_dma.managed_pages * (PAGE_SIZE / 1024);
     uint32_t zone_dma_free_kb = (uint32_t)(zone_free_pages(&contig_page_data.zone_dma) * (PAGE_SIZE / 1024));
-    uint32_t zone_normal_total_kb = contig_page_data.zone_normal.present_pages * (PAGE_SIZE / 1024);
+    uint32_t zone_normal_total_kb = contig_page_data.zone_normal.managed_pages * (PAGE_SIZE / 1024);
     uint32_t zone_normal_free_kb = (uint32_t)(zone_free_pages(&contig_page_data.zone_normal) * (PAGE_SIZE / 1024));
     uint32_t e820_ram_kb = bootmem_ram_kb();
     uint32_t e820_reserved_kb = bootmem_reserved_kb();
     uint32_t lowmem_end_kb = bootmem_lowmem_end() / 1024;
+    uint32_t lowmem_phys_end_kb = memlayout_lowmem_phys_end() / 1024;
+    uint32_t direct_map_start_kb = memlayout_directmap_start() / 1024;
+    uint32_t direct_map_end_kb = memlayout_directmap_end() / 1024;
+    uint32_t vmalloc_start_kb = memlayout_vmalloc_start() / 1024;
+    uint32_t vmalloc_end_kb = memlayout_vmalloc_end() / 1024;
+    uint32_t fixaddr_start_kb = memlayout_fixaddr_start() / 1024;
     if (contig_page_data.zone_dma.spanned_pages) {
         min_kb += contig_page_data.zone_dma.watermark[WMARK_MIN] * (PAGE_SIZE / 1024);
         low_kb += contig_page_data.zone_dma.watermark[WMARK_LOW] * (PAGE_SIZE / 1024);
@@ -194,6 +210,18 @@ static uint32_t proc_read_meminfo(struct inode *node, uint32_t offset, uint32_t 
     buf_append_u32(tmp, &off, sizeof(tmp), e820_reserved_kb);
     buf_append(tmp, &off, sizeof(tmp), " kB\nLowMemEnd: ");
     buf_append_u32(tmp, &off, sizeof(tmp), lowmem_end_kb);
+    buf_append(tmp, &off, sizeof(tmp), " kB\nLowMemPhysEnd: ");
+    buf_append_u32(tmp, &off, sizeof(tmp), lowmem_phys_end_kb);
+    buf_append(tmp, &off, sizeof(tmp), " kB\nDirectMapStart: ");
+    buf_append_u32(tmp, &off, sizeof(tmp), direct_map_start_kb);
+    buf_append(tmp, &off, sizeof(tmp), " kB\nDirectMapEnd: ");
+    buf_append_u32(tmp, &off, sizeof(tmp), direct_map_end_kb);
+    buf_append(tmp, &off, sizeof(tmp), " kB\nVmallocStart: ");
+    buf_append_u32(tmp, &off, sizeof(tmp), vmalloc_start_kb);
+    buf_append(tmp, &off, sizeof(tmp), " kB\nVmallocEnd: ");
+    buf_append_u32(tmp, &off, sizeof(tmp), vmalloc_end_kb);
+    buf_append(tmp, &off, sizeof(tmp), " kB\nFixaddrStart: ");
+    buf_append_u32(tmp, &off, sizeof(tmp), fixaddr_start_kb);
     buf_append(tmp, &off, sizeof(tmp), " kB\nMinFree: ");
     buf_append_u32(tmp, &off, sizeof(tmp), min_kb);
     buf_append(tmp, &off, sizeof(tmp), " kB\nLowFree: ");
@@ -216,6 +244,86 @@ static uint32_t proc_read_meminfo(struct inode *node, uint32_t offset, uint32_t 
         return 0;
     uint32_t remain = off - offset;
     if (size > remain) size = remain;
+    memcpy(buffer, tmp + offset, size);
+    return size;
+}
+
+static const char *e820_type_name(uint32_t type)
+{
+    switch (type) {
+        case MULTIBOOT_MEMORY_AVAILABLE:
+            return "System RAM";
+        case MULTIBOOT_MEMORY_RESERVED:
+            return "reserved";
+        case MULTIBOOT_MEMORY_ACPI_RECLAIMABLE:
+            return "ACPI Reclaimable";
+        case MULTIBOOT_MEMORY_NVS:
+            return "ACPI NVS";
+        case MULTIBOOT_MEMORY_BADRAM:
+            return "Bad RAM";
+        default:
+            return "reserved";
+    }
+}
+
+static uint32_t proc_read_iomem(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+{
+    (void)node;
+    static char tmp[1024];
+    uint32_t off = 0;
+
+    uint32_t n = bootmem_e820_entries();
+    for (uint32_t i = 0; i < n; i++) {
+        uint32_t base = 0;
+        uint32_t len = 0;
+        uint32_t type = 0;
+        if (bootmem_e820_get(i, &base, &len, &type) != 0)
+            continue;
+        if (len == 0)
+            continue;
+        uint32_t end = base + len - 1;
+        buf_append_hex(tmp, &off, sizeof(tmp), base);
+        buf_append(tmp, &off, sizeof(tmp), "-");
+        buf_append_hex(tmp, &off, sizeof(tmp), end);
+        buf_append(tmp, &off, sizeof(tmp), " : ");
+        buf_append(tmp, &off, sizeof(tmp), e820_type_name(type));
+        buf_append(tmp, &off, sizeof(tmp), "\n");
+        if (off + 64 >= sizeof(tmp))
+            break;
+    }
+
+    uint32_t kstart = bootmem_kernel_phys_start();
+    uint32_t kend = bootmem_kernel_phys_end();
+    if (kend > kstart) {
+        buf_append_hex(tmp, &off, sizeof(tmp), kstart);
+        buf_append(tmp, &off, sizeof(tmp), "-");
+        buf_append_hex(tmp, &off, sizeof(tmp), kend - 1);
+        buf_append(tmp, &off, sizeof(tmp), " : Kernel\n");
+    }
+
+    uint32_t mc = bootmem_module_count();
+    for (uint32_t i = 0; i < mc; i++) {
+        uint32_t ms = 0;
+        uint32_t me = 0;
+        if (bootmem_module_get(i, &ms, &me) != 0)
+            continue;
+        if (me <= ms)
+            continue;
+        buf_append_hex(tmp, &off, sizeof(tmp), ms);
+        buf_append(tmp, &off, sizeof(tmp), "-");
+        buf_append_hex(tmp, &off, sizeof(tmp), me - 1);
+        buf_append(tmp, &off, sizeof(tmp), " : initramfs\n");
+        if (off + 64 >= sizeof(tmp))
+            break;
+    }
+
+    if (off < sizeof(tmp))
+        tmp[off] = 0;
+    if (offset >= off)
+        return 0;
+    uint32_t remain = off - offset;
+    if (size > remain)
+        size = remain;
     memcpy(buffer, tmp + offset, size);
     return size;
 }
@@ -686,16 +794,21 @@ static struct dirent *proc_readdir(struct file *file, uint32_t index)
         return &proc_dirent;
     }
     if (index == 5) {
+        strcpy(proc_dirent.name, "iomem");
+        proc_dirent.ino = proc_iomem.i_ino;
+        return &proc_dirent;
+    }
+    if (index == 6) {
         strcpy(proc_dirent.name, "cow");
         proc_dirent.ino = proc_cow.i_ino;
         return &proc_dirent;
     }
-    if (index == 6) {
+    if (index == 7) {
         strcpy(proc_dirent.name, "mounts");
         proc_dirent.ino = proc_mounts.i_ino;
         return &proc_dirent;
     }
-    if (index == 7) {
+    if (index == 8) {
         strcpy(proc_dirent.name, "self");
         proc_dirent.ino = 0x1000;
         return &proc_dirent;
@@ -718,6 +831,8 @@ static struct inode *proc_finddir(struct inode *node, const char *name)
         return &proc_maps;
     if (!strcmp(name, "meminfo"))
         return &proc_meminfo;
+    if (!strcmp(name, "iomem"))
+        return &proc_iomem;
     if (!strcmp(name, "cow"))
         return &proc_cow;
     if (!strcmp(name, "mounts"))
@@ -782,6 +897,16 @@ static struct file_operations proc_maps_ops = {
 
 static struct file_operations proc_meminfo_ops = {
     .read = proc_read_meminfo,
+    .write = NULL,
+    .open = NULL,
+    .close = NULL,
+    .readdir = NULL,
+    .finddir = NULL,
+    .ioctl = NULL
+};
+
+static struct file_operations proc_iomem_ops = {
+    .read = proc_read_iomem,
     .write = NULL,
     .open = NULL,
     .close = NULL,
@@ -879,6 +1004,15 @@ static int proc_fill_super(struct super_block *sb, void *data, int silent)
     proc_meminfo.uid = 0;
     proc_meminfo.gid = 0;
     proc_meminfo.i_mode = 0444;
+
+    memset(&proc_iomem, 0, sizeof(proc_iomem));
+    proc_iomem.flags = FS_FILE;
+    proc_iomem.i_ino = 9;
+    proc_iomem.i_size = 1024;
+    proc_iomem.f_ops = &proc_iomem_ops;
+    proc_iomem.uid = 0;
+    proc_iomem.gid = 0;
+    proc_iomem.i_mode = 0444;
 
     memset(&proc_cow, 0, sizeof(proc_cow));
     proc_cow.flags = FS_FILE;

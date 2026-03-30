@@ -24,6 +24,7 @@
 #include "linux/printk.h"
 #include "linux/tty.h"
 #include "linux/version.h"
+#include "linux/memlayout.h"
 
 extern initcall_t __initcall_start[];
 extern initcall_t __initcall_end[];
@@ -120,7 +121,7 @@ void start_kernel(struct multiboot_info* mbi, uint32_t magic)
 
     boot_mbi = *mbi;
     if (boot_mbi.flags & 0x4)
-        setup_command_line((const char *)phys_to_virt(boot_mbi.cmdline));
+        setup_command_line((const char *)memlayout_directmap_phys_to_virt(boot_mbi.cmdline));
     else
         setup_command_line(NULL);
 

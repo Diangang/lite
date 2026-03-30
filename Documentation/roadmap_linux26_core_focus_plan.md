@@ -36,13 +36,15 @@
 - 线性映射（direct mapping）动态化：
   - `paging_init()` 不再固定映射 0-128MB，改为按 `lowmem_end` 映射（至少覆盖实际 RAM 的低端部分）。
   - 明确 `PAGE_OFFSET` 直映区的上界与不可用区（为后续 vmalloc/fixmap/highmem 留出布局空间）。
+  - 强化 direct map 边界约束：核心路径禁止对非 lowmem 物理地址使用 `phys_to_virt`（应走 `ioremap/kmap`）。
 - 启动参数与内存布局可观测：
-  - 在启动日志或 `/proc/meminfo` 增加关键指标：e820 RAM 总量/RESERVED 总量、lowmem_end、direct map 覆盖范围。
+  - 在启动日志或 `/proc/meminfo` 增加关键指标：e820 RAM/RESERVED、lowmem_end、direct map 覆盖范围、spanned/present/managed 的差异。
+  - 增加 `/proc/iomem`（e820 等价物可视化），用于验证 RAM/RESERVED/Kernel/initramfs 区间。
 
 验收（必须全部满足）：
 - QEMU 不同内存大小（例如 128M/256M/512M）启动一致：direct mapping 覆盖随内存变化而变化。
 - page allocator 在 >128MB 的物理页存在时也能稳定分配并访问（不再“靠运气”）。
-- `bin/smoke` 回归通过。
+- `bin/smoke` 回归通过（512M 下 Large MMAP Touch 通过）。
 
 说明：这个里程碑并不是“外围可观测性”，而是保证 MM/缺页/回收的所有后续工作都有可靠的地址空间前提。
 

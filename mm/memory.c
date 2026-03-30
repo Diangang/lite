@@ -10,6 +10,8 @@
 #include "linux/rmap.h"
 #include "linux/swap.h"
 #include "linux/bootmem.h"
+#include "linux/memlayout.h"
+#include "linux/mmzone.h"
 
 static pgd_t* page_directory = NULL;
 static pgd_t* kernel_directory = NULL;
@@ -33,7 +35,7 @@ void map_page_ex(pgd_t* pgd, void* phys_addr, void* virt_addr, pteval_t flags)
         if (!new_table_phys)
             return (void)printf("VMM: Failed to allocate Page Table for 0x%x\n", virt_addr);
 
-        pte_t* new_table = (pte_t*)phys_to_virt(new_table_phys);
+        pte_t* new_table = (pte_t*)memlayout_directmap_phys_to_virt(new_table_phys);
         memset(new_table, 0, PAGE_SIZE);
         pgd[pde_idx] = new_table_phys | PTE_READ_WRITE | PTE_PRESENT;
         if (flags & PTE_USER)
@@ -46,7 +48,7 @@ void map_page_ex(pgd_t* pgd, void* phys_addr, void* virt_addr, pteval_t flags)
         pgd[pde_idx] |= PTE_USER;
     }
 
-    pte_t* table = (pte_t*)phys_to_virt(pgd[pde_idx] & ~(PAGE_SIZE - 1));
+    pte_t* table = (pte_t*)memlayout_directmap_phys_to_virt(pgd[pde_idx] & ~(PAGE_SIZE - 1));
     table[pte_idx] = ((uint32_t)phys_addr) | flags;
 
     __asm__ volatile("invlpg (%0)" :: "r" (virt_addr) : "memory");
@@ -70,7 +72,7 @@ int page_mapped(void* virt_addr)
     if (!pgd_present(pde))
         return 0;
 
-    pte_t* table = (pte_t*)phys_to_virt(pde & ~(PAGE_SIZE - 1));
+    pte_t* table = (pte_t*)memlayout_directmap_phys_to_virt(pde & ~(PAGE_SIZE - 1));
     pteval_t pte = table[pte_idx];
 
     return pte_present(pte) ? 1 : 0;
@@ -89,7 +91,7 @@ uint32_t virt_to_phys(void* virt_addr)
     if (!pgd_present(pde))
         return 0xFFFFFFFF;
 
-    pte_t* table = (pte_t*)phys_to_virt(pde & ~(PAGE_SIZE - 1));
+    pte_t* table = (pte_t*)memlayout_directmap_phys_to_virt(pde & ~(PAGE_SIZE - 1));
     pteval_t pte = table[pte_idx];
     if (!pte_present(pte))
         return 0xFFFFFFFF;
@@ -110,7 +112,7 @@ uint32_t virt_to_phys_pgd(pgd_t* pgd, void* virt_addr)
     if (!pgd_present(pde))
         return 0xFFFFFFFF;
 
-    pte_t* table = (pte_t*)phys_to_virt(pde & ~(PAGE_SIZE - 1));
+    pte_t* table = (pte_t*)memlayout_directmap_phys_to_virt(pde & ~(PAGE_SIZE - 1));
     pteval_t pte = table[pte_idx];
     if (!pte_present(pte))
         return 0xFFFFFFFF;
@@ -131,7 +133,7 @@ pteval_t get_pte_flags(pgd_t* pgd, void* virt_addr)
     if (!pgd_present(pde))
         return 0;
 
-    pte_t* table = (pte_t*)phys_to_virt(pde & ~(PAGE_SIZE - 1));
+    pte_t* table = (pte_t*)memlayout_directmap_phys_to_virt(pde & ~(PAGE_SIZE - 1));
     pteval_t pte = table[pte_idx];
     if (!pte_present(pte))
         return 0;
@@ -155,7 +157,7 @@ void set_pte_flags(pgd_t* pgd, void* virt_addr, pteval_t flags)
     if (flags & PTE_USER)
         pgd[pde_idx] |= PTE_USER;
 
-    pte_t* table = (pte_t*)phys_to_virt(pde & ~(PAGE_SIZE - 1));
+    pte_t* table = (pte_t*)memlayout_directmap_phys_to_virt(pde & ~(PAGE_SIZE - 1));
     pteval_t pte = table[pte_idx];
     if (!pte_present(pte))
         return;
@@ -177,7 +179,7 @@ void unmap_page_pgd(pgd_t* pgd, void* virt_addr)
     if (!pgd_present(pde))
         return;
 
-    pte_t* table = (pte_t*)phys_to_virt(pde & ~(PAGE_SIZE - 1));
+    pte_t* table = (pte_t*)memlayout_directmap_phys_to_virt(pde & ~(PAGE_SIZE - 1));
     pteval_t pte = table[pte_idx];
     if (!pte_present(pte))
         return;
@@ -204,7 +206,7 @@ void set_page_user_pgd(pgd_t* pgd, void* virt_addr)
     if (!pgd_present(pde))
         return;
 
-    pte_t* table = (pte_t*)phys_to_virt(pde & ~(PAGE_SIZE - 1));
+    pte_t* table = (pte_t*)memlayout_directmap_phys_to_virt(pde & ~(PAGE_SIZE - 1));
     pteval_t pte = table[pte_idx];
     if (!pte_present(pte))
         return;
@@ -228,7 +230,7 @@ void set_page_readonly_pgd(pgd_t* pgd, void* virt_addr)
     if (!pgd_present(pde))
         return;
 
-    pte_t* table = (pte_t*)phys_to_virt(pde & ~(PAGE_SIZE - 1));
+    pte_t* table = (pte_t*)memlayout_directmap_phys_to_virt(pde & ~(PAGE_SIZE - 1));
     pteval_t pte = table[pte_idx];
     if (!pte_present(pte))
         return;
@@ -244,7 +246,7 @@ pgd_t* pgd_clone_kernel(void)
     uint32_t new_dir_phys = (uint32_t)alloc_page(GFP_KERNEL);
     if (!new_dir_phys)
         return NULL;
-    pgd_t* new_dir = (pgd_t*)phys_to_virt(new_dir_phys);
+    pgd_t* new_dir = (pgd_t*)memlayout_directmap_phys_to_virt(new_dir_phys);
     memset(new_dir, 0, PAGE_SIZE);
 
     for (int i = 0; i < 1024; i++)
@@ -283,7 +285,7 @@ static int get_pte(pgd_t* pgd, uint32_t va, pgdval_t* out_pde, pteval_t* out_pte
     if (!pgd_present(pde))
         return 0;
 
-    pte_t* table = (pte_t*)phys_to_virt(pde & ~(PAGE_SIZE - 1));
+    pte_t* table = (pte_t*)memlayout_directmap_phys_to_virt(pde & ~(PAGE_SIZE - 1));
     pteval_t pte = table[pte_idx];
     if (!pte_present(pte))
         return 0;
@@ -420,6 +422,35 @@ void get_cow_stats(uint32_t *faults, uint32_t *copies)
     if (copies) *copies = cow_copies;
 }
 
+static void pf_oom_dump(uint32_t faulting_address, uint32_t eip)
+{
+    printf("PF OOM: addr=0x%x eip=0x%x memfree_kb=%d memtotal_kb=%d\n",
+           faulting_address, eip,
+           (uint32_t)(freeram_pages() * (PAGE_SIZE / 1024)),
+           (uint32_t)(totalram_pages() * (PAGE_SIZE / 1024)));
+    printf("buddy_max_order=%d\n", buddy_max_order_get());
+    printf("DMA: free0=%d nr0=%d free_max=%d nr_max=%d\n",
+           contig_page_data.zone_dma.free_area[0].free_list,
+           contig_page_data.zone_dma.free_area[0].nr_free,
+           contig_page_data.zone_dma.free_area[MAX_ORDER - 1].free_list,
+           contig_page_data.zone_dma.free_area[MAX_ORDER - 1].nr_free);
+    printf("DMA: start=%d span=%d managed=%d present=%d\n",
+           contig_page_data.zone_dma.start_pfn,
+           contig_page_data.zone_dma.spanned_pages,
+           contig_page_data.zone_dma.managed_pages,
+           contig_page_data.zone_dma.present_pages);
+    printf("NORMAL: free0=%d nr0=%d free_max=%d nr_max=%d\n",
+           contig_page_data.zone_normal.free_area[0].free_list,
+           contig_page_data.zone_normal.free_area[0].nr_free,
+           contig_page_data.zone_normal.free_area[MAX_ORDER - 1].free_list,
+           contig_page_data.zone_normal.free_area[MAX_ORDER - 1].nr_free);
+    printf("NORMAL: start=%d span=%d managed=%d present=%d\n",
+           contig_page_data.zone_normal.start_pfn,
+           contig_page_data.zone_normal.spanned_pages,
+           contig_page_data.zone_normal.managed_pages,
+           contig_page_data.zone_normal.present_pages);
+}
+
 struct pt_regs *do_page_fault(struct pt_regs *regs)
 {
     uint32_t faulting_address;
@@ -458,8 +489,10 @@ struct pt_regs *do_page_fault(struct pt_regs *regs)
             pteval_t pte = get_pte_flags(page_directory, (void*)page_base);
             if (pte && (!pte_user(pte) || (is_write && !pte_write(pte)))) {
                 void *phys = alloc_page(GFP_KERNEL);
-                if (!phys)
+                if (!phys) {
+                    pf_oom_dump(faulting_address, regs->eip);
                     panic("KERNEL PANIC: Out of physical memory in Page Fault handler.");
+                }
                 pteval_t flags = PTE_PRESENT | PTE_USER;
                 if (vma_allows(current ? current->mm : NULL, page_base, 1, 0))
                     flags |= PTE_READ_WRITE;
@@ -506,8 +539,10 @@ struct pt_regs *do_page_fault(struct pt_regs *regs)
     }
 
     void *phys = alloc_page(GFP_KERNEL);
-    if (!phys)
+    if (!phys) {
+        pf_oom_dump(faulting_address, regs->eip);
         panic("KERNEL PANIC: Out of physical memory in Page Fault handler.");
+    }
 
     pteval_t flags = PTE_PRESENT;
     if (user_access) {
@@ -531,7 +566,7 @@ void paging_init(void)
     if (!pgd_phys)
         return (void)printf("PAGING: Failed to allocate Page Directory!\n");
 
-    page_directory = (pgd_t*)phys_to_virt(pgd_phys);
+    page_directory = (pgd_t*)memlayout_directmap_phys_to_virt(pgd_phys);
     memset(page_directory, 0, PAGE_SIZE);
 
     uint32_t kernel_pde_base = pgd_index(PAGE_OFFSET);
@@ -543,7 +578,7 @@ void paging_init(void)
         uint32_t pt_phys = (uint32_t)alloc_page(GFP_KERNEL);
         if (!pt_phys)
             panic("PAGING PANIC: Failed to allocate Page Table!");
-        pte_t* pt = (pte_t*)phys_to_virt(pt_phys);
+        pte_t* pt = (pte_t*)memlayout_directmap_phys_to_virt(pt_phys);
         memset(pt, 0, PAGE_SIZE);
 
         for (uint32_t i = 0; i < PTRS_PER_PTE; i++) {
@@ -559,7 +594,21 @@ void paging_init(void)
     __asm__ volatile("mov %0, %%cr3" :: "r"(pgd_phys));
     kernel_directory = page_directory;
 
-    printf("PAGING: Kernel mapped at PAGE_OFFSET (0-");
-    printf("%d", low_pdes * (PGDIR_SIZE / (1024 * 1024)));
-    printf("MB).\n");
+    uint32_t mapped_bytes = low_pdes * PGDIR_SIZE;
+    uint32_t direct_end = memlayout_directmap_end();
+    uint32_t vmalloc_start = memlayout_vmalloc_start();
+    uint32_t vmalloc_end = memlayout_vmalloc_end();
+    uint32_t fixaddr_start = memlayout_fixaddr_start();
+
+    if (direct_end != PAGE_OFFSET + mapped_bytes)
+        panic("PAGING: direct map mismatch");
+    if (direct_end > vmalloc_start)
+        panic("PAGING: direct map overlaps vmalloc");
+    if (vmalloc_start >= vmalloc_end)
+        panic("PAGING: vmalloc range invalid");
+
+    printf("PAGING: direct_map=%p-%p vmalloc=%p-%p fixaddr_start=%p\n",
+           (void*)PAGE_OFFSET, (void*)direct_end,
+           (void*)vmalloc_start, (void*)vmalloc_end,
+           (void*)fixaddr_start);
 }

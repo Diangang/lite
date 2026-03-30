@@ -7,6 +7,7 @@ enum {
 };
 
 static int failures;
+static int read_file(const char *path, char *buf, int cap);
 
 static void fail(const char *msg)
 {
@@ -14,6 +15,66 @@ static void fail(const char *msg)
     print("FAIL: ");
     print(msg);
     print("\n");
+}
+
+static int parse_memtotal_kb(void)
+{
+    char buf[1024];
+    int n = read_file("/proc/meminfo", buf, sizeof(buf));
+    if (n <= 0)
+        return -1;
+    const char *key = "MemTotal:";
+    for (int i = 0; i + 9 < n; i++) {
+        int match = 1;
+        for (int j = 0; j < 9; j++) {
+            if (buf[i + j] != key[j]) {
+                match = 0;
+                break;
+            }
+        }
+        if (!match)
+            continue;
+        int k = i + 9;
+        while (k < n && (buf[k] == ' ' || buf[k] == '\t'))
+            k++;
+        int val = 0;
+        while (k < n && buf[k] >= '0' && buf[k] <= '9') {
+            val = val * 10 + (buf[k] - '0');
+            k++;
+        }
+        return val;
+    }
+    return -1;
+}
+
+static int parse_memfree_kb(void)
+{
+    char buf[1024];
+    int n = read_file("/proc/meminfo", buf, sizeof(buf));
+    if (n <= 0)
+        return -1;
+    const char *key = "MemFree:";
+    for (int i = 0; i + 8 < n; i++) {
+        int match = 1;
+        for (int j = 0; j < 8; j++) {
+            if (buf[i + j] != key[j]) {
+                match = 0;
+                break;
+            }
+        }
+        if (!match)
+            continue;
+        int k = i + 8;
+        while (k < n && (buf[k] == ' ' || buf[k] == '\t'))
+            k++;
+        int val = 0;
+        while (k < n && buf[k] >= '0' && buf[k] <= '9') {
+            val = val * 10 + (buf[k] - '0');
+            k++;
+        }
+        return val;
+    }
+    return -1;
 }
 
 void test_fork() {
@@ -354,8 +415,113 @@ void test_rmdir() {
         print("rmdir/unlink OK.\n");
 }
 
+void test_proc_meminfo_iomem() {
+    print("\n--- Test 10: /proc meminfo/iomem ---\n");
+    int ok = 1;
+    char buf[1024];
+    int n = read_file("/proc/meminfo", buf, sizeof(buf));
+    if (n <= 0) {
+        fail("read /proc/meminfo");
+        return;
+    }
+    if (!contains(buf, n, "E820Ram:")) {
+        fail("meminfo missing E820Ram");
+        ok = 0;
+    }
+    if (!contains(buf, n, "LowMemEnd:")) {
+        fail("meminfo missing LowMemEnd");
+        ok = 0;
+    }
+    if (!contains(buf, n, "LowMemPhysEnd:")) {
+        fail("meminfo missing LowMemPhysEnd");
+        ok = 0;
+    }
+    if (!contains(buf, n, "VmallocStart:")) {
+        fail("meminfo missing VmallocStart");
+        ok = 0;
+    }
+    if (!contains(buf, n, "VmallocEnd:")) {
+        fail("meminfo missing VmallocEnd");
+        ok = 0;
+    }
+    if (!contains(buf, n, "DirectMapStart:")) {
+        fail("meminfo missing DirectMapStart");
+        ok = 0;
+    }
+    if (!contains(buf, n, "DirectMapEnd:")) {
+        fail("meminfo missing DirectMapEnd");
+        ok = 0;
+    }
+    if (!contains(buf, n, "FixaddrStart:")) {
+        fail("meminfo missing FixaddrStart");
+        ok = 0;
+    }
+
+    n = read_file("/proc/iomem", buf, sizeof(buf));
+    if (n <= 0) {
+        fail("read /proc/iomem");
+        return;
+    }
+    if (!contains(buf, n, "System RAM")) {
+        fail("iomem missing System RAM");
+        ok = 0;
+    }
+    if (!contains(buf, n, "Kernel")) {
+        fail("iomem missing Kernel");
+        ok = 0;
+    }
+    if (!contains(buf, n, "initramfs")) {
+        fail("iomem missing initramfs");
+        ok = 0;
+    }
+    if (ok)
+        print("/proc meminfo/iomem OK.\n");
+}
+
+void test_large_mmap_touch() {
+    print("\n--- Test 11: Large MMAP Touch ---\n");
+    int memtotal_kb = parse_memtotal_kb();
+    if (memtotal_kb < 0) {
+        fail("parse MemTotal");
+        return;
+    }
+    int memfree_kb = parse_memfree_kb();
+    if (memfree_kb < 0) {
+        fail("parse MemFree");
+        return;
+    }
+    print("MemTotal_kB=");
+    print_int(memtotal_kb);
+    print(" MemFree_kB=");
+    print_int(memfree_kb);
+    print("\n");
+
+    if (memtotal_kb < (192 * 1024) || memfree_kb < (208 * 1024)) {
+        print("SKIP: Not enough free memory for >128MB stress.\n");
+        return;
+    }
+
+    int target_kb = 144 * 1024;
+    int bytes = target_kb * 1024;
+
+    char *addr = (char *)mmap(0, bytes, 3, 0, 0, 0);
+    if (!addr || (int)addr == -1) {
+        fail("large mmap");
+        return;
+    }
+
+    for (int i = 0; i < bytes; i += 4096)
+        addr[i] = (char)(i & 0xFF);
+
+    int ret = munmap(addr, bytes);
+    if (ret != 0)
+        fail("large munmap");
+    else
+        print("Large mmap touch OK.\n");
+}
+
 void test_pci_uevent() {
-    print("\n--- Test 10: PCI uevent ---\n");
+    print("\n--- Test 12: PCI uevent ---\n");
     char buf[2048];
     int n = read_file("/sys/kernel/uevent", buf, sizeof(buf));
     if (n <= 0) {
@@ -416,7 +582,7 @@ void test_pci_uevent() {
 }
 
 void test_sysfs_layout() {
-    print("\n--- Test 11: sysfs layout ---\n");
+    print("\n--- Test 13: sysfs layout ---\n");
     int ok = 1;
     char buf[128];
     int n = read_file("/sys/devices/platform/type", buf, sizeof(buf));
@@ -467,7 +633,7 @@ void test_sysfs_layout() {
 }
 
 void test_sysfs_bind_unbind_console() {
-    print("\n--- Test 12: sysfs bind/unbind ---\n");
+    print("\n--- Test 14: sysfs bind/unbind ---\n");
     int ok = 1;
     char buf[128];
     int n = read_file("/sys/devices/platform/console/driver", buf, sizeof(buf));
@@ -517,6 +683,8 @@ int main() {
     test_sched();
     test_rmdir();
     test_mounts();
+    test_proc_meminfo_iomem();
+    test_large_mmap_touch();
     test_pci_uevent();
     test_sysfs_layout();
     test_sysfs_bind_unbind_console();

@@ -3,6 +3,7 @@
 #include "linux/slab.h"
 #include "linux/libc.h"
 #include "linux/pagemap.h"
+#include "linux/memlayout.h"
 #include "asm/page.h"
 
 void address_space_init(struct address_space *mapping, struct inode *host)
@@ -36,7 +37,7 @@ static struct page_cache_entry *add_to_page_cache(struct address_space *mapping,
         return NULL;
     }
 
-    memset(phys_to_virt(p->phys_addr), 0, 4096);
+    memset(memlayout_directmap_phys_to_virt(p->phys_addr), 0, 4096);
 
     p->next = mapping->pages;
     mapping->pages = p;
@@ -69,7 +70,7 @@ uint32_t generic_file_read(struct inode *node, uint32_t offset, uint32_t size, u
 
         struct page_cache_entry *p = find_get_page(mapping, index);
         if (p)
-            memcpy(buffer + bytes_read, (void*)((uint32_t)phys_to_virt(p->phys_addr) + page_offset), bytes);
+            memcpy(buffer + bytes_read, (void*)((uint32_t)memlayout_directmap_phys_to_virt(p->phys_addr) + page_offset), bytes);
         else
             // Page not in cache, in a real OS we would read from disk here.
             // Since this is generic and backing ramfs, if it's not in cache, it's just zeroes.
@@ -108,7 +109,7 @@ uint32_t generic_file_write(struct inode *node, uint32_t offset, uint32_t size, 
                 break; // Out of memory
         }
 
-        memcpy((void*)((uint32_t)phys_to_virt(p->phys_addr) + page_offset), buffer + bytes_written, bytes);
+        memcpy((void*)((uint32_t)memlayout_directmap_phys_to_virt(p->phys_addr) + page_offset), buffer + bytes_written, bytes);
 
         offset += bytes;
         bytes_written += bytes;

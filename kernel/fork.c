@@ -47,7 +47,11 @@ static struct mm_struct *mm_clone_cow(struct mm_struct *src)
         return NULL;
     struct mm_struct *mm = (struct mm_struct*)kmalloc(sizeof(struct mm_struct));
     if (!mm) {
-        free_page((unsigned long)new_dir);
+        uint32_t pgd_vaddr = (uint32_t)new_dir;
+        if (pgd_vaddr >= PAGE_OFFSET)
+            free_page((unsigned long)virt_to_phys_addr(new_dir));
+        else
+            free_page((unsigned long)pgd_vaddr);
         return NULL;
     }
     memset(mm, 0, sizeof(*mm));
@@ -59,7 +63,11 @@ static struct mm_struct *mm_clone_cow(struct mm_struct *src)
     mm->brk = src->brk;
     mm->mmap = vma_clone_list(src->mmap);
     if (src->mmap && !mm->mmap) {
-        free_page((unsigned long)new_dir);
+        uint32_t pgd_vaddr = (uint32_t)new_dir;
+        if (pgd_vaddr >= PAGE_OFFSET)
+            free_page((unsigned long)virt_to_phys_addr(new_dir));
+        else
+            free_page((unsigned long)pgd_vaddr);
         kfree(mm);
         return NULL;
     }

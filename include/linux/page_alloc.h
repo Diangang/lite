@@ -40,6 +40,8 @@ unsigned long totalram_pages(void);
 unsigned long freeram_pages(void);
 unsigned long zone_free_pages(struct zone *zone);
 
+unsigned int buddy_max_order_get(void);
+
 void show_mem(void);
 
 #endif

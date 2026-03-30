@@ -8,6 +8,7 @@
 #include "linux/pagemap.h"
 #include "asm/multiboot.h"
 #include "asm/page.h"
+#include "linux/memlayout.h"
 
 // Basic CPIO newc header
 struct cpio_newc_header {
@@ -47,14 +48,14 @@ void populate_rootfs(void) {
     if (boot_mbi.mods_count == 0)
         panic("Module count is zero. Skipping initramfs");
 
-    struct multiboot_module *mod = (struct multiboot_module *)phys_to_virt(boot_mbi.mods_addr);
+    struct multiboot_module *mod = (struct multiboot_module *)memlayout_directmap_phys_to_virt(boot_mbi.mods_addr);
     uint32_t location = mod->mod_start;
     uint32_t end_location = mod->mod_end;
 
     printf("Extracting initramfs from 0x%x to 0x%x...\n", location, end_location);
 
-    uint8_t *ptr = (uint8_t *)phys_to_virt(location);
-    uint8_t *end = (uint8_t *)phys_to_virt(end_location);
+    uint8_t *ptr = (uint8_t *)memlayout_directmap_phys_to_virt(location);
+    uint8_t *end = (uint8_t *)memlayout_directmap_phys_to_virt(end_location);
     while (ptr < end) {
         struct cpio_newc_header *hdr = (struct cpio_newc_header *)ptr;
 

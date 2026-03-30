@@ -1,10 +1,9 @@
 #include "linux/slab.h"
 #include "asm/page.h"
-#include "asm/pgtable.h"
 #include "linux/page_alloc.h"
 #include "linux/libc.h"
+#include "linux/memlayout.h"
 
-#define SLAB_VIRT_START PAGE_OFFSET
 #define SLAB_MAX_PAGES 4096
 #define SLAB_MAX_CACHE 9
 #define SLAB_MAGIC 0x534C4142
@@ -36,7 +35,6 @@ static struct kmem_cache caches[SLAB_MAX_CACHE];
 static struct slab slab_pool[SLAB_MAX_PAGES];
 static struct slab *slab_free_list = NULL;
 static struct slab *slab_map[SLAB_MAX_PAGES];
-static uint32_t slab_virt_base = SLAB_VIRT_START;
 static uint32_t slab_pages = 0;
 
 static size_t align_up(size_t value, size_t align)
@@ -61,9 +59,7 @@ static void *slab_alloc_page(struct slab *s)
     void *phys = alloc_page(GFP_KERNEL);
     if (!phys)
         return NULL;
-    uint32_t vaddr = slab_virt_base;
-    map_page(phys, (void*)vaddr);
-    slab_virt_base += PAGE_SIZE;
+    uint32_t vaddr = (uint32_t)memlayout_directmap_phys_to_virt((uint32_t)phys);
     s->vaddr = (void*)vaddr;
     slab_map[slab_pages] = s;
     slab_pages++;
@@ -72,12 +68,15 @@ static void *slab_alloc_page(struct slab *s)
 
 static struct slab *slab_from_ptr(void *ptr)
 {
-    if ((uint32_t)ptr < SLAB_VIRT_START)
+    if (!ptr)
         return NULL;
-    uint32_t idx = ((uint32_t)ptr - SLAB_VIRT_START) / PAGE_SIZE;
-    if (idx >= slab_pages)
-        return NULL;
-    return slab_map[idx];
+    uint32_t page_base = ((uint32_t)ptr) & ~(PAGE_SIZE - 1);
+    for (uint32_t i = 0; i < slab_pages; i++) {
+        struct slab *s = slab_map[i];
+        if (s && (uint32_t)s->vaddr == page_base)
+            return s;
+    }
+    return NULL;
 }
 
 static void slab_init_objects(struct slab *s, size_t size)
@@ -168,11 +167,7 @@ static void *kmalloc_large(size_t size)
     void *phys = alloc_pages(GFP_KERNEL, order);
     if (!phys)
         return NULL;
-    uint32_t vaddr = slab_virt_base;
-    for (unsigned int i = 0; i < (1u << order); i++) {
-        map_page((void*)((uint32_t)phys + i * PAGE_SIZE), (void*)(vaddr + i * PAGE_SIZE));
-    }
-    slab_virt_base += (1u << order) * PAGE_SIZE;
+    uint32_t vaddr = (uint32_t)memlayout_directmap_phys_to_virt((uint32_t)phys);
     struct large_hdr *hdr = (struct large_hdr*)vaddr;
     hdr->magic = LARGE_MAGIC;
     hdr->order = order;
@@ -235,7 +230,6 @@ void kmem_cache_init(void)
         caches[i].slabs = NULL;
     }
     memset(slab_map, 0, sizeof(slab_map));
-    slab_virt_base = SLAB_VIRT_START;
     slab_pages = 0;
     printf("SLAB: Initialized\n");
 }

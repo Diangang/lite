@@ -5,6 +5,7 @@
 #include "asm/pgtable.h"
 #include "linux/page_alloc.h"
 #include "asm/page.h"
+#include "linux/memlayout.h"
 #include "linux/irqflags.h"
 #include "linux/rmap.h"
 
@@ -22,7 +23,7 @@ static int task_free_user_page_mapped(struct mm_struct *mm, pgd_t *dir, uint32_t
     pgdval_t pde = dir[pde_idx];
     if (!pgd_present(pde))
         return 0;
-    pte_t *table = (pte_t*)phys_to_virt(pde & ~0xFFF);
+    pte_t *table = (pte_t*)memlayout_directmap_phys_to_virt(pde & ~0xFFF);
     pteval_t pte = table[pte_idx];
     if (!pte_present(pte))
         return 0;
@@ -102,7 +103,11 @@ void mm_destroy(struct mm_struct *mm)
         free_page((unsigned long)pde_phys);
     }
 
-    free_page((unsigned long)mm->pgd);
+    uint32_t pgd_vaddr = (uint32_t)mm->pgd;
+    if (pgd_vaddr >= PAGE_OFFSET)
+        free_page((unsigned long)virt_to_phys_addr(mm->pgd));
+    else
+        free_page((unsigned long)pgd_vaddr);
     vma_list_free(mm);
     kfree(mm);
 }

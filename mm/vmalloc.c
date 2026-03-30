@@ -1,13 +1,10 @@
 #include "linux/vmalloc.h"
 #include "linux/page_alloc.h"
 #include "linux/slab.h"
+#include "linux/memlayout.h"
 #include "asm/page.h"
 #include "asm/pgtable.h"
 #include "linux/libc.h"
-
-#define VMALLOC_START 0xD0000000
-#define VMALLOC_END   0xF0000000
-#define KMAP_START    0xF0000000
 
 struct vmalloc_block {
     uint32_t vaddr;
@@ -16,16 +13,26 @@ struct vmalloc_block {
 };
 
 static struct vmalloc_block *vmalloc_list = NULL;
-static uint32_t vmalloc_base = VMALLOC_START;
+static uint32_t vmalloc_base;
+static uint32_t vmalloc_end;
+
+static void vmalloc_init_range(void)
+{
+    if (vmalloc_end)
+        return;
+    vmalloc_base = memlayout_vmalloc_start();
+    vmalloc_end = memlayout_vmalloc_end();
+}
 
 void *vmalloc(uint32_t size)
 {
     if (size == 0)
         return 0;
+    vmalloc_init_range();
     uint32_t aligned = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
     if (vmalloc_base + aligned < vmalloc_base)
         return 0;
-    if (vmalloc_base + aligned > VMALLOC_END)
+    if (vmalloc_base + aligned > vmalloc_end)
         return 0;
     uint32_t vaddr = vmalloc_base;
     uint32_t pages = aligned / PAGE_SIZE;
@@ -83,10 +90,11 @@ void *ioremap(uint32_t phys, uint32_t size)
 {
     if (size == 0)
         return 0;
+    vmalloc_init_range();
     uint32_t aligned = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
     if (vmalloc_base + aligned < vmalloc_base)
         return 0;
-    if (vmalloc_base + aligned > VMALLOC_END)
+    if (vmalloc_base + aligned > vmalloc_end)
         return 0;
     uint32_t vaddr = vmalloc_base;
     uint32_t pages = aligned / PAGE_SIZE;
@@ -107,10 +115,10 @@ void iounmap(void *addr)
 void *kmap(uint32_t pfn)
 {
     uint32_t phys = pfn << PAGE_SHIFT;
-    if (phys < (128 * 1024 * 1024))
-        return phys_to_virt(phys);
-    map_page_ex(get_pgd_kernel(), (void*)phys, (void*)KMAP_START, PTE_PRESENT | PTE_READ_WRITE);
-    return (void*)KMAP_START;
+    if (phys < memlayout_lowmem_phys_end())
+        return memlayout_directmap_phys_to_virt(phys);
+    map_page_ex(get_pgd_kernel(), (void*)phys, (void*)memlayout_fixaddr_start(), PTE_PRESENT | PTE_READ_WRITE);
+    return (void*)memlayout_fixaddr_start();
 }
 
 void kunmap(void *addr)
