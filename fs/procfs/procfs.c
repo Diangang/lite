@@ -12,6 +12,7 @@
 #include "linux/mmzone.h"
 #include "linux/vmscan.h"
 #include "linux/pagemap.h"
+#include "linux/blkdev.h"
 #include "linux/bootmem.h"
 #include "linux/memlayout.h"
 #include "asm/pgtable.h"
@@ -29,6 +30,7 @@ static struct inode proc_pfault;
 static struct inode proc_vmscan;
 static struct inode proc_writeback;
 static struct inode proc_pagecache;
+static struct inode proc_blockstats;
 static struct inode proc_mounts;
 
 typedef struct {
@@ -441,6 +443,33 @@ static uint32_t proc_read_writeback(struct inode *node, uint32_t offset, uint32_
     buf_append_u32(tmp, &off, sizeof(tmp), cleaned);
     buf_append(tmp, &off, sizeof(tmp), "\ndiscarded=");
     buf_append_u32(tmp, &off, sizeof(tmp), discarded);
+    buf_append(tmp, &off, sizeof(tmp), "\n");
+    if (off < sizeof(tmp))
+        tmp[off] = 0;
+    if (offset >= off)
+        return 0;
+    uint32_t remain = off - offset;
+    if (size > remain)
+        size = remain;
+    memcpy(buffer, tmp + offset, size);
+    return size;
+}
+
+static uint32_t proc_read_blockstats(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+{
+    (void)node;
+    static char tmp[160];
+    uint32_t off = 0;
+    uint32_t reads = 0, writes = 0, bytes_read = 0, bytes_written = 0;
+    get_block_stats(&reads, &writes, &bytes_read, &bytes_written);
+    buf_append(tmp, &off, sizeof(tmp), "reads=");
+    buf_append_u32(tmp, &off, sizeof(tmp), reads);
+    buf_append(tmp, &off, sizeof(tmp), "\nwrites=");
+    buf_append_u32(tmp, &off, sizeof(tmp), writes);
+    buf_append(tmp, &off, sizeof(tmp), "\nbytes_read=");
+    buf_append_u32(tmp, &off, sizeof(tmp), bytes_read);
+    buf_append(tmp, &off, sizeof(tmp), "\nbytes_written=");
+    buf_append_u32(tmp, &off, sizeof(tmp), bytes_written);
     buf_append(tmp, &off, sizeof(tmp), "\n");
     if (off < sizeof(tmp))
         tmp[off] = 0;
@@ -972,11 +1001,16 @@ static struct dirent *proc_readdir(struct file *file, uint32_t index)
         return &proc_dirent;
     }
     if (index == 11) {
+        strcpy(proc_dirent.name, "blockstats");
+        proc_dirent.ino = proc_blockstats.i_ino;
+        return &proc_dirent;
+    }
+    if (index == 12) {
         strcpy(proc_dirent.name, "mounts");
         proc_dirent.ino = proc_mounts.i_ino;
         return &proc_dirent;
     }
-    if (index == 12) {
+    if (index == 13) {
         strcpy(proc_dirent.name, "self");
         proc_dirent.ino = 0x1000;
         return &proc_dirent;
@@ -1011,6 +1045,8 @@ static struct inode *proc_finddir(struct inode *node, const char *name)
         return &proc_writeback;
     if (!strcmp(name, "pagecache"))
         return &proc_pagecache;
+    if (!strcmp(name, "blockstats"))
+        return &proc_blockstats;
     if (!strcmp(name, "mounts"))
         return &proc_mounts;
     if (!strcmp(name, "self"))
@@ -1133,6 +1169,16 @@ static struct file_operations proc_writeback_ops = {
 
 static struct file_operations proc_pagecache_ops = {
     .read = proc_read_pagecache,
+    .write = NULL,
+    .open = NULL,
+    .close = NULL,
+    .readdir = NULL,
+    .finddir = NULL,
+    .ioctl = NULL
+};
+
+static struct file_operations proc_blockstats_ops = {
+    .read = proc_read_blockstats,
     .write = NULL,
     .open = NULL,
     .close = NULL,
@@ -1274,6 +1320,15 @@ static int proc_fill_super(struct super_block *sb, void *data, int silent)
     proc_pagecache.uid = 0;
     proc_pagecache.gid = 0;
     proc_pagecache.i_mode = 0444;
+
+    memset(&proc_blockstats, 0, sizeof(proc_blockstats));
+    proc_blockstats.flags = FS_FILE;
+    proc_blockstats.i_ino = 14;
+    proc_blockstats.i_size = 160;
+    proc_blockstats.f_ops = &proc_blockstats_ops;
+    proc_blockstats.uid = 0;
+    proc_blockstats.gid = 0;
+    proc_blockstats.i_mode = 0444;
 
     memset(&proc_mounts, 0, sizeof(proc_mounts));
     proc_mounts.flags = FS_FILE;

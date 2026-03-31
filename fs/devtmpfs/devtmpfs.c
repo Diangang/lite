@@ -6,6 +6,7 @@
 #include "linux/console.h"
 #include "linux/slab.h"
 #include "linux/device.h"
+#include "linux/blkdev.h"
 
 #define MAX_DEVICES 32
 
@@ -177,6 +178,11 @@ static void devtmpfs_add_for_device(struct device *dev)
         devtmpfs_add_node("tty", &dev_tty);
     if (!strcmp(dev->kobj.name, "ttyS0"))
         devtmpfs_add_node("ttyS0", &dev_tty);
+    if (dev->type && !strcmp(dev->type, "block")) {
+        struct inode *inode = blockdev_inode_create((struct block_device *)dev->driver_data);
+        if (inode)
+            devtmpfs_add_node(dev->kobj.name, inode);
+    }
 }
 
 void devtmpfs_register_device(struct device *dev)
@@ -196,6 +202,8 @@ void devtmpfs_unregister_device(struct device *dev)
         devtmpfs_remove_node("tty");
     if (!strcmp(dev->kobj.name, "ttyS0"))
         devtmpfs_remove_node("ttyS0");
+    if (dev->type && !strcmp(dev->type, "block"))
+        devtmpfs_remove_node(dev->kobj.name);
 }
 
 static int devtmpfs_fill_super(struct super_block *sb, void *data, int silent)

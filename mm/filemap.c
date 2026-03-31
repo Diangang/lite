@@ -3,6 +3,7 @@
 #include "linux/slab.h"
 #include "linux/libc.h"
 #include "linux/pagemap.h"
+#include "linux/blkdev.h"
 #include "linux/memlayout.h"
 #include "asm/page.h"
 
@@ -77,7 +78,7 @@ uint32_t generic_file_read(struct inode *node, uint32_t offset, uint32_t size, u
 {
     if (!node || !buffer || size == 0)
         return 0;
-    if ((node->flags & 0x7) != FS_FILE)
+    if ((node->flags & 0x7) != FS_FILE && (node->flags & 0x7) != FS_BLOCKDEVICE)
         return 0;
     if (offset >= node->i_size)
         return 0;
@@ -89,6 +90,9 @@ uint32_t generic_file_read(struct inode *node, uint32_t offset, uint32_t size, u
     struct address_space *mapping = node->i_mapping;
     if (!mapping)
         return 0;
+    struct block_device *bdev = NULL;
+    if ((node->flags & 0x7) == FS_BLOCKDEVICE)
+        bdev = (struct block_device *)node->private_data;
 
     while (size > 0) {
         uint32_t index = offset / 4096;
@@ -102,7 +106,17 @@ uint32_t generic_file_read(struct inode *node, uint32_t offset, uint32_t size, u
             memcpy(buffer + bytes_read, (void*)((uint32_t)memlayout_directmap_phys_to_virt(p->phys_addr) + page_offset), bytes);
         } else {
             pcache_misses++;
-            memset(buffer + bytes_read, 0, bytes);
+            if (bdev) {
+                p = add_to_page_cache(mapping, index);
+                if (p) {
+                    block_device_read(bdev, index * 4096, 4096, (uint8_t *)memlayout_directmap_phys_to_virt(p->phys_addr));
+                    memcpy(buffer + bytes_read, (void*)((uint32_t)memlayout_directmap_phys_to_virt(p->phys_addr) + page_offset), bytes);
+                } else {
+                    memset(buffer + bytes_read, 0, bytes);
+                }
+            } else {
+                memset(buffer + bytes_read, 0, bytes);
+            }
         }
 
         offset += bytes;
@@ -116,12 +130,22 @@ uint32_t generic_file_write(struct inode *node, uint32_t offset, uint32_t size, 
 {
     if (!node || !buffer || size == 0)
         return 0;
-    if ((node->flags & 0x7) != FS_FILE)
+    if ((node->flags & 0x7) != FS_FILE && (node->flags & 0x7) != FS_BLOCKDEVICE)
         return 0;
 
     struct address_space *mapping = node->i_mapping;
     if (!mapping)
         return 0;
+    struct block_device *bdev = NULL;
+    if ((node->flags & 0x7) == FS_BLOCKDEVICE) {
+        bdev = (struct block_device *)node->private_data;
+        if (!bdev)
+            return 0;
+        if (offset >= bdev->size)
+            return 0;
+        if (offset + size > bdev->size)
+            size = bdev->size - offset;
+    }
 
     uint32_t bytes_written = 0;
 
@@ -139,6 +163,8 @@ uint32_t generic_file_write(struct inode *node, uint32_t offset, uint32_t size, 
             p = add_to_page_cache(mapping, index);
             if (!p)
                 break;
+            if (bdev && (page_offset != 0 || bytes < 4096))
+                block_device_read(bdev, index * 4096, 4096, (uint8_t *)memlayout_directmap_phys_to_virt(p->phys_addr));
         }
 
         memcpy((void*)((uint32_t)memlayout_directmap_phys_to_virt(p->phys_addr) + page_offset), buffer + bytes_written, bytes);
@@ -152,8 +178,12 @@ uint32_t generic_file_write(struct inode *node, uint32_t offset, uint32_t size, 
         size -= bytes;
     }
 
-    if (offset > node->i_size)
-        node->i_size = offset;
+    if ((node->flags & 0x7) != FS_BLOCKDEVICE) {
+        if (offset > node->i_size)
+            node->i_size = offset;
+    } else if (bdev) {
+        node->i_size = bdev->size;
+    }
 
     return bytes_written;
 }
@@ -224,6 +254,12 @@ int writeback_flush_all(void)
         struct page_cache_entry *p = m->pages;
         while (p) {
             if (p->dirty) {
+                struct inode *host = m->host;
+                if (host && (host->flags & 0x7) == FS_BLOCKDEVICE && host->private_data) {
+                    block_device_write((struct block_device *)host->private_data,
+                        p->index * 4096, 4096,
+                        (const uint8_t *)memlayout_directmap_phys_to_virt(p->phys_addr));
+                }
                 p->dirty = 0;
                 if (wb_dirty_pages)
                     wb_dirty_pages--;

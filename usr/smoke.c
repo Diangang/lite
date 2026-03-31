@@ -222,6 +222,23 @@ static int parse_writeback_stats(int *dirty, int *cleaned, int *discarded)
     return 0;
 }
 
+static int parse_blockstats(int *reads, int *writes, int *bytes_read, int *bytes_written)
+{
+    char buf[160];
+    int n = read_file("/proc/blockstats", buf, sizeof(buf));
+    if (n <= 0)
+        return -1;
+    if (parse_kv_u32(buf, n, "reads=", reads) < 0)
+        return -1;
+    if (parse_kv_u32(buf, n, "writes=", writes) < 0)
+        return -1;
+    if (parse_kv_u32(buf, n, "bytes_read=", bytes_read) < 0)
+        return -1;
+    if (parse_kv_u32(buf, n, "bytes_written=", bytes_written) < 0)
+        return -1;
+    return 0;
+}
+
 static int parse_pagecache_stats(int *hits, int *misses)
 {
     char buf[128];
@@ -1672,6 +1689,83 @@ void test_pagecache_stats() {
     print("pagecache stats OK.\n");
 }
 
+void test_blockstats_ramdisk() {
+    print("\n--- Test 32: Blockstats (ram0) ---\n");
+    int r0 = 0, w0 = 0, br0 = 0, bw0 = 0;
+    if (parse_blockstats(&r0, &w0, &br0, &bw0) < 0) {
+        fail("read /proc/blockstats");
+        return;
+    }
+    int fd = open("/dev/ram0", 0);
+    if (fd < 0) {
+        fail("open /dev/ram0");
+        return;
+    }
+    char buf[4096];
+    for (int i = 0; i < 4096; i++)
+        buf[i] = 'R';
+    int wr = write(fd, buf, 4096);
+    close(fd);
+    if (wr != 4096) {
+        fail("write /dev/ram0");
+        return;
+    }
+    int procfd = open("/proc/writeback", 0);
+    if (procfd >= 0) {
+        write(procfd, "flush\n", 6);
+        close(procfd);
+    }
+    int r1 = 0, w1 = 0, br1 = 0, bw1 = 0;
+    if (parse_blockstats(&r1, &w1, &br1, &bw1) < 0) {
+        fail("read /proc/blockstats after write");
+        return;
+    }
+    if (w1 <= w0 || bw1 <= bw0) {
+        fail("blockstats write not increased");
+        return;
+    }
+    fd = open("/dev/ram0", 0);
+    if (fd < 0) {
+        fail("open /dev/ram0 read");
+        return;
+    }
+    int rd = read(fd, buf, 4096);
+    if (rd != 4096) {
+        close(fd);
+        fail("read /dev/ram0 page0");
+        return;
+    }
+    for (int i = 0; i < 4096; i++) {
+        if (buf[i] != 'R') {
+            close(fd);
+            fail("ram0 data mismatch");
+            return;
+        }
+    }
+    rd = read(fd, buf, 4096);
+    close(fd);
+    if (rd != 4096) {
+        fail("read /dev/ram0 page1");
+        return;
+    }
+    for (int i = 0; i < 4096; i++) {
+        if (buf[i] != 0) {
+            fail("ram0 zero page mismatch");
+            return;
+        }
+    }
+    int r2 = 0, w2 = 0, br2 = 0, bw2 = 0;
+    if (parse_blockstats(&r2, &w2, &br2, &bw2) < 0) {
+        fail("read /proc/blockstats after read");
+        return;
+    }
+    if (r2 <= r1 || br2 <= br1) {
+        fail("blockstats read not increased");
+        return;
+    }
+    print("blockstats ram0 OK.\n");
+}
+
 int main() {
     print("================================\n");
     print("  Lite OS Automated Test Suite  \n");
@@ -1708,6 +1802,7 @@ int main() {
     test_writeback();
     test_writeback_truncate();
     test_pagecache_stats();
+    test_blockstats_ramdisk();
 
     print("\n================================\n");
     if (failures == 0) {
