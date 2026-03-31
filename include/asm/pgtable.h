@@ -93,6 +93,7 @@ int access_ok(pgd_t* pgd, void* addr, uint32_t len, int write);
 int __copy_from_user(void* dst, const void* src_user, uint32_t len);
 int __copy_to_user(void* dst_user, const void* src, uint32_t len);
 void get_cow_stats(uint32_t *faults, uint32_t *copies);
+void get_pf_stats(uint32_t *total, uint32_t *present, uint32_t *not_present, uint32_t *write, uint32_t *user, uint32_t *kernel, uint32_t *reserved, uint32_t *prot, uint32_t *null, uint32_t *kernel_addr, uint32_t *out_of_range);
 struct pt_regs *do_page_fault(struct pt_regs *regs);
 
 #endif

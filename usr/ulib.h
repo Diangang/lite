@@ -28,6 +28,7 @@ int mkdir(const char *pathname);
 int rmdir(const char *pathname);
 void *mmap(void *addr, int length, int prot, int flags, int fd, int offset);
 int munmap(void *addr, int length);
+int kill(int pid, int sig);
 
 void print(const char *str);
 void print_int(int val);

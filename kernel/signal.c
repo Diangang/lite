@@ -5,9 +5,39 @@
 #include "linux/sched.h"
 #include "linux/wait.h"
 
+static void signal_wake_task(struct task_struct *t)
+{
+    if (!t)
+        return;
+    if (t->state == TASK_SLEEPING) {
+        t->wake_jiffies = 0;
+        t->state = TASK_RUNNABLE;
+        if (t->time_slice <= 0)
+            t->time_slice = TASK_TIMESLICE_TICKS;
+        need_resched = 1;
+        return;
+    }
+    if (t->state == TASK_BLOCKED && t->waitq) {
+        wait_queue_remove(t->waitq, t);
+        if (t->time_slice <= 0)
+            t->time_slice = TASK_TIMESLICE_TICKS;
+        t->state = TASK_RUNNABLE;
+        need_resched = 1;
+    }
+}
+
+void signal_notify_exit(struct task_struct *child)
+{
+    if (!child || !child->parent)
+        return;
+    uint32_t flags = irq_save();
+    signal_wake_task(child->parent);
+    irq_restore(flags);
+}
+
 int sys_kill(uint32_t id, int sig)
 {
-    if (sig < 0 || sig > SIGTERM)
+    if (!(sig == 0 || sig == SIGCHLD || sig == SIGINT || sig == SIGKILL || sig == SIGTERM))
         return -1;
     if (id == 0)
         return -1;
@@ -20,6 +50,15 @@ int sys_kill(uint32_t id, int sig)
         return -1;
     }
     if (sig == 0) {
+        irq_restore(flags);
+        return 0;
+    }
+    if (sig == SIGCHLD) {
+        if (!t->parent) {
+            irq_restore(flags);
+            return -1;
+        }
+        signal_wake_task(t->parent);
         irq_restore(flags);
         return 0;
     }
@@ -36,14 +75,11 @@ int sys_kill(uint32_t id, int sig)
         do_exit_reason(128 + sig, TASK_EXIT_SIGNAL, (uint32_t)sig, 0);
         return 0;
     }
-    if (t->state == TASK_BLOCKED && t->waitq)
-        wait_queue_remove(t->waitq, t);
-    t->exit_code = 128 + sig;
-    t->exit_state = TASK_EXIT_SIGNAL;
-    t->exit_info0 = (uint32_t)sig;
-    t->exit_info1 = 0;
-    t->state = TASK_ZOMBIE;
-    wait_queue_wake_all(&exit_waitq);
+    if (t->pid == 1) {
+        irq_restore(flags);
+        return -1;
+    }
     irq_restore(flags);
+    exit_notify(t, 128 + sig, TASK_EXIT_SIGNAL, (uint32_t)sig, 0);
     return 0;
 }

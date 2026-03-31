@@ -88,8 +88,9 @@ void populate_rootfs(void) {
             } else if ((mode & 0170000) == 0100000) { // Regular file
                 struct file *f = vfs_open(abs_path, VFS_O_CREAT | 0x0001); // 0x0001 is VFS_O_WRONLY in file.h? Wait, let's check VFS_O_WRONLY.
                 if (f) {
-                    vfs_write(f, data, filesize);
+                    int written = vfs_write(f, data, filesize);
                     vfs_close(f);
+                    (void)written;
                 } else {
                     printf("Failed to create file: %s\n", abs_path);
                 }

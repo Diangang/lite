@@ -104,6 +104,10 @@ int munmap(void *addr, int length) {
     return syscall2(SYS_MUNMAP, (int)addr, length);
 }
 
+int kill(int pid, int sig) {
+    return syscall2(SYS_KILL, pid, sig);
+}
+
 static int strlen(const char *s) {
     int len = 0;
     while(s[len]) len++;

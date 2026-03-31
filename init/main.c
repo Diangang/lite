@@ -68,6 +68,7 @@ static void prepare_namespace(void)
             "/sbin/init",
             "/etc/init",
             "/bin/init",
+            "/sbin/sh",
             "/bin/sh"
         };
         for (uint32_t i = 0; i < (sizeof(fallbacks) / sizeof(fallbacks[0])); i++) {

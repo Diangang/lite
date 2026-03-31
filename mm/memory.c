@@ -17,6 +17,17 @@ static pgd_t* page_directory = NULL;
 static pgd_t* kernel_directory = NULL;
 static uint32_t cow_faults = 0;
 static uint32_t cow_copies = 0;
+static uint32_t pf_total = 0;
+static uint32_t pf_present = 0;
+static uint32_t pf_not_present = 0;
+static uint32_t pf_write = 0;
+static uint32_t pf_user = 0;
+static uint32_t pf_kernel = 0;
+static uint32_t pf_reserved = 0;
+static uint32_t pf_prot = 0;
+static uint32_t pf_null = 0;
+static uint32_t pf_kernel_addr = 0;
+static uint32_t pf_out_of_range = 0;
 
 extern void load_page_directory(uint32_t*);
 extern void enable_paging(void);
@@ -422,6 +433,21 @@ void get_cow_stats(uint32_t *faults, uint32_t *copies)
     if (copies) *copies = cow_copies;
 }
 
+void get_pf_stats(uint32_t *total, uint32_t *present, uint32_t *not_present, uint32_t *write, uint32_t *user, uint32_t *kernel, uint32_t *reserved, uint32_t *prot, uint32_t *null, uint32_t *kernel_addr, uint32_t *out_of_range)
+{
+    if (total) *total = pf_total;
+    if (present) *present = pf_present;
+    if (not_present) *not_present = pf_not_present;
+    if (write) *write = pf_write;
+    if (user) *user = pf_user;
+    if (kernel) *kernel = pf_kernel;
+    if (reserved) *reserved = pf_reserved;
+    if (prot) *prot = pf_prot;
+    if (null) *null = pf_null;
+    if (kernel_addr) *kernel_addr = pf_kernel_addr;
+    if (out_of_range) *out_of_range = pf_out_of_range;
+}
+
 static void pf_oom_dump(uint32_t faulting_address, uint32_t eip)
 {
     printf("PF OOM: addr=0x%x eip=0x%x memfree_kb=%d memtotal_kb=%d\n",
@@ -464,6 +490,20 @@ struct pt_regs *do_page_fault(struct pt_regs *regs)
 
     uint32_t page_base = faulting_address & ~(PAGE_SIZE - 1);
 
+    pf_total++;
+    if (is_present)
+        pf_present++;
+    else
+        pf_not_present++;
+    if (is_write)
+        pf_write++;
+    if (is_user)
+        pf_user++;
+    else
+        pf_kernel++;
+    if (is_reserved)
+        pf_reserved++;
+
     if (is_reserved) {
         printf("Page Fault! ( reserved ) at 0x%x - EIP: 0x%x\n", faulting_address, regs->eip);
         panic("KERNEL PANIC: Page Fault caused by reserved bit violation!");
@@ -505,6 +545,7 @@ struct pt_regs *do_page_fault(struct pt_regs *regs)
         }
 
         printf("User Page Fault: unhandled protection fault.\n");
+        pf_prot++;
         do_exit_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
         struct pt_regs *task_schedule(struct pt_regs *r);
         return task_schedule(regs);
@@ -513,6 +554,7 @@ struct pt_regs *do_page_fault(struct pt_regs *regs)
     if (faulting_address < PAGE_SIZE) {
         if (user_access) {
             printf("User Page Fault: null access.\n");
+            pf_null++;
             do_exit_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
             struct pt_regs *task_schedule(struct pt_regs *r);
             return task_schedule(regs);
@@ -521,12 +563,14 @@ struct pt_regs *do_page_fault(struct pt_regs *regs)
     }
     if (user_access && faulting_address >= TASK_SIZE) {
         printf("User Page Fault: kernel address at 0x%x - EIP: 0x%x\n", faulting_address, regs->eip);
+        pf_kernel_addr++;
         do_exit_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
         struct pt_regs *task_schedule(struct pt_regs *r);
         return task_schedule(regs);
     }
     if (user_access && !vma_allows(current ? current->mm : NULL, page_base, is_write, is_instr_fetch)) {
         printf("User Page Fault: out of range at 0x%x - EIP: 0x%x\n", faulting_address, regs->eip);
+        pf_out_of_range++;
         do_exit_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
         struct pt_regs *task_schedule(struct pt_regs *r);
         return task_schedule(regs);

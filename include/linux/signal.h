@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+struct task_struct;
+
 enum {
     SIGHUP = 1,
     SIGINT = 2,
@@ -18,9 +20,11 @@ enum {
     SIGUSR2 = 12,
     SIGPIPE = 13,
     SIGALRM = 14,
-    SIGTERM = 15
+    SIGTERM = 15,
+    SIGCHLD = 17
 };
 
 int sys_kill(uint32_t id, int sig);
+void signal_notify_exit(struct task_struct *child);
 
 #endif

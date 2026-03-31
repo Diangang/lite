@@ -6,11 +6,38 @@
 #include "linux/memlayout.h"
 #include "asm/page.h"
 
+static struct address_space *mapping_list = NULL;
+static uint32_t wb_dirty_pages = 0;
+static uint32_t wb_cleaned_pages = 0;
+static uint32_t wb_discarded_pages = 0;
+static uint32_t pcache_hits = 0;
+static uint32_t pcache_misses = 0;
+
 void address_space_init(struct address_space *mapping, struct inode *host)
 {
     mapping->host = host;
     mapping->pages = NULL;
     mapping->nrpages = 0;
+    mapping->next = mapping_list;
+    mapping_list = mapping;
+}
+
+void address_space_release(struct address_space *mapping)
+{
+    if (!mapping)
+        return;
+    if (mapping_list == mapping) {
+        mapping_list = mapping->next;
+        return;
+    }
+    struct address_space *prev = mapping_list;
+    while (prev && prev->next) {
+        if (prev->next == mapping) {
+            prev->next = mapping->next;
+            return;
+        }
+        prev = prev->next;
+    }
 }
 
 static struct page_cache_entry *find_get_page(struct address_space *mapping, uint32_t index)
@@ -36,6 +63,7 @@ static struct page_cache_entry *add_to_page_cache(struct address_space *mapping,
         kfree(p);
         return NULL;
     }
+    p->dirty = 0;
 
     memset(memlayout_directmap_phys_to_virt(p->phys_addr), 0, 4096);
 
@@ -69,12 +97,13 @@ uint32_t generic_file_read(struct inode *node, uint32_t offset, uint32_t size, u
         if (bytes > size) bytes = size;
 
         struct page_cache_entry *p = find_get_page(mapping, index);
-        if (p)
+        if (p) {
+            pcache_hits++;
             memcpy(buffer + bytes_read, (void*)((uint32_t)memlayout_directmap_phys_to_virt(p->phys_addr) + page_offset), bytes);
-        else
-            // Page not in cache, in a real OS we would read from disk here.
-            // Since this is generic and backing ramfs, if it's not in cache, it's just zeroes.
+        } else {
+            pcache_misses++;
             memset(buffer + bytes_read, 0, bytes);
+        }
 
         offset += bytes;
         bytes_read += bytes;
@@ -103,13 +132,20 @@ uint32_t generic_file_write(struct inode *node, uint32_t offset, uint32_t size, 
         if (bytes > size) bytes = size;
 
         struct page_cache_entry *p = find_get_page(mapping, index);
-        if (!p) {
+        if (p) {
+            pcache_hits++;
+        } else {
+            pcache_misses++;
             p = add_to_page_cache(mapping, index);
             if (!p)
-                break; // Out of memory
+                break;
         }
 
         memcpy((void*)((uint32_t)memlayout_directmap_phys_to_virt(p->phys_addr) + page_offset), buffer + bytes_written, bytes);
+        if (!p->dirty) {
+            p->dirty = 1;
+            wb_dirty_pages++;
+        }
 
         offset += bytes;
         bytes_written += bytes;
@@ -132,6 +168,12 @@ void truncate_inode_pages(struct address_space *mapping, uint32_t lstart)
         struct page_cache_entry *p = mapping->pages;
         while (p) {
             struct page_cache_entry *next = p->next;
+            if (p->dirty) {
+                p->dirty = 0;
+                if (wb_dirty_pages)
+                    wb_dirty_pages--;
+                wb_discarded_pages++;
+            }
             if (p->phys_addr)
                 free_page((unsigned long)p->phys_addr);
 
@@ -143,4 +185,72 @@ void truncate_inode_pages(struct address_space *mapping, uint32_t lstart)
         mapping->pages = NULL;
         mapping->nrpages = 0;
     }
+}
+
+int page_cache_reclaim_one(void)
+{
+    struct address_space *m = mapping_list;
+    while (m) {
+        if (m->pages) {
+            struct page_cache_entry *p = m->pages;
+            struct page_cache_entry *prev = NULL;
+            while (p) {
+                if (!p->dirty) {
+                    if (prev)
+                        prev->next = p->next;
+                    else
+                        m->pages = p->next;
+                    if (m->nrpages)
+                        m->nrpages--;
+                    if (p->phys_addr)
+                        free_page((unsigned long)p->phys_addr);
+                    kfree(p);
+                    return 1;
+                }
+                prev = p;
+                p = p->next;
+            }
+        }
+        m = m->next;
+    }
+    return 0;
+}
+
+int writeback_flush_all(void)
+{
+    int flushed = 0;
+    struct address_space *m = mapping_list;
+    while (m) {
+        struct page_cache_entry *p = m->pages;
+        while (p) {
+            if (p->dirty) {
+                p->dirty = 0;
+                if (wb_dirty_pages)
+                    wb_dirty_pages--;
+                wb_cleaned_pages++;
+                flushed++;
+            }
+            p = p->next;
+        }
+        m = m->next;
+    }
+    return flushed;
+}
+
+void get_writeback_stats(uint32_t *dirty, uint32_t *cleaned, uint32_t *discarded)
+{
+    if (dirty)
+        *dirty = wb_dirty_pages;
+    if (cleaned)
+        *cleaned = wb_cleaned_pages;
+    if (discarded)
+        *discarded = wb_discarded_pages;
+}
+
+void get_pagecache_stats(uint32_t *hits, uint32_t *misses)
+{
+    if (hits)
+        *hits = pcache_hits;
+    if (misses)
+        *misses = pcache_misses;
 }

@@ -65,6 +65,11 @@
 - 新增 smoke 用例：fork 炸裂（循环 fork/exit/wait），无死锁、无泄漏、状态正确。
 - QEMU 可复现：多次运行结果一致。
 
+完成进展：
+- ✅ 退出路径职责边界：`do_exit → exit_notify → release_task` 已闭环。
+- ✅ wait 回收与状态编码：fork blast + waitpid 编码回归通过。
+- ✅ signal 基础语义：SIGCHLD/SIGTERM/SIGKILL/SIGINT/SIG0 回归通过，sleep 可被 SIGCHLD 打断。
+
 ### M2：缺页 + 匿名页 + COW 正确性（P2 的核心前半）
 
 目标：把匿名页生命周期与 COW 从“能跑”推进到“语义正确”：写时复制只发生一次、引用计数正确、释放路径可预测。
@@ -81,6 +86,10 @@
 - 新增 smoke 用例：fork 后父子分别写同一匿名页，读回验证隔离；重复多次不崩溃。
 - 内存压力测试：触发回收/分配失败时行为可解释（不要求 swap 先完成）。
 
+完成进展：
+- ✅ 缺页分类统计：/proc/pfault 导出并回归验证。
+- ✅ COW 语义与可观测：/proc/cow + Test 22–25 覆盖隔离、单次复制、释放路径。
+
 ### M3：回收最小闭环（P2 的核心后半）
 
 目标：在内存压力下，系统能继续运行，并且“回收/退化/失败”的策略可控。
@@ -95,6 +104,10 @@
 验收：
 - 新增压力测试程序（usr/）：malloc/触发缺页/触发回收，不死锁、不 silent corruption。
 
+完成进展：
+- ✅ vmscan 可观测：/proc/vmscan 导出 wakeups/tries/reclaims/anon/file。
+- ✅ file cache 最小回收：page cache reclaim + vmscan 触发回收链路，Test 27/28 回归通过。
+
 ### M4：page cache + writeback 最小闭环（P3 的核心）
 
 目标：把 VFS 的 read/write 路径真正走 page cache，并且有“脏页回写”的闭环。
@@ -107,6 +120,13 @@
 
 验收：
 - 新增 smoke 用例：同一文件多次写/读/覆盖，验证数据一致性与缓存命中（可用统计计数器验证）。
+
+完成进展：
+- ✅ page cache 脏页跟踪与 writeback 统计：/proc/writeback 导出 dirty/cleaned。
+- ✅ writeback 触发闭环：可通过 /proc/writeback 写入触发刷回。
+- ✅ 回归用例：Test 29 覆盖写→脏→刷回→统计收敛。
+- ✅ page cache 命中/未命中统计：/proc/pagecache 导出 hits/misses，Test 30 覆盖写/读/回收路径。
+- ✅ writeback 语义收敛：Test 31 覆盖覆盖写/部分写/截断与 discarded 统计。
 
 ### M5：块层主链路（P5 的入口，但只做最小闭环）
 

@@ -77,6 +77,164 @@ static int parse_memfree_kb(void)
     return -1;
 }
 
+static int parse_sched_ticks(void)
+{
+    char buf[256];
+    int n = read_file("/proc/sched", buf, sizeof(buf));
+    if (n <= 0)
+        return -1;
+    const char *key = "ticks=";
+    for (int i = 0; i + 6 < n; i++) {
+        int match = 1;
+        for (int j = 0; j < 6; j++) {
+            if (buf[i + j] != key[j]) {
+                match = 0;
+                break;
+            }
+        }
+        if (!match)
+            continue;
+        int k = i + 6;
+        int val = 0;
+        while (k < n && buf[k] >= '0' && buf[k] <= '9') {
+            val = val * 10 + (buf[k] - '0');
+            k++;
+        }
+        return val;
+    }
+    return -1;
+}
+
+static int parse_cow_stats(int *faults, int *copies)
+{
+    char buf[128];
+    int n = read_file("/proc/cow", buf, sizeof(buf));
+    if (n <= 0)
+        return -1;
+    int got_faults = 0;
+    int got_copies = 0;
+    for (int i = 0; i + 7 < n; i++) {
+        if (!got_faults && buf[i] == 'f' && buf[i+1] == 'a' && buf[i+2] == 'u' && buf[i+3] == 'l' && buf[i+4] == 't' && buf[i+5] == 's' && buf[i+6] == '=') {
+            int k = i + 7;
+            int val = 0;
+            while (k < n && buf[k] >= '0' && buf[k] <= '9') {
+                val = val * 10 + (buf[k] - '0');
+                k++;
+            }
+            *faults = val;
+            got_faults = 1;
+        }
+        if (!got_copies && buf[i] == 'c' && buf[i+1] == 'o' && buf[i+2] == 'p' && buf[i+3] == 'i' && buf[i+4] == 'e' && buf[i+5] == 's' && buf[i+6] == '=') {
+            int k = i + 7;
+            int val = 0;
+            while (k < n && buf[k] >= '0' && buf[k] <= '9') {
+                val = val * 10 + (buf[k] - '0');
+                k++;
+            }
+            *copies = val;
+            got_copies = 1;
+        }
+    }
+    if (!got_faults || !got_copies)
+        return -1;
+    return 0;
+}
+
+static int parse_kv_u32(const char *buf, int n, const char *key, int *out)
+{
+    int key_len = 0;
+    while (key[key_len])
+        key_len++;
+    for (int i = 0; i + key_len < n; i++) {
+        int match = 1;
+        for (int j = 0; j < key_len; j++) {
+            if (buf[i + j] != key[j]) {
+                match = 0;
+                break;
+            }
+        }
+        if (!match)
+            continue;
+        int k = i + key_len;
+        int val = 0;
+        while (k < n && buf[k] >= '0' && buf[k] <= '9') {
+            val = val * 10 + (buf[k] - '0');
+            k++;
+        }
+        *out = val;
+        return 0;
+    }
+    return -1;
+}
+
+static int parse_pfault_stats(int *total, int *present, int *not_present, int *write, int *user, int *prot)
+{
+    char buf[256];
+    int n = read_file("/proc/pfault", buf, sizeof(buf));
+    if (n <= 0)
+        return -1;
+    if (parse_kv_u32(buf, n, "total=", total) < 0)
+        return -1;
+    if (parse_kv_u32(buf, n, "present=", present) < 0)
+        return -1;
+    if (parse_kv_u32(buf, n, "not_present=", not_present) < 0)
+        return -1;
+    if (parse_kv_u32(buf, n, "write=", write) < 0)
+        return -1;
+    if (parse_kv_u32(buf, n, "user=", user) < 0)
+        return -1;
+    if (parse_kv_u32(buf, n, "prot=", prot) < 0)
+        return -1;
+    return 0;
+}
+
+static int parse_vmscan_stats(int *wakeups, int *tries, int *reclaims, int *anon, int *file)
+{
+    char buf[128];
+    int n = read_file("/proc/vmscan", buf, sizeof(buf));
+    if (n <= 0)
+        return -1;
+    if (parse_kv_u32(buf, n, "kswapd_wakeups=", wakeups) < 0)
+        return -1;
+    if (parse_kv_u32(buf, n, "kswapd_tries=", tries) < 0)
+        return -1;
+    if (parse_kv_u32(buf, n, "kswapd_reclaims=", reclaims) < 0)
+        return -1;
+    if (parse_kv_u32(buf, n, "kswapd_anon_reclaims=", anon) < 0)
+        return -1;
+    if (parse_kv_u32(buf, n, "kswapd_file_reclaims=", file) < 0)
+        return -1;
+    return 0;
+}
+
+static int parse_writeback_stats(int *dirty, int *cleaned, int *discarded)
+{
+    char buf[128];
+    int n = read_file("/proc/writeback", buf, sizeof(buf));
+    if (n <= 0)
+        return -1;
+    if (parse_kv_u32(buf, n, "dirty=", dirty) < 0)
+        return -1;
+    if (parse_kv_u32(buf, n, "cleaned=", cleaned) < 0)
+        return -1;
+    if (parse_kv_u32(buf, n, "discarded=", discarded) < 0)
+        return -1;
+    return 0;
+}
+
+static int parse_pagecache_stats(int *hits, int *misses)
+{
+    char buf[128];
+    int n = read_file("/proc/pagecache", buf, sizeof(buf));
+    if (n <= 0)
+        return -1;
+    if (parse_kv_u32(buf, n, "hits=", hits) < 0)
+        return -1;
+    if (parse_kv_u32(buf, n, "misses=", misses) < 0)
+        return -1;
+    return 0;
+}
+
 void test_fork() {
     print("\n--- Test 1: Fork & Waitpid ---\n");
     int pid = fork();
@@ -669,6 +827,851 @@ void test_sysfs_bind_unbind_console() {
         print("sysfs bind/unbind OK.\n");
 }
 
+void test_fork_blast() {
+    print("\n--- Test 15: Fork Blast (waitpid semantics) ---\n");
+
+    int memtotal_kb = parse_memtotal_kb();
+    int nseq = 32;
+    int nburst = 48;
+    if (memtotal_kb >= 256 * 1024) {
+        nseq = 64;
+        nburst = 96;
+    }
+    if (nburst > 120)
+        nburst = 120;
+
+    for (int i = 0; i < nseq; i++) {
+        int pid = fork();
+        if (pid == 0) {
+            exit(10 + i);
+        }
+        if (pid < 0) {
+            fail("fork blast: fork failed (seq)");
+            return;
+        }
+        int st[4] = {0};
+        int ret = waitpid(pid, st, 16);
+        if (ret != pid || st[0] != 10 + i) {
+            fail("fork blast: seq waitpid mismatch");
+            return;
+        }
+    }
+
+    int seen[120];
+    for (int i = 0; i < nburst; i++)
+        seen[i] = 0;
+
+    int spawned = 0;
+    for (int i = 0; i < nburst; i++) {
+        int pid = fork();
+        if (pid == 0) {
+            yield();
+            exit(100 + i);
+        }
+        if (pid < 0)
+            break;
+        spawned++;
+    }
+
+    if (spawned == 0) {
+        fail("fork blast: fork failed (burst)");
+        return;
+    }
+
+    for (int i = 0; i < spawned; i++) {
+        int st[4] = {0};
+        int ret = waitpid(-1, st, 16);
+        if (ret < 0) {
+            fail("fork blast: waitpid(-1) failed early");
+            return;
+        }
+        int code = st[0];
+        if (code < 100 || code >= 100 + spawned) {
+            fail("fork blast: bad exit code range");
+            return;
+        }
+        int idx = code - 100;
+        seen[idx]++;
+        if (seen[idx] != 1) {
+            fail("fork blast: duplicate reap");
+            return;
+        }
+    }
+
+    int st[4] = {0};
+    int extra = waitpid(-1, st, 16);
+    if (extra != -1) {
+        fail("fork blast: waitpid(-1) should return -1 when no children");
+        return;
+    }
+
+    print("fork blast OK.\n");
+}
+
+void test_sleep_interrupt_sigchld() {
+    print("\n--- Test 16: Sleep Interrupt (SIGCHLD) ---\n");
+    int t0 = parse_sched_ticks();
+    if (t0 < 0) {
+        fail("parse /proc/sched ticks");
+        return;
+    }
+    int pid = fork();
+    if (pid == 0) {
+        sleep(2);
+        exit(0);
+    }
+    if (pid < 0) {
+        fail("fork for sleep interrupt");
+        return;
+    }
+    sleep(50);
+    int t1 = parse_sched_ticks();
+    if (t1 < 0) {
+        fail("parse /proc/sched ticks after sleep");
+        return;
+    }
+    int delta = t1 - t0;
+    int st[4] = {0};
+    waitpid(pid, st, 16);
+    if (delta >= 45) {
+        fail("sleep not interrupted by SIGCHLD");
+        return;
+    }
+    print("sleep interrupt OK.\n");
+}
+
+void test_kill_sigterm() {
+    print("\n--- Test 17: Kill (SIGTERM) ---\n");
+    int pid = fork();
+    if (pid == 0) {
+        sleep(200);
+        exit(0);
+    }
+    if (pid < 0) {
+        fail("fork for kill");
+        return;
+    }
+    sleep(5);
+    int SIGTERM = 15;
+    int r = kill(pid, SIGTERM);
+    if (r != 0) {
+        fail("kill(SIGTERM) failed");
+        return;
+    }
+    int st[4] = {0};
+    int ret = waitpid(pid, st, 16);
+    if (ret != pid) {
+        fail("waitpid after kill");
+        return;
+    }
+    if (st[1] != 3 || st[2] != SIGTERM) {
+        fail("kill exit status mismatch");
+        return;
+    }
+    print("kill SIGTERM OK.\n");
+}
+
+void test_kill_sigkill() {
+    print("\n--- Test 18: Kill (SIGKILL) ---\n");
+    int pid = fork();
+    if (pid == 0) {
+        sleep(200);
+        exit(0);
+    }
+    if (pid < 0) {
+        fail("fork for kill sigkill");
+        return;
+    }
+    sleep(5);
+    int SIGKILL = 9;
+    int r = kill(pid, SIGKILL);
+    if (r != 0) {
+        fail("kill(SIGKILL) failed");
+        return;
+    }
+    int st[4] = {0};
+    int ret = waitpid(pid, st, 16);
+    if (ret != pid) {
+        fail("waitpid after kill sigkill");
+        return;
+    }
+    if (st[1] != 3 || st[2] != SIGKILL) {
+        fail("kill sigkill exit status mismatch");
+        return;
+    }
+    print("kill SIGKILL OK.\n");
+}
+
+void test_kill_sigint() {
+    print("\n--- Test 19: Kill (SIGINT) ---\n");
+    int pid = fork();
+    if (pid == 0) {
+        sleep(200);
+        exit(0);
+    }
+    if (pid < 0) {
+        fail("fork for kill sigint");
+        return;
+    }
+    sleep(5);
+    int SIGINT = 2;
+    int r = kill(pid, SIGINT);
+    if (r != 0) {
+        fail("kill(SIGINT) failed");
+        return;
+    }
+    int st[4] = {0};
+    int ret = waitpid(pid, st, 16);
+    if (ret != pid) {
+        fail("waitpid after kill sigint");
+        return;
+    }
+    if (st[1] != 3 || st[2] != SIGINT) {
+        fail("kill sigint exit status mismatch");
+        return;
+    }
+    print("kill SIGINT OK.\n");
+}
+
+void test_kill_sig0() {
+    print("\n--- Test 20: Kill (SIG0) ---\n");
+    int pid = fork();
+    if (pid == 0) {
+        sleep(200);
+        exit(0);
+    }
+    if (pid < 0) {
+        fail("fork for kill sig0");
+        return;
+    }
+    int r = kill(pid, 0);
+    if (r != 0) {
+        fail("kill(SIG0) failed on live pid");
+        return;
+    }
+    int bad = kill(99999, 0);
+    if (bad == 0) {
+        fail("kill(SIG0) should fail on invalid pid");
+        return;
+    }
+    int SIGTERM = 15;
+    kill(pid, SIGTERM);
+    int st[4] = {0};
+    waitpid(pid, st, 16);
+    print("kill SIG0 OK.\n");
+}
+
+void test_kill_pid1() {
+    print("\n--- Test 21: Kill PID 1 ---\n");
+    int SIGTERM = 15;
+    int r = kill(1, SIGTERM);
+    if (r == 0) {
+        fail("kill(pid 1) should fail");
+        return;
+    }
+    print("kill pid1 OK.\n");
+}
+
+void test_cow_isolation() {
+    print("\n--- Test 22: COW Isolation ---\n");
+    for (int i = 0; i < 32; i++) {
+        char *p = (char *)mmap(0, 4096, VMA_READ | VMA_WRITE, 0, -1, 0);
+        if ((int)p == -1 || !p) {
+            fail("cow mmap failed");
+            return;
+        }
+        p[0] = 0x11;
+        p[1] = 0x22;
+        int pid = fork();
+        if (pid == 0) {
+            if (p[0] != 0x11 || p[1] != 0x22)
+                exit(1);
+            p[0] = 0x77;
+            if (p[0] != 0x77)
+                exit(2);
+            exit(10);
+        }
+        if (pid < 0) {
+            munmap(p, 4096);
+            fail("cow fork failed");
+            return;
+        }
+        int st[4] = {0};
+        int ret = waitpid(pid, st, 16);
+        if (ret != pid || st[1] != 0 || st[0] != 10) {
+            munmap(p, 4096);
+            fail("cow child exit bad");
+            return;
+        }
+        if (p[0] != 0x11 || p[1] != 0x22) {
+            munmap(p, 4096);
+            fail("cow parent modified");
+            return;
+        }
+        munmap(p, 4096);
+    }
+    print("cow isolation OK.\n");
+}
+
+void test_cow_stats() {
+    print("\n--- Test 23: COW Stats ---\n");
+    int f0 = 0, c0 = 0;
+    if (parse_cow_stats(&f0, &c0) < 0) {
+        fail("read /proc/cow");
+        return;
+    }
+    int iters = 16;
+    for (int i = 0; i < iters; i++) {
+        char *p = (char *)mmap(0, 4096, VMA_READ | VMA_WRITE, 0, -1, 0);
+        if ((int)p == -1 || !p) {
+            fail("cow stats mmap failed");
+            return;
+        }
+        p[0] = 0x44;
+        int pid = fork();
+        if (pid == 0) {
+            p[0] = 0x55;
+            exit(0);
+        }
+        if (pid < 0) {
+            munmap(p, 4096);
+            fail("cow stats fork failed");
+            return;
+        }
+        int st[4] = {0};
+        waitpid(pid, st, 16);
+        p[0] = 0x66;
+        munmap(p, 4096);
+    }
+    int f1 = 0, c1 = 0;
+    if (parse_cow_stats(&f1, &c1) < 0) {
+        fail("read /proc/cow after");
+        return;
+    }
+    int df = f1 - f0;
+    int dc = c1 - c0;
+    if (df < iters) {
+        fail("cow faults too low");
+        return;
+    }
+    if (dc < 1 || dc > df) {
+        fail("cow copies invalid");
+        return;
+    }
+    print("cow stats OK.\n");
+}
+
+void test_cow_single_copy() {
+    print("\n--- Test 24: COW Single Copy ---\n");
+    int f0 = 0, c0 = 0;
+    if (parse_cow_stats(&f0, &c0) < 0) {
+        fail("read /proc/cow before");
+        return;
+    }
+    int iters = 16;
+    for (int i = 0; i < iters; i++) {
+        char *p = (char *)mmap(0, 4096, VMA_READ | VMA_WRITE, 0, -1, 0);
+        if ((int)p == -1 || !p) {
+            fail("cow single mmap failed");
+            return;
+        }
+        p[0] = 0x21;
+        int pid = fork();
+        if (pid == 0) {
+            p[0] = 0x22;
+            exit(0);
+        }
+        if (pid < 0) {
+            munmap(p, 4096);
+            fail("cow single fork failed");
+            return;
+        }
+        int st[4] = {0};
+        waitpid(pid, st, 16);
+        p[0] = 0x23;
+        p[0] = 0x24;
+        munmap(p, 4096);
+    }
+    int f1 = 0, c1 = 0;
+    if (parse_cow_stats(&f1, &c1) < 0) {
+        fail("read /proc/cow after");
+        return;
+    }
+    int df = f1 - f0;
+    int dc = c1 - c0;
+    if (dc != iters) {
+        fail("cow copies not single per iter");
+        return;
+    }
+    if (df < iters * 2) {
+        fail("cow faults too low for single-copy");
+        return;
+    }
+    print("cow single copy OK.\n");
+}
+
+void test_cow_release() {
+    print("\n--- Test 25: COW Release ---\n");
+    int before = parse_memfree_kb();
+    if (before < 0) {
+        fail("memfree before");
+        return;
+    }
+    int iters = 8;
+    int pages = 512;
+    int len = pages * 4096;
+    for (int i = 0; i < iters; i++) {
+        char *p = (char *)mmap(0, len, VMA_READ | VMA_WRITE, 0, -1, 0);
+        if ((int)p == -1 || !p) {
+            fail("cow release mmap failed");
+            return;
+        }
+        for (int off = 0; off < len; off += 4096)
+            p[off] = (char)i;
+        int pid = fork();
+        if (pid == 0) {
+            for (int off = 0; off < len; off += 4096)
+                p[off] = (char)(i + 1);
+            exit(0);
+        }
+        if (pid < 0) {
+            munmap(p, len);
+            fail("cow release fork failed");
+            return;
+        }
+        int st[4] = {0};
+        waitpid(pid, st, 16);
+        munmap(p, len);
+    }
+    int after = parse_memfree_kb();
+    if (after < 0) {
+        fail("memfree after");
+        return;
+    }
+    int delta = before - after;
+    if (delta > 2048) {
+        fail("cow release leak");
+        return;
+    }
+    print("cow release OK.\n");
+}
+
+void test_pfault_stats() {
+    print("\n--- Test 26: Page Fault Stats ---\n");
+    int t0 = 0, p0 = 0, np0 = 0, w0 = 0, u0 = 0, prot0 = 0;
+    if (parse_pfault_stats(&t0, &p0, &np0, &w0, &u0, &prot0) < 0) {
+        fail("read /proc/pfault");
+        return;
+    }
+    char *p = (char *)mmap(0, 4096, VMA_READ | VMA_WRITE, 0, -1, 0);
+    if ((int)p == -1 || !p) {
+        fail("pfault mmap");
+        return;
+    }
+    p[0] = 0x1;
+    munmap(p, 4096);
+    int t1 = 0, p1 = 0, np1 = 0, w1 = 0, u1 = 0, prot1 = 0;
+    if (parse_pfault_stats(&t1, &p1, &np1, &w1, &u1, &prot1) < 0) {
+        fail("read /proc/pfault after access");
+        return;
+    }
+    if (np1 <= np0 || w1 <= w0 || u1 <= u0 || t1 <= t0) {
+        fail("pfault counters no increase");
+        return;
+    }
+    char *q = (char *)mmap(0, 4096, VMA_READ | VMA_WRITE, 0, -1, 0);
+    if ((int)q == -1 || !q) {
+        fail("pfault mmap2");
+        return;
+    }
+    q[0] = 0x2;
+    int pid = fork();
+    if (pid == 0) {
+        volatile char tmp = q[0];
+        if (tmp == 0x7f)
+            q[0] = tmp;
+        int prot_res = syscall3(SYS_MPROTECT, (int)q, 4096, VMA_READ);
+        if (prot_res < 0)
+            exit(3);
+        q[0] = 0x3;
+        exit(0);
+    }
+    if (pid < 0) {
+        munmap(q, 4096);
+        fail("pfault fork");
+        return;
+    }
+    int st[4] = {0};
+    waitpid(pid, st, 16);
+    munmap(q, 4096);
+    if (st[1] != 2) {
+        fail("pfault child not killed");
+        return;
+    }
+    int t2 = 0, p2 = 0, np2 = 0, w2 = 0, u2 = 0, prot2 = 0;
+    if (parse_pfault_stats(&t2, &p2, &np2, &w2, &u2, &prot2) < 0) {
+        fail("read /proc/pfault after prot");
+        return;
+    }
+    if (prot2 <= prot1 || p2 <= p1) {
+        fail("pfault prot not counted");
+        return;
+    }
+    print("pfault stats OK.\n");
+}
+
+void test_vmscan_wakeups() {
+    print("\n--- Test 27: Vmscan Wakeups ---\n");
+    int w0 = 0, t0 = 0, r0 = 0, a0 = 0, f0 = 0;
+    if (parse_vmscan_stats(&w0, &t0, &r0, &a0, &f0) < 0) {
+        fail("read /proc/vmscan");
+        return;
+    }
+    int memfree_kb = parse_memfree_kb();
+    if (memfree_kb < 0) {
+        fail("memfree for vmscan");
+        return;
+    }
+    int bytes = (memfree_kb * 1024 * 3) / 4;
+    if (bytes < (16 * 1024 * 1024)) {
+        print("vmscan SKIP.\n");
+        return;
+    }
+    char *p = (char *)mmap(0, bytes, VMA_READ | VMA_WRITE, 0, -1, 0);
+    if ((int)p == -1 || !p) {
+        fail("vmscan mmap");
+        return;
+    }
+    for (int off = 0; off < bytes; off += 4096)
+        p[off] = (char)(off >> 12);
+    munmap(p, bytes);
+    int w1 = 0, t1 = 0, r1 = 0, a1 = 0, f1 = 0;
+    if (parse_vmscan_stats(&w1, &t1, &r1, &a1, &f1) < 0) {
+        fail("read /proc/vmscan after");
+        return;
+    }
+    if (w1 < w0) {
+        fail("vmscan wakeups decreased");
+        return;
+    }
+    if (t1 < t0) {
+        fail("vmscan tries decreased");
+        return;
+    }
+    if (r1 < r0) {
+        fail("vmscan reclaims decreased");
+        return;
+    }
+    if (a1 < a0) {
+        fail("vmscan anon reclaims decreased");
+        return;
+    }
+    if (f1 < f0) {
+        fail("vmscan file reclaims decreased");
+        return;
+    }
+    print("vmscan wakeups OK.\n");
+}
+
+void test_file_cache_reclaim() {
+    print("\n--- Test 28: File Cache Reclaim ---\n");
+    int w0 = 0, t0 = 0, r0 = 0, a0 = 0, f0 = 0;
+    if (parse_vmscan_stats(&w0, &t0, &r0, &a0, &f0) < 0) {
+        fail("read /proc/vmscan before file");
+        return;
+    }
+    int fd = open("/cache.bin", O_CREAT | O_TRUNC);
+    if (fd < 0) {
+        fail("open cache.bin");
+        return;
+    }
+    int pages = 256;
+    char buf[4096];
+    for (int i = 0; i < 4096; i++)
+        buf[i] = (char)i;
+    for (int i = 0; i < pages; i++) {
+        int wr = write(fd, buf, 4096);
+        if (wr != 4096) {
+            close(fd);
+            fail("write cache.bin");
+            return;
+        }
+    }
+    close(fd);
+    int procfd = open("/proc/vmscan", 0);
+    if (procfd >= 0) {
+        write(procfd, "reclaim\n", 8);
+        close(procfd);
+    }
+    int memfree_kb = parse_memfree_kb();
+    if (memfree_kb < 0) {
+        fail("memfree for file reclaim");
+        return;
+    }
+    int observed = 0;
+    int t1 = t0, f1 = f0;
+    for (int round = 0; round < 2; round++) {
+        int bytes = (memfree_kb * 1024 * 15) / 16;
+        if (bytes < (8 * 1024 * 1024)) {
+            break;
+        }
+        char *p = (char *)mmap(0, bytes, VMA_READ | VMA_WRITE, 0, -1, 0);
+        if ((int)p == -1 || !p) {
+            break;
+        }
+        for (int off = 0; off < bytes; off += 4096)
+            p[off] = (char)(off >> 12);
+        munmap(p, bytes);
+        int w2 = 0, t2 = 0, r2 = 0, a2 = 0, f2 = 0;
+        if (parse_vmscan_stats(&w2, &t2, &r2, &a2, &f2) < 0)
+            break;
+        t1 = t2;
+        f1 = f2;
+        if (f1 > f0) {
+            observed = 1;
+            break;
+        }
+    }
+    if (!observed) {
+        if (t1 == t0) {
+            print("file reclaim SKIP.\n");
+            return;
+        }
+        fail("file reclaim not observed");
+        return;
+    }
+    print("file reclaim OK.\n");
+}
+
+void test_writeback() {
+    print("\n--- Test 29: Writeback ---\n");
+    int d0 = 0, c0 = 0, x0 = 0;
+    if (parse_writeback_stats(&d0, &c0, &x0) < 0) {
+        fail("read /proc/writeback");
+        return;
+    }
+    int fd = open("/wb.txt", O_CREAT | O_TRUNC);
+    if (fd < 0) {
+        fail("open wb.txt");
+        return;
+    }
+    char buf[4096];
+    for (int i = 0; i < 4096; i++)
+        buf[i] = (char)(i + 1);
+    int wr = write(fd, buf, 4096);
+    close(fd);
+    if (wr != 4096) {
+        fail("write wb.txt");
+        return;
+    }
+    int d1 = 0, c1 = 0, x1 = 0;
+    if (parse_writeback_stats(&d1, &c1, &x1) < 0) {
+        fail("read /proc/writeback after write");
+        return;
+    }
+    if (d1 <= d0) {
+        fail("writeback dirty not increased");
+        return;
+    }
+    int procfd = open("/proc/writeback", 0);
+    if (procfd >= 0) {
+        write(procfd, "flush\n", 6);
+        close(procfd);
+    }
+    int d2 = 0, c2 = 0, x2 = 0;
+    if (parse_writeback_stats(&d2, &c2, &x2) < 0) {
+        fail("read /proc/writeback after flush");
+        return;
+    }
+    if (d2 >= d1 || c2 <= c1) {
+        fail("writeback flush ineffective");
+        return;
+    }
+    print("writeback OK.\n");
+}
+
+void test_writeback_truncate() {
+    print("\n--- Test 31: Writeback Truncate ---\n");
+    int d0 = 0, c0 = 0, x0 = 0;
+    if (parse_writeback_stats(&d0, &c0, &x0) < 0) {
+        fail("read /proc/writeback before truncate");
+        return;
+    }
+    int fd = open("/wb2.txt", O_CREAT | O_TRUNC);
+    if (fd < 0) {
+        fail("open wb2.txt");
+        return;
+    }
+    char buf[4096];
+    for (int i = 0; i < 4096; i++)
+        buf[i] = 'A';
+    int wr = write(fd, buf, 4096);
+    close(fd);
+    if (wr != 4096) {
+        fail("write wb2.txt");
+        return;
+    }
+    int d1 = 0, c1 = 0, x1 = 0;
+    if (parse_writeback_stats(&d1, &c1, &x1) < 0) {
+        fail("read /proc/writeback after write2");
+        return;
+    }
+    if (d1 <= d0) {
+        fail("writeback dirty not increased 2");
+        return;
+    }
+    fd = open("/wb2.txt", 0);
+    if (fd < 0) {
+        fail("open wb2.txt overwrite");
+        return;
+    }
+    for (int i = 0; i < 512; i++)
+        buf[i] = 'B';
+    wr = write(fd, buf, 512);
+    close(fd);
+    if (wr != 512) {
+        fail("overwrite wb2.txt");
+        return;
+    }
+    fd = open("/wb2.txt", 0);
+    if (fd < 0) {
+        fail("open wb2.txt read");
+        return;
+    }
+    int rd = read(fd, buf, 4096);
+    close(fd);
+    if (rd != 4096) {
+        fail("read wb2.txt");
+        return;
+    }
+    for (int i = 0; i < 512; i++) {
+        if (buf[i] != 'B') {
+            fail("overwrite mismatch");
+            return;
+        }
+    }
+    for (int i = 512; i < 4096; i++) {
+        if (buf[i] != 'A') {
+            fail("partial overwrite mismatch");
+            return;
+        }
+    }
+    fd = open("/wb2.txt", O_TRUNC);
+    if (fd < 0) {
+        fail("truncate wb2.txt");
+        return;
+    }
+    close(fd);
+    int d2 = 0, c2 = 0, x2 = 0;
+    if (parse_writeback_stats(&d2, &c2, &x2) < 0) {
+        fail("read /proc/writeback after truncate");
+        return;
+    }
+    if (x2 <= x0) {
+        fail("writeback discard not increased");
+        return;
+    }
+    if (d2 >= d1) {
+        fail("writeback dirty not decreased on truncate");
+        return;
+    }
+    fd = open("/wb2.txt", 0);
+    if (fd < 0) {
+        fail("open wb2.txt read after truncate");
+        return;
+    }
+    rd = read(fd, buf, 1);
+    close(fd);
+    if (rd != 0) {
+        fail("truncate size not zero");
+        return;
+    }
+    print("writeback truncate OK.\n");
+}
+
+void test_pagecache_stats() {
+    print("\n--- Test 30: Page Cache Stats ---\n");
+    int h0 = 0, m0 = 0;
+    if (parse_pagecache_stats(&h0, &m0) < 0) {
+        fail("read /proc/pagecache");
+        return;
+    }
+    int fd = open("/pc.txt", O_CREAT | O_TRUNC);
+    if (fd < 0) {
+        fail("open pc.txt");
+        return;
+    }
+    char buf[4096];
+    for (int i = 0; i < 4096; i++)
+        buf[i] = (char)(i ^ 0x5a);
+    int wr = write(fd, buf, 4096);
+    close(fd);
+    if (wr != 4096) {
+        fail("write pc.txt");
+        return;
+    }
+    int h1 = 0, m1 = 0;
+    if (parse_pagecache_stats(&h1, &m1) < 0) {
+        fail("read /proc/pagecache after write");
+        return;
+    }
+    if (m1 <= m0) {
+        fail("pagecache miss not increased on write");
+        return;
+    }
+    int fd2 = open("/pc.txt", 0);
+    if (fd2 < 0) {
+        fail("open pc.txt read");
+        return;
+    }
+    int rd = read(fd2, buf, 4096);
+    close(fd2);
+    if (rd != 4096) {
+        fail("read pc.txt");
+        return;
+    }
+    int h2 = 0, m2 = 0;
+    if (parse_pagecache_stats(&h2, &m2) < 0) {
+        fail("read /proc/pagecache after hit");
+        return;
+    }
+    if (h2 <= h1) {
+        fail("pagecache hit not increased");
+        return;
+    }
+    int procfd = open("/proc/writeback", 0);
+    if (procfd >= 0) {
+        write(procfd, "flush\n", 6);
+        close(procfd);
+    }
+    procfd = open("/proc/vmscan", 0);
+    if (procfd >= 0) {
+        write(procfd, "reclaim\n", 8);
+        close(procfd);
+    }
+    fd2 = open("/pc.txt", 0);
+    if (fd2 < 0) {
+        fail("open pc.txt read2");
+        return;
+    }
+    rd = read(fd2, buf, 4096);
+    close(fd2);
+    if (rd != 4096) {
+        fail("read pc.txt 2");
+        return;
+    }
+    int h3 = 0, m3 = 0;
+    if (parse_pagecache_stats(&h3, &m3) < 0) {
+        fail("read /proc/pagecache after miss");
+        return;
+    }
+    if (m3 <= m2) {
+        fail("pagecache miss not increased");
+        return;
+    }
+    print("pagecache stats OK.\n");
+}
+
 int main() {
     print("================================\n");
     print("  Lite OS Automated Test Suite  \n");
@@ -688,6 +1691,23 @@ int main() {
     test_pci_uevent();
     test_sysfs_layout();
     test_sysfs_bind_unbind_console();
+    test_fork_blast();
+    test_sleep_interrupt_sigchld();
+    test_kill_sigterm();
+    test_kill_sigkill();
+    test_kill_sigint();
+    test_kill_sig0();
+    test_kill_pid1();
+    test_cow_isolation();
+    test_cow_stats();
+    test_cow_single_copy();
+    test_cow_release();
+    test_pfault_stats();
+    test_vmscan_wakeups();
+    test_file_cache_reclaim();
+    test_writeback();
+    test_writeback_truncate();
+    test_pagecache_stats();
 
     print("\n================================\n");
     if (failures == 0) {

@@ -25,6 +25,10 @@ static struct inode proc_maps;
 static struct inode proc_meminfo;
 static struct inode proc_iomem;
 static struct inode proc_cow;
+static struct inode proc_pfault;
+static struct inode proc_vmscan;
+static struct inode proc_writeback;
+static struct inode proc_pagecache;
 static struct inode proc_mounts;
 
 typedef struct {
@@ -347,6 +351,150 @@ static uint32_t proc_read_cow(struct inode *node, uint32_t offset, uint32_t size
     uint32_t remain = off - offset;
     if (size > remain) size = remain;
     memcpy(buffer, tmp + offset, size);
+    return size;
+}
+
+static uint32_t proc_read_pfault(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+{
+    (void)node;
+    static char tmp[256];
+    uint32_t off = 0;
+    uint32_t total = 0, present = 0, not_present = 0, write = 0, user = 0, kernel = 0;
+    uint32_t reserved = 0, prot = 0, null = 0, kernel_addr = 0, out_of_range = 0;
+    get_pf_stats(&total, &present, &not_present, &write, &user, &kernel, &reserved, &prot, &null, &kernel_addr, &out_of_range);
+    buf_append(tmp, &off, sizeof(tmp), "total=");
+    buf_append_u32(tmp, &off, sizeof(tmp), total);
+    buf_append(tmp, &off, sizeof(tmp), "\npresent=");
+    buf_append_u32(tmp, &off, sizeof(tmp), present);
+    buf_append(tmp, &off, sizeof(tmp), "\nnot_present=");
+    buf_append_u32(tmp, &off, sizeof(tmp), not_present);
+    buf_append(tmp, &off, sizeof(tmp), "\nwrite=");
+    buf_append_u32(tmp, &off, sizeof(tmp), write);
+    buf_append(tmp, &off, sizeof(tmp), "\nuser=");
+    buf_append_u32(tmp, &off, sizeof(tmp), user);
+    buf_append(tmp, &off, sizeof(tmp), "\nkernel=");
+    buf_append_u32(tmp, &off, sizeof(tmp), kernel);
+    buf_append(tmp, &off, sizeof(tmp), "\nreserved=");
+    buf_append_u32(tmp, &off, sizeof(tmp), reserved);
+    buf_append(tmp, &off, sizeof(tmp), "\nprot=");
+    buf_append_u32(tmp, &off, sizeof(tmp), prot);
+    buf_append(tmp, &off, sizeof(tmp), "\nnull=");
+    buf_append_u32(tmp, &off, sizeof(tmp), null);
+    buf_append(tmp, &off, sizeof(tmp), "\nkernel_addr=");
+    buf_append_u32(tmp, &off, sizeof(tmp), kernel_addr);
+    buf_append(tmp, &off, sizeof(tmp), "\nout_of_range=");
+    buf_append_u32(tmp, &off, sizeof(tmp), out_of_range);
+    buf_append(tmp, &off, sizeof(tmp), "\n");
+    if (off < sizeof(tmp))
+        tmp[off] = 0;
+    if (offset >= off)
+        return 0;
+    uint32_t remain = off - offset;
+    if (size > remain)
+        size = remain;
+    memcpy(buffer, tmp + offset, size);
+    return size;
+}
+
+static uint32_t proc_read_vmscan(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+{
+    (void)node;
+    static char tmp[128];
+    uint32_t off = 0;
+    uint32_t wakeups = kswapd_wakeup_count();
+    uint32_t tries = kswapd_try_count();
+    uint32_t reclaims = kswapd_reclaim_count();
+    uint32_t anon = kswapd_anon_reclaim_count();
+    uint32_t file = kswapd_file_reclaim_count();
+    buf_append(tmp, &off, sizeof(tmp), "kswapd_wakeups=");
+    buf_append_u32(tmp, &off, sizeof(tmp), wakeups);
+    buf_append(tmp, &off, sizeof(tmp), "\nkswapd_tries=");
+    buf_append_u32(tmp, &off, sizeof(tmp), tries);
+    buf_append(tmp, &off, sizeof(tmp), "\nkswapd_reclaims=");
+    buf_append_u32(tmp, &off, sizeof(tmp), reclaims);
+    buf_append(tmp, &off, sizeof(tmp), "\nkswapd_anon_reclaims=");
+    buf_append_u32(tmp, &off, sizeof(tmp), anon);
+    buf_append(tmp, &off, sizeof(tmp), "\nkswapd_file_reclaims=");
+    buf_append_u32(tmp, &off, sizeof(tmp), file);
+    buf_append(tmp, &off, sizeof(tmp), "\n");
+    if (off < sizeof(tmp))
+        tmp[off] = 0;
+    if (offset >= off)
+        return 0;
+    uint32_t remain = off - offset;
+    if (size > remain)
+        size = remain;
+    memcpy(buffer, tmp + offset, size);
+    return size;
+}
+
+static uint32_t proc_read_writeback(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+{
+    (void)node;
+    static char tmp[128];
+    uint32_t off = 0;
+    uint32_t dirty = 0, cleaned = 0, discarded = 0;
+    get_writeback_stats(&dirty, &cleaned, &discarded);
+    buf_append(tmp, &off, sizeof(tmp), "dirty=");
+    buf_append_u32(tmp, &off, sizeof(tmp), dirty);
+    buf_append(tmp, &off, sizeof(tmp), "\ncleaned=");
+    buf_append_u32(tmp, &off, sizeof(tmp), cleaned);
+    buf_append(tmp, &off, sizeof(tmp), "\ndiscarded=");
+    buf_append_u32(tmp, &off, sizeof(tmp), discarded);
+    buf_append(tmp, &off, sizeof(tmp), "\n");
+    if (off < sizeof(tmp))
+        tmp[off] = 0;
+    if (offset >= off)
+        return 0;
+    uint32_t remain = off - offset;
+    if (size > remain)
+        size = remain;
+    memcpy(buffer, tmp + offset, size);
+    return size;
+}
+
+static uint32_t proc_write_writeback(struct inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer)
+{
+    (void)node;
+    (void)offset;
+    (void)buffer;
+    writeback_flush_all();
+    return size;
+}
+
+static uint32_t proc_read_pagecache(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+{
+    (void)node;
+    static char tmp[128];
+    uint32_t off = 0;
+    uint32_t hits = 0, misses = 0;
+    get_pagecache_stats(&hits, &misses);
+    buf_append(tmp, &off, sizeof(tmp), "hits=");
+    buf_append_u32(tmp, &off, sizeof(tmp), hits);
+    buf_append(tmp, &off, sizeof(tmp), "\nmisses=");
+    buf_append_u32(tmp, &off, sizeof(tmp), misses);
+    buf_append(tmp, &off, sizeof(tmp), "\n");
+    if (off < sizeof(tmp))
+        tmp[off] = 0;
+    if (offset >= off)
+        return 0;
+    uint32_t remain = off - offset;
+    if (size > remain)
+        size = remain;
+    memcpy(buffer, tmp + offset, size);
+    return size;
+}
+
+static uint32_t proc_write_vmscan(struct inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer)
+{
+    (void)node;
+    (void)offset;
+    (void)buffer;
+    writeback_flush_all();
+    if (contig_page_data.zone_dma.spanned_pages)
+        try_to_free_pages(&contig_page_data.zone_dma, 0);
+    if (contig_page_data.zone_normal.spanned_pages)
+        try_to_free_pages(&contig_page_data.zone_normal, 0);
     return size;
 }
 
@@ -804,11 +952,31 @@ static struct dirent *proc_readdir(struct file *file, uint32_t index)
         return &proc_dirent;
     }
     if (index == 7) {
+        strcpy(proc_dirent.name, "pfault");
+        proc_dirent.ino = proc_pfault.i_ino;
+        return &proc_dirent;
+    }
+    if (index == 8) {
+        strcpy(proc_dirent.name, "vmscan");
+        proc_dirent.ino = proc_vmscan.i_ino;
+        return &proc_dirent;
+    }
+    if (index == 9) {
+        strcpy(proc_dirent.name, "writeback");
+        proc_dirent.ino = proc_writeback.i_ino;
+        return &proc_dirent;
+    }
+    if (index == 10) {
+        strcpy(proc_dirent.name, "pagecache");
+        proc_dirent.ino = proc_pagecache.i_ino;
+        return &proc_dirent;
+    }
+    if (index == 11) {
         strcpy(proc_dirent.name, "mounts");
         proc_dirent.ino = proc_mounts.i_ino;
         return &proc_dirent;
     }
-    if (index == 8) {
+    if (index == 12) {
         strcpy(proc_dirent.name, "self");
         proc_dirent.ino = 0x1000;
         return &proc_dirent;
@@ -835,6 +1003,14 @@ static struct inode *proc_finddir(struct inode *node, const char *name)
         return &proc_iomem;
     if (!strcmp(name, "cow"))
         return &proc_cow;
+    if (!strcmp(name, "pfault"))
+        return &proc_pfault;
+    if (!strcmp(name, "vmscan"))
+        return &proc_vmscan;
+    if (!strcmp(name, "writeback"))
+        return &proc_writeback;
+    if (!strcmp(name, "pagecache"))
+        return &proc_pagecache;
     if (!strcmp(name, "mounts"))
         return &proc_mounts;
     if (!strcmp(name, "self"))
@@ -917,6 +1093,46 @@ static struct file_operations proc_iomem_ops = {
 
 static struct file_operations proc_cow_ops = {
     .read = proc_read_cow,
+    .write = NULL,
+    .open = NULL,
+    .close = NULL,
+    .readdir = NULL,
+    .finddir = NULL,
+    .ioctl = NULL
+};
+
+static struct file_operations proc_pfault_ops = {
+    .read = proc_read_pfault,
+    .write = NULL,
+    .open = NULL,
+    .close = NULL,
+    .readdir = NULL,
+    .finddir = NULL,
+    .ioctl = NULL
+};
+
+static struct file_operations proc_vmscan_ops = {
+    .read = proc_read_vmscan,
+    .write = proc_write_vmscan,
+    .open = NULL,
+    .close = NULL,
+    .readdir = NULL,
+    .finddir = NULL,
+    .ioctl = NULL
+};
+
+static struct file_operations proc_writeback_ops = {
+    .read = proc_read_writeback,
+    .write = proc_write_writeback,
+    .open = NULL,
+    .close = NULL,
+    .readdir = NULL,
+    .finddir = NULL,
+    .ioctl = NULL
+};
+
+static struct file_operations proc_pagecache_ops = {
+    .read = proc_read_pagecache,
     .write = NULL,
     .open = NULL,
     .close = NULL,
@@ -1022,6 +1238,42 @@ static int proc_fill_super(struct super_block *sb, void *data, int silent)
     proc_cow.uid = 0;
     proc_cow.gid = 0;
     proc_cow.i_mode = 0444;
+
+    memset(&proc_pfault, 0, sizeof(proc_pfault));
+    proc_pfault.flags = FS_FILE;
+    proc_pfault.i_ino = 10;
+    proc_pfault.i_size = 256;
+    proc_pfault.f_ops = &proc_pfault_ops;
+    proc_pfault.uid = 0;
+    proc_pfault.gid = 0;
+    proc_pfault.i_mode = 0444;
+
+    memset(&proc_vmscan, 0, sizeof(proc_vmscan));
+    proc_vmscan.flags = FS_FILE;
+    proc_vmscan.i_ino = 11;
+    proc_vmscan.i_size = 128;
+    proc_vmscan.f_ops = &proc_vmscan_ops;
+    proc_vmscan.uid = 0;
+    proc_vmscan.gid = 0;
+    proc_vmscan.i_mode = 0444;
+
+    memset(&proc_writeback, 0, sizeof(proc_writeback));
+    proc_writeback.flags = FS_FILE;
+    proc_writeback.i_ino = 12;
+    proc_writeback.i_size = 128;
+    proc_writeback.f_ops = &proc_writeback_ops;
+    proc_writeback.uid = 0;
+    proc_writeback.gid = 0;
+    proc_writeback.i_mode = 0444;
+
+    memset(&proc_pagecache, 0, sizeof(proc_pagecache));
+    proc_pagecache.flags = FS_FILE;
+    proc_pagecache.i_ino = 13;
+    proc_pagecache.i_size = 128;
+    proc_pagecache.f_ops = &proc_pagecache_ops;
+    proc_pagecache.uid = 0;
+    proc_pagecache.gid = 0;
+    proc_pagecache.i_mode = 0444;
 
     memset(&proc_mounts, 0, sizeof(proc_mounts));
     proc_mounts.flags = FS_FILE;

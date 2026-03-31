@@ -2,6 +2,7 @@
 #include "linux/slab.h"
 #include "linux/libc.h"
 #include "linux/cred.h"
+#include "linux/pagemap.h"
 
 // Ramfs relies entirely on generic_file_read/write and generic_readdir
 // We don't even need a private data struct anymore!
@@ -101,8 +102,10 @@ static int ramfs_unlink(struct dentry *dir_dentry, const char *name)
     if (target->i_mapping)
         truncate_inode_pages(target->i_mapping, 0);
 
-    if (target->i_mapping)
+    if (target->i_mapping) {
+        address_space_release(target->i_mapping);
         kfree(target->i_mapping);
+    }
     vfs_dentry_detach(found);
     if (found->name)
         kfree((void*)found->name);
@@ -143,8 +146,10 @@ static int ramfs_rmdir(struct dentry *dir_dentry, const char *name)
     if (found->children)
         return -1;
 
-    if (target->i_mapping)
+    if (target->i_mapping) {
+        address_space_release(target->i_mapping);
         kfree(target->i_mapping);
+    }
     vfs_dentry_detach(found);
     if (found->name)
         kfree((void*)found->name);
