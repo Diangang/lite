@@ -2,6 +2,8 @@
 
 目的：把开发重心从“可观测/外设/展示”拉回到 Linux 2.6 的核心机制闭环，优先补齐 **进程生命周期 + MM（缺页/COW/回收）+ VFS 内存路径（page cache/writeback）**。sysfs/driver model/PCI/NVMe 仅作为验证载体，不作为主线目标。
 
+说明：本文件记录了 M0–M5 的闭环达成情况；下一阶段（对齐 Linux 2.6 的块层/缓存/磁盘 FS 与 swap/writeback 线程模型）见 [roadmap_linux26_core_focus_plan_v2.md](file:///data25/lidg/lite/Documentation/roadmap_linux26_core_focus_plan_v2.md)。
+
 ## 0. 原则（本计划的约束）
 
 1. **先闭环，再扩展**：每个阶段必须有可复现的触发方式 + smoke/自测覆盖 + 回归基线。
@@ -47,6 +49,12 @@
 - `bin/smoke` 回归通过（512M 下 Large MMAP Touch 通过）。
 
 说明：这个里程碑并不是“外围可观测性”，而是保证 MM/缺页/回收的所有后续工作都有可靠的地址空间前提。
+
+完成进展：
+- ✅ e820 等价物：解析 multiboot memory map，生成内部 e820 表，并且 reserved 不可分配（bootmem + reserved overlap）。
+- ✅ direct mapping 动态化：`paging_init()` 按 `lowmem_end` 建立高半区线性映射，并做边界一致性检查。
+- ✅ 可观测：`/proc/meminfo` 导出 E820Ram/LowMemEnd/DirectMap/Vmalloc/Fixaddr 等，`/proc/iomem` 导出 System RAM/Kernel/initramfs 等区间。
+- ✅ 验收回归：`make smoke-128`/`make smoke-512` 通过，direct map 随内存大小变化。
 
 ### M1：进程生命周期与 wait/signal 闭环（P1 的核心部分）
 
@@ -141,9 +149,11 @@
 - QEMU 中挂载块设备并读取文件；在压力下不崩溃。
 
 完成进展：
-- ✅ ramdisk 块设备注册：/dev/ram0 通过 devtmpfs 暴露。
+- ✅ ramdisk 块设备注册：/dev/ram0、/dev/ram1 通过 devtmpfs 暴露。
 - ✅ blockstats 可观测：/proc/blockstats 导出读写计数与字节数。
 - ✅ 回归用例：Test 32 覆盖 ram0 写→刷回→读路径与统计增长。
+- ✅ minix 最小块 FS：挂载 /mnt（backend=/dev/ram1），可读取 /mnt/hello.txt。
+- ✅ 回归用例：Test 33 覆盖 minix 挂载后读取文件内容。
 
 ## 3. 每个里程碑的“强制回归基线”
 

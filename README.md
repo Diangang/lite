@@ -26,7 +26,7 @@ Lite 是一款用于学习和演示操作系统底层原理的极简 32 位 x86 
     - **Buddy 框架**：支持按页 (4KB) 及按 order 的物理页分配与释放，并挂接到 zone/free_area 与 zonelist。
   - **虚拟内存管理 (paging/pgtable)**：
     - **分页机制 (Paging)**：开启 x86 保护模式分页，设置 CR3 和 CR0 寄存器。
-    - **内核线性映射**：将物理内存前 128MB 映射到 `PAGE_OFFSET` 起始的高半区。
+    - **内核线性映射**：将 lowmem（由 multiboot memory map 计算并受 32-bit lowmem 上限约束）映射到 `PAGE_OFFSET` 起始的高半区。
     - **启动 trampoline**：开启分页后跳转到高半区并清理低端恒等映射（当前覆盖前 4MB）。
     - **缺页异常处理**：捕获 `#PF` (Interrupt 14)，支持最小按需映射（not-present 缺页自动分配并映射），并基于用户 VMA 范围校验合法性。
     - **映射查询**：提供虚拟地址是否已映射与虚实地址转换的辅助接口。

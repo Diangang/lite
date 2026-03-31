@@ -161,6 +161,19 @@ int vfs_mount_fs(const char *path, const char *fs_name)
     return vfs_mount(path, sb);
 }
 
+int vfs_mount_fs_dev(const char *path, const char *fs_name, const char *dev_name)
+{
+    struct file_system_type *fs = get_filesystem(fs_name);
+    if (!fs)
+        panic("filesystem type not found.");
+
+    struct super_block *sb = fs->get_sb(fs, 0, dev_name, NULL);
+    if (!sb)
+        panic("get_sb failed.");
+
+    return vfs_mount(path, sb);
+}
+
 void vfs_init(void)
 {
     // 1. Initialize VFS caches (if we had them properly separated)

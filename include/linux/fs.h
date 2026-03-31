@@ -108,6 +108,7 @@ const char *task_get_cwd(void);
 
 int vfs_mount(const char *path, struct super_block *sb);
 int vfs_mount_fs(const char *path, const char *fs_name);
+int vfs_mount_fs_dev(const char *path, const char *fs_name, const char *dev_name);
 int vfs_chdir(const char *path);
 int vfs_mkdir(const char *path);
 int vfs_unlink(const char *path);

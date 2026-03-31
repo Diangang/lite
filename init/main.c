@@ -151,6 +151,7 @@ static void prepare_namespace(void)
     vfs_mount_fs("/proc", "proc");
     vfs_mount_fs("/dev", "devtmpfs");
     ksysfs_init();
+    vfs_mount_fs_dev("/mnt", "minix", "/dev/ram1");
 
     const char *init = get_init_process();
     if (run_init_process(init) != 0) {

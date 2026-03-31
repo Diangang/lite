@@ -1766,6 +1766,35 @@ void test_blockstats_ramdisk() {
     print("blockstats ram0 OK.\n");
 }
 
+void test_minix_mount_read() {
+    print("\n--- Test 33: MinixFS Read ---\n");
+    int fd = open("/mnt/hello.txt", 0);
+    if (fd < 0) {
+        fail("open /mnt/hello.txt");
+        return;
+    }
+    char buf[64];
+    int n = read(fd, buf, sizeof(buf));
+    close(fd);
+    if (n <= 0) {
+        fail("read /mnt/hello.txt");
+        return;
+    }
+    const char *expect = "Hello from MinixFS!\n";
+    int elen = 20;
+    if (n < elen) {
+        fail("minix read short");
+        return;
+    }
+    for (int i = 0; i < elen; i++) {
+        if (buf[i] != expect[i]) {
+            fail("minix content mismatch");
+            return;
+        }
+    }
+    print("minixfs read OK.\n");
+}
+
 int main() {
     print("================================\n");
     print("  Lite OS Automated Test Suite  \n");
@@ -1803,6 +1832,7 @@ int main() {
     test_writeback_truncate();
     test_pagecache_stats();
     test_blockstats_ramdisk();
+    test_minix_mount_read();
 
     print("\n================================\n");
     if (failures == 0) {
