@@ -14,9 +14,43 @@ static uint32_t wb_discarded_pages = 0;
 static uint32_t pcache_hits = 0;
 static uint32_t pcache_misses = 0;
 
+static int blockdev_readpage(struct inode *inode, uint32_t index, struct page_cache_entry *page)
+{
+    if (!inode || !page)
+        return -1;
+    if ((inode->flags & 0x7) != FS_BLOCKDEVICE)
+        return -1;
+    struct block_device *bdev = (struct block_device *)inode->private_data;
+    if (!bdev)
+        return -1;
+    block_device_read(bdev, index * 4096, 4096, (uint8_t *)memlayout_directmap_phys_to_virt(page->phys_addr));
+    return 0;
+}
+
+static int blockdev_writepage(struct inode *inode, struct page_cache_entry *page)
+{
+    if (!inode || !page)
+        return -1;
+    if ((inode->flags & 0x7) != FS_BLOCKDEVICE)
+        return -1;
+    struct block_device *bdev = (struct block_device *)inode->private_data;
+    if (!bdev)
+        return -1;
+    block_device_write(bdev, page->index * 4096, 4096, (const uint8_t *)memlayout_directmap_phys_to_virt(page->phys_addr));
+    return 0;
+}
+
+static struct address_space_operations blockdev_aops = {
+    .readpage = blockdev_readpage,
+    .writepage = blockdev_writepage
+};
+
 void address_space_init(struct address_space *mapping, struct inode *host)
 {
     mapping->host = host;
+    mapping->a_ops = NULL;
+    if (host && (host->flags & 0x7) == FS_BLOCKDEVICE)
+        mapping->a_ops = &blockdev_aops;
     mapping->pages = NULL;
     mapping->nrpages = 0;
     mapping->next = mapping_list;
@@ -80,19 +114,23 @@ uint32_t generic_file_read(struct inode *node, uint32_t offset, uint32_t size, u
         return 0;
     if ((node->flags & 0x7) != FS_FILE && (node->flags & 0x7) != FS_BLOCKDEVICE)
         return 0;
-    if (offset >= node->i_size)
+
+    uint32_t isize = node->i_size;
+    if ((node->flags & 0x7) == FS_BLOCKDEVICE) {
+        struct block_device *bdev = (struct block_device *)node->private_data;
+        if (bdev)
+            isize = bdev->size;
+    }
+    if (offset >= isize)
         return 0;
 
-    uint32_t remain = node->i_size - offset;
+    uint32_t remain = isize - offset;
     if (size > remain) size = remain;
 
     uint32_t bytes_read = 0;
     struct address_space *mapping = node->i_mapping;
     if (!mapping)
         return 0;
-    struct block_device *bdev = NULL;
-    if ((node->flags & 0x7) == FS_BLOCKDEVICE)
-        bdev = (struct block_device *)node->private_data;
 
     while (size > 0) {
         uint32_t index = offset / 4096;
@@ -106,13 +144,14 @@ uint32_t generic_file_read(struct inode *node, uint32_t offset, uint32_t size, u
             memcpy(buffer + bytes_read, (void*)((uint32_t)memlayout_directmap_phys_to_virt(p->phys_addr) + page_offset), bytes);
         } else {
             pcache_misses++;
-            if (bdev) {
+            if (mapping->a_ops && mapping->a_ops->readpage) {
                 p = add_to_page_cache(mapping, index);
-                if (p) {
-                    block_device_read(bdev, index * 4096, 4096, (uint8_t *)memlayout_directmap_phys_to_virt(p->phys_addr));
-                    memcpy(buffer + bytes_read, (void*)((uint32_t)memlayout_directmap_phys_to_virt(p->phys_addr) + page_offset), bytes);
-                } else {
+                if (!p) {
                     memset(buffer + bytes_read, 0, bytes);
+                } else {
+                    if (mapping->a_ops->readpage(node, index, p) != 0)
+                        memset(memlayout_directmap_phys_to_virt(p->phys_addr), 0, 4096);
+                    memcpy(buffer + bytes_read, (void*)((uint32_t)memlayout_directmap_phys_to_virt(p->phys_addr) + page_offset), bytes);
                 }
             } else {
                 memset(buffer + bytes_read, 0, bytes);
@@ -163,8 +202,10 @@ uint32_t generic_file_write(struct inode *node, uint32_t offset, uint32_t size, 
             p = add_to_page_cache(mapping, index);
             if (!p)
                 break;
-            if (bdev && (page_offset != 0 || bytes < 4096))
-                block_device_read(bdev, index * 4096, 4096, (uint8_t *)memlayout_directmap_phys_to_virt(p->phys_addr));
+            if (mapping->a_ops && mapping->a_ops->readpage && (page_offset != 0 || bytes < 4096)) {
+                if (mapping->a_ops->readpage(node, index, p) != 0)
+                    memset(memlayout_directmap_phys_to_virt(p->phys_addr), 0, 4096);
+            }
         }
 
         memcpy((void*)((uint32_t)memlayout_directmap_phys_to_virt(p->phys_addr) + page_offset), buffer + bytes_written, bytes);
@@ -255,11 +296,8 @@ int writeback_flush_all(void)
         while (p) {
             if (p->dirty) {
                 struct inode *host = m->host;
-                if (host && (host->flags & 0x7) == FS_BLOCKDEVICE && host->private_data) {
-                    block_device_write((struct block_device *)host->private_data,
-                        p->index * 4096, 4096,
-                        (const uint8_t *)memlayout_directmap_phys_to_virt(p->phys_addr));
-                }
+                if (host && m->a_ops && m->a_ops->writepage)
+                    m->a_ops->writepage(host, p);
                 p->dirty = 0;
                 if (wb_dirty_pages)
                     wb_dirty_pages--;

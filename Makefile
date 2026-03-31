@@ -5,6 +5,7 @@ AS = as
 LD = ld
 
 CFLAGS = -m32 -ffreestanding -O2 -Wall -Wextra -fno-pie -fno-builtin
+CFLAGS += -MMD -MP
 CFLAGS += -Iinclude -Ikernel -Iinit -Ilib -Iarch/x86 -Imm -Ifs -Idrivers -Idrivers/base -Idrivers/pci -Idrivers/pci/pcie -Idrivers/nvme -Idrivers/input -Idrivers/tty -Idrivers/tty/serial -Idrivers/clocksource -Idrivers/video -Idrivers/video/console
 LDFLAGS = -m elf_i386 -T arch/x86/kernel/linker.ld -nostdlib
 
@@ -14,11 +15,14 @@ SOURCES_C += arch/x86/kernel/gdt.c arch/x86/kernel/idt.c arch/x86/kernel/isr.c a
 SOURCES_C += arch/x86/kernel/irq.c
 SOURCES_C += mm/bootmem.c mm/mmzone.c mm/mmap.c mm/page_alloc.c mm/vmscan.c mm/memory.c mm/vmalloc.c mm/slab.c mm/filemap.c mm/rmap.c mm/swap.c lib/libc.c lib/kref.c lib/kobject.c lib/bitmap.c lib/rbtree.c lib/idr.c lib/parser.c
 SOURCES_C += fs/file.c fs/fdtable.c fs/exec.c fs/inode.c fs/dentry.c fs/namei.c fs/read_write.c fs/open.c fs/readdir.c fs/ioctl.c fs/namespace.c fs/ramfs/ramfs.c fs/procfs/procfs.c fs/procfs/base.c fs/procfs/array.c fs/procfs/task_mmu.c fs/devtmpfs/devtmpfs.c fs/block_dev.c fs/minixfs/minixfs.c
+SOURCES_C += fs/buffer.c
+SOURCES_C += block/blk-core.c
 SOURCES_C += fs/sysfs/sysfs.c init/initramfs.c
 SOURCES_C += drivers/base/core.c drivers/base/bus.c drivers/base/driver.c drivers/base/init.c drivers/pci/pci.c drivers/pci/pcie/pcie.c drivers/nvme/nvme.c drivers/input/keyboard.c drivers/block/blkdev.c drivers/block/ramdisk.c
 SOURCES_C += drivers/clocksource/timer.c drivers/tty/tty.c drivers/tty/serial/serial.c
 SOURCES_C += drivers/video/console/vga.c drivers/video/console/console.c drivers/video/console/console_driver.c
 OBJECTS = $(SOURCES_S:.s=.o) $(SOURCES_C:.c=.o)
+DEPS = $(OBJECTS:.o=.d) $(USH_OBJS:.o=.d) $(INIT_OBJS:.o=.d) $(SMOKE_OBJS:.o=.d)
 
 OUT_DIR = out
 KERNEL = $(OUT_DIR)/myos.bin
@@ -40,6 +44,8 @@ $(OUT_DIR):
 
 $(KERNEL): $(OBJECTS) arch/x86/kernel/linker.ld
 	$(LD) $(LDFLAGS) -o $@ $(OBJECTS)
+
+-include $(DEPS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -99,7 +105,7 @@ debug: $(KERNEL) $(INITRAMFS)
 	qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -s -S -serial stdio
 
 clean:
-	rm -f $(OBJECTS) $(USH_OBJS) $(INIT_OBJS) $(SMOKE_OBJS)
+	rm -f $(OBJECTS) $(USH_OBJS) $(INIT_OBJS) $(SMOKE_OBJS) $(DEPS)
 	rm -rf $(OUT_DIR) isodir rootfs
 
 .PHONY: all iso run run-iso smoke smoke-512 smoke-128 clean

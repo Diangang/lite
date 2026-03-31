@@ -4,11 +4,13 @@
 #include <stdint.h>
 
 struct inode;
+struct request_queue;
 
 struct block_device {
     uint32_t size;
     uint32_t block_size;
     uint8_t *data;
+    struct request_queue *queue;
     uint32_t reads;
     uint32_t writes;
     uint32_t bytes_read;

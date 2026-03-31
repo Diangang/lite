@@ -4,6 +4,7 @@
 #include "linux/slab.h"
 #include "linux/pagemap.h"
 #include "linux/blkdev.h"
+#include "linux/buffer_head.h"
 
 #define MINIX_BLOCK_SIZE 1024
 #define MINIX_SUPER_MAGIC 0x137F
@@ -47,12 +48,26 @@ struct minix_mount_data {
 
 static uint32_t minix_bread(struct block_device *bdev, uint32_t block, void *buf)
 {
-    return block_device_read(bdev, block * MINIX_BLOCK_SIZE, MINIX_BLOCK_SIZE, (uint8_t *)buf);
+    struct buffer_head *bh = bread(bdev, block, MINIX_BLOCK_SIZE);
+    if (!bh)
+        return 0;
+    memcpy(buf, bh->b_data, MINIX_BLOCK_SIZE);
+    brelse(bh);
+    return MINIX_BLOCK_SIZE;
 }
 
 static uint32_t minix_bwrite(struct block_device *bdev, uint32_t block, const void *buf)
 {
-    return block_device_write(bdev, block * MINIX_BLOCK_SIZE, MINIX_BLOCK_SIZE, (const uint8_t *)buf);
+    struct buffer_head *bh = bread(bdev, block, MINIX_BLOCK_SIZE);
+    if (!bh)
+        return 0;
+    memcpy(bh->b_data, buf, MINIX_BLOCK_SIZE);
+    mark_buffer_dirty(bh);
+    int err = sync_dirty_buffer(bh);
+    brelse(bh);
+    if (err != 0)
+        return 0;
+    return MINIX_BLOCK_SIZE;
 }
 
 static int minix_read_super(struct block_device *bdev, struct minix_super_block *sb)
@@ -167,6 +182,69 @@ static uint32_t minix_file_read(struct inode *node, uint32_t offset, uint32_t si
     return done;
 }
 
+static uint32_t minix_file_write(struct inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer)
+{
+    if (!node || !buffer || size == 0)
+        return 0;
+    if ((node->flags & 0x7) != FS_FILE)
+        return 0;
+    struct minix_inode_info *info = (struct minix_inode_info *)node->private_data;
+    if (!info || !info->bdev)
+        return 0;
+    
+    uint32_t done = 0;
+    uint32_t zsize = minix_zone_size(&info->sb);
+    if (zsize == 0)
+        return 0;
+    uint8_t blk[MINIX_BLOCK_SIZE];
+
+    while (done < size) {
+        uint32_t pos = offset + done;
+        uint16_t zone = minix_zone_for_pos(&info->dinode, &info->sb, pos);
+        if (!zone)
+            break;
+        uint32_t zone_off = pos % zsize;
+        uint32_t chunk = size - done;
+        uint32_t left_in_zone = zsize - zone_off;
+        if (chunk > left_in_zone)
+            chunk = left_in_zone;
+
+        uint32_t base_block = minix_zone_to_block(zone) + (zone_off / MINIX_BLOCK_SIZE);
+        uint32_t block_off = zone_off % MINIX_BLOCK_SIZE;
+        uint32_t left_in_block = MINIX_BLOCK_SIZE - block_off;
+        uint32_t sub = chunk;
+        if (sub > left_in_block)
+            sub = left_in_block;
+
+        if (minix_bread(info->bdev, base_block, blk) != MINIX_BLOCK_SIZE)
+            break;
+        memcpy(blk + block_off, buffer + done, sub);
+        if (minix_bwrite(info->bdev, base_block, blk) != MINIX_BLOCK_SIZE)
+            break;
+        done += sub;
+    }
+    
+    if (offset + done > info->dinode.i_size) {
+        info->dinode.i_size = offset + done;
+        node->i_size = info->dinode.i_size;
+        
+        uint32_t inode_size = minix_inode_size();
+        uint32_t inodes_per_block = MINIX_BLOCK_SIZE / inode_size;
+        uint32_t idx = node->i_ino - 1; // 使用正确的 inode 号
+        uint32_t block = minix_inode_table_block(&info->sb) + (idx / inodes_per_block);
+        uint32_t off = (idx % inodes_per_block) * inode_size;
+        
+        if (minix_bread(info->bdev, block, blk) == MINIX_BLOCK_SIZE) {
+            memcpy(blk + off, &info->dinode, sizeof(info->dinode));
+            minix_bwrite(info->bdev, block, blk);
+        }
+    }
+    
+    return done;
+}
+
+static uint32_t minix_file_write(struct inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer);
+
 static struct file_operations minix_dir_ops = {
     .read = NULL,
     .write = NULL,
@@ -181,7 +259,7 @@ static struct file_operations minix_dir_ops = {
 
 static struct file_operations minix_file_ops = {
     .read = minix_file_read,
-    .write = NULL,
+    .write = minix_file_write,
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
@@ -220,6 +298,10 @@ static struct inode *minix_new_vfs_inode_file(uint32_t ino, struct minix_inode_i
     inode->private_data = info;
     return inode;
 }
+
+
+
+
 
 static void minix_write_example_image(struct block_device *bdev)
 {
@@ -421,4 +503,3 @@ static int init_minix_fs(void)
 }
 
 module_init(init_minix_fs);
-

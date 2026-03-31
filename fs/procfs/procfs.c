@@ -13,6 +13,8 @@
 #include "linux/vmscan.h"
 #include "linux/pagemap.h"
 #include "linux/blkdev.h"
+#include "linux/buffer_head.h"
+#include "linux/device.h"
 #include "linux/bootmem.h"
 #include "linux/memlayout.h"
 #include "asm/pgtable.h"
@@ -31,6 +33,7 @@ static struct inode proc_vmscan;
 static struct inode proc_writeback;
 static struct inode proc_pagecache;
 static struct inode proc_blockstats;
+static struct inode proc_diskstats;
 static struct inode proc_mounts;
 
 typedef struct {
@@ -482,12 +485,51 @@ static uint32_t proc_read_blockstats(struct inode *node, uint32_t offset, uint32
     return size;
 }
 
+static uint32_t proc_read_diskstats(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+{
+    (void)node;
+    static char tmp[768];
+    uint32_t off = 0;
+
+    uint32_t n = device_model_device_count();
+    for (uint32_t i = 0; i < n; i++) {
+        struct device *dev = device_model_device_at(i);
+        if (!dev || !dev->type || strcmp(dev->type, "block") != 0)
+            continue;
+        struct block_device *bdev = (struct block_device *)dev->driver_data;
+        if (!bdev)
+            continue;
+
+        buf_append(tmp, &off, sizeof(tmp), dev->kobj.name);
+        buf_append(tmp, &off, sizeof(tmp), " reads=");
+        buf_append_u32(tmp, &off, sizeof(tmp), bdev->reads);
+        buf_append(tmp, &off, sizeof(tmp), " writes=");
+        buf_append_u32(tmp, &off, sizeof(tmp), bdev->writes);
+        buf_append(tmp, &off, sizeof(tmp), " bytes_read=");
+        buf_append_u32(tmp, &off, sizeof(tmp), bdev->bytes_read);
+        buf_append(tmp, &off, sizeof(tmp), " bytes_written=");
+        buf_append_u32(tmp, &off, sizeof(tmp), bdev->bytes_written);
+        buf_append(tmp, &off, sizeof(tmp), "\n");
+    }
+
+    if (off < sizeof(tmp))
+        tmp[off] = 0;
+    if (offset >= off)
+        return 0;
+    uint32_t remain = off - offset;
+    if (size > remain)
+        size = remain;
+    memcpy(buffer, tmp + offset, size);
+    return size;
+}
+
 static uint32_t proc_write_writeback(struct inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer)
 {
     (void)node;
     (void)offset;
     (void)buffer;
     writeback_flush_all();
+    sync_dirty_buffers_all();
     return size;
 }
 
@@ -1006,11 +1048,16 @@ static struct dirent *proc_readdir(struct file *file, uint32_t index)
         return &proc_dirent;
     }
     if (index == 12) {
+        strcpy(proc_dirent.name, "diskstats");
+        proc_dirent.ino = proc_diskstats.i_ino;
+        return &proc_dirent;
+    }
+    if (index == 13) {
         strcpy(proc_dirent.name, "mounts");
         proc_dirent.ino = proc_mounts.i_ino;
         return &proc_dirent;
     }
-    if (index == 13) {
+    if (index == 14) {
         strcpy(proc_dirent.name, "self");
         proc_dirent.ino = 0x1000;
         return &proc_dirent;
@@ -1047,6 +1094,8 @@ static struct inode *proc_finddir(struct inode *node, const char *name)
         return &proc_pagecache;
     if (!strcmp(name, "blockstats"))
         return &proc_blockstats;
+    if (!strcmp(name, "diskstats"))
+        return &proc_diskstats;
     if (!strcmp(name, "mounts"))
         return &proc_mounts;
     if (!strcmp(name, "self"))
@@ -1179,6 +1228,16 @@ static struct file_operations proc_pagecache_ops = {
 
 static struct file_operations proc_blockstats_ops = {
     .read = proc_read_blockstats,
+    .write = NULL,
+    .open = NULL,
+    .close = NULL,
+    .readdir = NULL,
+    .finddir = NULL,
+    .ioctl = NULL
+};
+
+static struct file_operations proc_diskstats_ops = {
+    .read = proc_read_diskstats,
     .write = NULL,
     .open = NULL,
     .close = NULL,
@@ -1329,6 +1388,15 @@ static int proc_fill_super(struct super_block *sb, void *data, int silent)
     proc_blockstats.uid = 0;
     proc_blockstats.gid = 0;
     proc_blockstats.i_mode = 0444;
+
+    memset(&proc_diskstats, 0, sizeof(proc_diskstats));
+    proc_diskstats.flags = FS_FILE;
+    proc_diskstats.i_ino = 15;
+    proc_diskstats.i_size = 768;
+    proc_diskstats.f_ops = &proc_diskstats_ops;
+    proc_diskstats.uid = 0;
+    proc_diskstats.gid = 0;
+    proc_diskstats.i_mode = 0444;
 
     memset(&proc_mounts, 0, sizeof(proc_mounts));
     proc_mounts.flags = FS_FILE;

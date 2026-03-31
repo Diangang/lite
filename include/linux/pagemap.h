@@ -7,6 +7,8 @@ struct inode;
 struct file;
 struct dirent;
 
+struct address_space_operations;
+
 struct page_cache_entry {
     uint32_t index;
     uint32_t phys_addr;
@@ -14,8 +16,14 @@ struct page_cache_entry {
     struct page_cache_entry *next;
 };
 
+struct address_space_operations {
+    int (*readpage)(struct inode *inode, uint32_t index, struct page_cache_entry *page);
+    int (*writepage)(struct inode *inode, struct page_cache_entry *page);
+};
+
 struct address_space {
     struct inode *host;
+    struct address_space_operations *a_ops;
     struct page_cache_entry *pages;
     uint32_t nrpages;
     struct address_space *next;
