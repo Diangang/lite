@@ -57,6 +57,17 @@
 ### 3.4 匿名映射 (mmap)
 - `mmap` 的选址策略为从 `align_up(brk)` 开始向上寻找空闲的 VMA，最高不超过用户栈底。
 
+### 3.5 NVMe 设备内存映射
+- NVMe 控制器和命名空间的内存映射通过 PCIe BAR (Base Address Register) 实现
+- 控制器寄存器和门铃区域通过 `ioremap` 映射到内核虚拟地址空间
+- 命名空间数据通过块设备接口访问，最终通过 PCIe DMA 传输
+
+### 3.6 文件系统内存映射
+- **Page Cache**：文件数据通过 page cache 缓存，使用物理页分配器分配物理页
+- **MinixFS**：元数据和数据块通过 buffer cache 管理，与 page cache 集成
+- **ramfs**：完全基于内存的文件系统，直接使用内核内存分配
+- **procfs/sysfs/devtmpfs**：伪文件系统，数据动态生成，不占用实际磁盘空间
+
 ---
 
 ## 4. 关键机制说明

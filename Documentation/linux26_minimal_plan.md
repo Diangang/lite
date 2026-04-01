@@ -27,11 +27,14 @@
 - **文件系统**:
   - `ramfs`: 退化为极简的数据壳，完全依赖 VFS 的 Generic 方法运作。
   - `initrd`, `procfs`, `devtmpfs`, `sysfs`: 全面支持 VFS 新架构。
+  - `minixfs`: 实现了基本的 Minix 文件系统读写支持，包括文件创建、删除、读写等操作。
 
 ### 4. 设备驱动模型 (Drivers)
 - `kobject` / `kset` (简化版)：在 `sysfs` 中暴露内核对象。
 - 终端子系统 (TTY)：简单的输入环形缓冲区和回显机制。
 - 串口和 VGA：基于中断（Serial）和内存映射（VGA）的控制台。
+- **PCI/PCIe 子系统**：实现了基本的 PCI 设备枚举和配置空间访问。
+- **NVMe 驱动**：实现了 NVMe 控制器初始化、命名空间管理和块设备注册，支持 NVMe 设备检测和访问。
 
 ## 下一步演进计划 (Roadmap)
 

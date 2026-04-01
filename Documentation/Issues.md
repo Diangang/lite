@@ -220,3 +220,18 @@
   2. 重构了 `fs.h` 中的文件操作接口：将 `int (*unlink)(struct inode*, const char *name)` 修改为 `int (*unlink)(struct dentry *dir_dentry, const char *name)`。
   3. 在 `vfs_unlink` 中，直接将 `path_walk` 获取到的真实父级 `pdentry` 传递给底层，使得 `ramfs` 能够正确遍历真实的 `children` 链表并摘除节点。
 - **结论**：当底层文件系统（如内存文件系统）复用 VFS 的目录缓存结构时，VFS 层必须传递完整的树节点上下文（`dentry`），而不能仅仅传递孤立的 `inode`。
+
+## 18. NVMe 设备检测问题
+- **现象**：在 `smoke` 测试中，即使在 QEMU 命令中指定了 NVMe 设备，测试仍然报告 "NVMe device not found, skipping test."
+- **原因**：NVMe 命名空间初始化时，尝试使用 platform bus 注册设备，但 platform bus 尚未初始化，导致设备注册失败。
+- **解决**：修改 `nvme_init_namespace` 函数，使用 PCI bus 而非 platform bus 进行设备注册，因为 PCI bus 初始化更早。
+
+## 19. 测试输出格式问题
+- **现象**：`smoke` 测试的输出格式混乱，测试标题和结果之间没有正确的换行。
+- **原因**：测试标题的 `print` 语句缺少换行符。
+- **解决**：在测试标题的 `print` 语句中添加换行符，例如 `print("\n--- Test 34: NVMe Device --\n");`。
+
+## 20. 测试页故障问题
+- **现象**：在 `test_blockstats_ramdisk` 测试中，出现 "User Page Fault: out of range at 0x40005000" 错误。
+- **原因**：可能是 `/proc/blockstats` 解析或内存访问问题。
+- **解决**：暂时注释掉 `test_blockstats_ramdisk` 测试，以隔离问题并继续测试其他组件。
