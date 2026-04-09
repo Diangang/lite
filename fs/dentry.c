@@ -4,6 +4,7 @@
 
 struct dentry *vfs_root_dentry = NULL;
 
+/* d_alloc: Implement d alloc. */
 struct dentry *d_alloc(struct dentry *parent, const char *name)
 {
     struct dentry *d = (struct dentry*)kmalloc(sizeof(struct dentry));
@@ -20,6 +21,7 @@ struct dentry *d_alloc(struct dentry *parent, const char *name)
     return d;
 }
 
+/* d_lookup: Implement d lookup. */
 struct dentry *d_lookup(struct dentry *parent, const char *name)
 {
     if (!parent || !name)
@@ -33,6 +35,7 @@ struct dentry *d_lookup(struct dentry *parent, const char *name)
     return NULL;
 }
 
+/* vfs_dentry_get: Implement vfs dentry get. */
 struct dentry *vfs_dentry_get(struct inode *node, const char *name)
 {
     // For legacy compat where code just wanted a dummy dentry for an inode
@@ -42,6 +45,7 @@ struct dentry *vfs_dentry_get(struct inode *node, const char *name)
     return d;
 }
 
+/* vfs_dentry_put: Implement vfs dentry put. */
 void vfs_dentry_put(struct dentry *d)
 {
     if (!d)
@@ -51,6 +55,7 @@ void vfs_dentry_put(struct dentry *d)
     // unless system is out of memory.
 }
 
+/* vfs_dentry_detach: Implement vfs dentry detach. */
 void vfs_dentry_detach(struct dentry *d)
 {
     if (!d)

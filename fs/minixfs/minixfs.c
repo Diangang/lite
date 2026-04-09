@@ -46,6 +46,7 @@ struct minix_mount_data {
     const char *dev_name;
 };
 
+/* minix_bread: Implement minix bread. */
 static uint32_t minix_bread(struct block_device *bdev, uint32_t block, void *buf)
 {
     struct buffer_head *bh = bread(bdev, block, MINIX_BLOCK_SIZE);
@@ -56,6 +57,7 @@ static uint32_t minix_bread(struct block_device *bdev, uint32_t block, void *buf
     return MINIX_BLOCK_SIZE;
 }
 
+/* minix_bwrite: Implement minix bwrite. */
 static uint32_t minix_bwrite(struct block_device *bdev, uint32_t block, const void *buf)
 {
     struct buffer_head *bh = bread(bdev, block, MINIX_BLOCK_SIZE);
@@ -70,6 +72,7 @@ static uint32_t minix_bwrite(struct block_device *bdev, uint32_t block, const vo
     return MINIX_BLOCK_SIZE;
 }
 
+/* minix_read_super: Implement minix read super. */
 static int minix_read_super(struct block_device *bdev, struct minix_super_block *sb)
 {
     if (!bdev || !sb)
@@ -85,16 +88,19 @@ static int minix_read_super(struct block_device *bdev, struct minix_super_block 
     return 0;
 }
 
+/* minix_inode_table_block: Implement minix inode table block. */
 static uint32_t minix_inode_table_block(const struct minix_super_block *sb)
 {
     return 2 + sb->s_imap_blocks + sb->s_zmap_blocks;
 }
 
+/* minix_inode_size: Implement minix inode size. */
 static uint32_t minix_inode_size(void)
 {
     return (uint32_t)sizeof(struct minix_inode_disk);
 }
 
+/* minix_read_inode: Implement minix read inode. */
 static int minix_read_inode(struct block_device *bdev, const struct minix_super_block *sb, uint32_t ino, struct minix_inode_disk *out)
 {
     if (!bdev || !sb || !out || ino == 0)
@@ -114,16 +120,19 @@ static int minix_read_inode(struct block_device *bdev, const struct minix_super_
     return 0;
 }
 
+/* minix_zone_size: Implement minix zone size. */
 static uint32_t minix_zone_size(const struct minix_super_block *sb)
 {
     return MINIX_BLOCK_SIZE << sb->s_log_zone_size;
 }
 
+/* minix_zone_to_block: Implement minix zone to block. */
 static uint32_t minix_zone_to_block(uint16_t zone)
 {
     return (uint32_t)zone;
 }
 
+/* minix_zone_for_pos: Implement minix zone for pos. */
 static uint16_t minix_zone_for_pos(const struct minix_inode_disk *in, const struct minix_super_block *sb, uint32_t pos)
 {
     uint32_t zsize = minix_zone_size(sb);
@@ -135,6 +144,7 @@ static uint16_t minix_zone_for_pos(const struct minix_inode_disk *in, const stru
     return 0;
 }
 
+/* minix_file_read: Implement minix file read. */
 static uint32_t minix_file_read(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!node || !buffer || size == 0)
@@ -182,6 +192,7 @@ static uint32_t minix_file_read(struct inode *node, uint32_t offset, uint32_t si
     return done;
 }
 
+/* minix_file_write: Implement minix file write. */
 static uint32_t minix_file_write(struct inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer)
 {
     if (!node || !buffer || size == 0)
@@ -267,6 +278,7 @@ static struct file_operations minix_file_ops = {
     .ioctl = NULL
 };
 
+/* minix_new_vfs_inode_dir: Implement minix new vfs inode dir. */
 static struct inode *minix_new_vfs_inode_dir(uint32_t ino)
 {
     struct inode *inode = (struct inode *)kmalloc(sizeof(struct inode));
@@ -282,6 +294,7 @@ static struct inode *minix_new_vfs_inode_dir(uint32_t ino)
     return inode;
 }
 
+/* minix_new_vfs_inode_file: Implement minix new vfs inode file. */
 static struct inode *minix_new_vfs_inode_file(uint32_t ino, struct minix_inode_info *info)
 {
     struct inode *inode = (struct inode *)kmalloc(sizeof(struct inode));
@@ -303,6 +316,7 @@ static struct inode *minix_new_vfs_inode_file(uint32_t ino, struct minix_inode_i
 
 
 
+/* minix_write_example_image: Implement minix write example image. */
 static void minix_write_example_image(struct block_device *bdev)
 {
     struct minix_super_block sb;
@@ -376,6 +390,7 @@ static void minix_write_example_image(struct block_device *bdev)
     minix_bwrite(bdev, 6, blk);
 }
 
+/* minix_fill_super: Implement minix fill super. */
 static int minix_fill_super(struct super_block *sb, void *data, int silent)
 {
     (void)silent;
@@ -479,6 +494,7 @@ static int minix_fill_super(struct super_block *sb, void *data, int silent)
     return 0;
 }
 
+/* minix_get_sb: Implement minix get sb. */
 static struct super_block *minix_get_sb(struct file_system_type *fs_type, int flags, const char *dev_name, void *data)
 {
     (void)data;
@@ -495,6 +511,7 @@ static struct file_system_type minix_fs_type = {
     .next = NULL
 };
 
+/* init_minix_fs: Initialize minix fs. */
 static int init_minix_fs(void)
 {
     register_filesystem(&minix_fs_type);

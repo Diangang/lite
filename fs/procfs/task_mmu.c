@@ -2,6 +2,7 @@
 #include "linux/pid.h"
 #include "internal.h"
 
+/* task_dump_maps: Implement task dump maps. */
 uint32_t task_dump_maps(char *buf, uint32_t len)
 {
     if (!buf || len == 0)
@@ -32,6 +33,7 @@ uint32_t task_dump_maps(char *buf, uint32_t len)
     return off;
 }
 
+/* task_dump_maps_pid: Implement task dump maps pid. */
 uint32_t task_dump_maps_pid(uint32_t pid, char *buf, uint32_t len)
 {
     if (!buf || len == 0)

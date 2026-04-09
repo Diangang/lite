@@ -4,6 +4,7 @@
 #include "linux/libc.h"
 #include "linux/console.h"
 
+/* vfs_get_mounts: Implement vfs get mounts. */
 static struct file_system_type *file_systems;
 static struct vfsmount *vfs_mounts;
 
@@ -12,6 +13,7 @@ struct vfsmount *vfs_get_mounts(void)
     return vfs_mounts;
 }
 
+/* get_filesystem: Get filesystem. */
 static struct file_system_type *get_filesystem(const char *name)
 {
     if (!name)
@@ -23,6 +25,7 @@ static struct file_system_type *get_filesystem(const char *name)
     return NULL;
 }
 
+/* vfs_get_sb_single: Implement vfs get sb single. */
 struct super_block *vfs_get_sb_single(struct file_system_type *fs_type, int flags, const char *dev_name, void *data)
 {
     (void)flags;
@@ -51,6 +54,7 @@ struct super_block *vfs_get_sb_single(struct file_system_type *fs_type, int flag
     return sb;
 }
 
+/* register_filesystem: Register filesystem. */
 int register_filesystem(struct file_system_type *fs)
 {
     struct file_system_type **p;
@@ -67,6 +71,7 @@ int register_filesystem(struct file_system_type *fs)
     return 0;
 }
 
+/* unregister_filesystem: Unregister filesystem. */
 int unregister_filesystem(struct file_system_type *fs)
 {
     struct file_system_type **p;
@@ -82,6 +87,7 @@ int unregister_filesystem(struct file_system_type *fs)
     return -1;
 }
 
+/* vfs_mount_rootfs: Implement vfs mount rootfs. */
 static int vfs_mount_rootfs(const char *fs_name)
 {
     struct file_system_type *fs = get_filesystem(fs_name);
@@ -111,6 +117,7 @@ static int vfs_mount_rootfs(const char *fs_name)
     return 0;
 }
 
+/* vfs_mount: Implement vfs mount. */
 int vfs_mount(const char *path, struct super_block *sb)
 {
     if (!path || !sb || !sb->s_root || !sb->s_root->inode)
@@ -148,6 +155,7 @@ int vfs_mount(const char *path, struct super_block *sb)
     return 0;
 }
 
+/* vfs_mount_fs: Implement vfs mount fs. */
 int vfs_mount_fs(const char *path, const char *fs_name)
 {
     struct file_system_type *fs = get_filesystem(fs_name);
@@ -161,6 +169,7 @@ int vfs_mount_fs(const char *path, const char *fs_name)
     return vfs_mount(path, sb);
 }
 
+/* vfs_mount_fs_dev: Implement vfs mount fs dev. */
 int vfs_mount_fs_dev(const char *path, const char *fs_name, const char *dev_name)
 {
     struct file_system_type *fs = get_filesystem(fs_name);
@@ -174,6 +183,7 @@ int vfs_mount_fs_dev(const char *path, const char *fs_name, const char *dev_name
     return vfs_mount(path, sb);
 }
 
+/* vfs_init: Initialize vfs. */
 void vfs_init(void)
 {
     // 1. Initialize VFS caches (if we had them properly separated)

@@ -18,6 +18,7 @@ static uint64_t pci_mem_alloc = 0x80000000;
 static uint64_t pci_pref_alloc = 0x90000000;
 static uint8_t pci_next_bus = 1;
 
+/* pci_align32: Implement PCI align32. */
 static uint32_t pci_align32(uint32_t val, uint32_t align)
 {
     if (!align)
@@ -25,6 +26,7 @@ static uint32_t pci_align32(uint32_t val, uint32_t align)
     return (val + align - 1) & ~(align - 1);
 }
 
+/* pci_align64: Implement PCI align64. */
 static uint64_t pci_align64(uint64_t val, uint64_t align)
 {
     if (!align)
@@ -32,6 +34,7 @@ static uint64_t pci_align64(uint64_t val, uint64_t align)
     return (val + align - 1) & ~(align - 1);
 }
 
+/* pci_alloc_io: Implement PCI alloc io. */
 static uint32_t pci_alloc_io(uint8_t bus, uint32_t size, int *ok)
 {
     if (!size || !ok) {
@@ -62,6 +65,7 @@ static uint32_t pci_alloc_io(uint8_t bus, uint32_t size, int *ok)
     return base;
 }
 
+/* pci_alloc_mem64: Implement PCI alloc mem64. */
 static uint64_t pci_alloc_mem64(uint8_t bus, uint64_t size, int pref, int *ok)
 {
     if (!size || !ok) {
@@ -106,6 +110,7 @@ static uint64_t pci_alloc_mem64(uint8_t bus, uint64_t size, int pref, int *ok)
     return base;
 }
 
+/* pci_alloc_mem32: Implement PCI alloc mem32. */
 static uint32_t pci_alloc_mem32(uint8_t bus, uint32_t size, int pref, int *ok)
 {
     uint64_t base = pci_alloc_mem64(bus, size, pref, ok);
@@ -114,6 +119,7 @@ static uint32_t pci_alloc_mem32(uint8_t bus, uint32_t size, int pref, int *ok)
     return (uint32_t)base;
 }
 
+/* pci_enable_device: Implement PCI enable device. */
 static void pci_enable_device(struct device *dev)
 {
     uint16_t cmd = pci_config_read16_device(dev, 0x04);
@@ -124,23 +130,27 @@ static void pci_enable_device(struct device *dev)
     device_uevent_emit("enable", dev);
 }
 
+/* pci_config_addr: Implement PCI config addr. */
 static uint32_t pci_config_addr(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset)
 {
     return 0x80000000 | ((uint32_t)bus << 16) | ((uint32_t)dev << 11) | ((uint32_t)func << 8) | (offset & 0xFC);
 }
 
+/* pci_config_read32: Implement PCI config read32. */
 uint32_t pci_config_read32(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset)
 {
     outl(0xCF8, pci_config_addr(bus, dev, func, offset));
     return inl(0xCFC);
 }
 
+/* pci_config_write32: Implement PCI config write32. */
 void pci_config_write32(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset, uint32_t value)
 {
     outl(0xCF8, pci_config_addr(bus, dev, func, offset));
     outl(0xCFC, value);
 }
 
+/* pci_config_read16: Implement PCI config read16. */
 uint16_t pci_config_read16(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset)
 {
     uint32_t val = pci_config_read32(bus, dev, func, offset);
@@ -148,6 +158,7 @@ uint16_t pci_config_read16(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offse
     return (uint16_t)((val >> shift) & 0xFFFF);
 }
 
+/* pci_config_read8: Implement PCI config read8. */
 uint8_t pci_config_read8(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset)
 {
     uint32_t val = pci_config_read32(bus, dev, func, offset);
@@ -155,6 +166,7 @@ uint8_t pci_config_read8(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset)
     return (uint8_t)((val >> shift) & 0xFF);
 }
 
+/* pci_config_read32_device: Implement PCI config read32 device. */
 uint32_t pci_config_read32_device(struct device *dev, uint8_t offset)
 {
     if (!dev)
@@ -162,6 +174,7 @@ uint32_t pci_config_read32_device(struct device *dev, uint8_t offset)
     return pci_config_read32(dev->bus_num, dev->dev_num, dev->func_num, offset);
 }
 
+/* pci_config_read16_device: Implement PCI config read16 device. */
 uint16_t pci_config_read16_device(struct device *dev, uint8_t offset)
 {
     if (!dev)
@@ -169,6 +182,7 @@ uint16_t pci_config_read16_device(struct device *dev, uint8_t offset)
     return pci_config_read16(dev->bus_num, dev->dev_num, dev->func_num, offset);
 }
 
+/* pci_config_read8_device: Implement PCI config read8 device. */
 uint8_t pci_config_read8_device(struct device *dev, uint8_t offset)
 {
     if (!dev)
@@ -176,6 +190,7 @@ uint8_t pci_config_read8_device(struct device *dev, uint8_t offset)
     return pci_config_read8(dev->bus_num, dev->dev_num, dev->func_num, offset);
 }
 
+/* pci_config_write32_device: Implement PCI config write32 device. */
 void pci_config_write32_device(struct device *dev, uint8_t offset, uint32_t value)
 {
     if (!dev)
@@ -183,6 +198,7 @@ void pci_config_write32_device(struct device *dev, uint8_t offset, uint32_t valu
     pci_config_write32(dev->bus_num, dev->dev_num, dev->func_num, offset, value);
 }
 
+/* pci_hex: Implement PCI hex. */
 static char pci_hex(uint8_t v)
 {
     if (v < 10)
@@ -190,6 +206,7 @@ static char pci_hex(uint8_t v)
     return (char)('a' + (v - 10));
 }
 
+/* pci_make_name: Implement PCI make name. */
 static void pci_make_name(char *buf, uint8_t bus, uint8_t dev, uint8_t func)
 {
     buf[0] = 'p';
@@ -206,6 +223,7 @@ static void pci_make_name(char *buf, uint8_t bus, uint8_t dev, uint8_t func)
 }
 
 static void pci_scan_bus(uint8_t bus);
+/* pci_assign_bridge_bus: Implement PCI assign bridge bus. */
 static uint8_t pci_assign_bridge_bus(struct device *pdev, uint8_t parent_bus)
 {
     uint32_t bus_reg = pci_config_read32_device(pdev, 0x18);
@@ -223,6 +241,7 @@ static uint8_t pci_assign_bridge_bus(struct device *pdev, uint8_t parent_bus)
     return secondary;
 }
 
+/* pci_register_function: Implement PCI register function. */
 static void pci_register_function(uint8_t bus, uint8_t dev, uint8_t func)
 {
     uint16_t vendor = pci_config_read16(bus, dev, func, 0x00);
@@ -371,6 +390,7 @@ static void pci_register_function(uint8_t bus, uint8_t dev, uint8_t func)
     pcie_scan_device(pdev);
 }
 
+/* pci_scan_device: Implement PCI scan device. */
 static void pci_scan_device(uint8_t bus, uint8_t dev)
 {
     uint16_t vendor = pci_config_read16(bus, dev, 0, 0x00);
@@ -385,6 +405,7 @@ static void pci_scan_device(uint8_t bus, uint8_t dev)
         pci_register_function(bus, dev, func);
 }
 
+/* pci_scan_bus: Implement PCI scan bus. */
 static void pci_scan_bus(uint8_t bus)
 {
     if (pci_bus_scanned[bus])
@@ -394,11 +415,13 @@ static void pci_scan_bus(uint8_t bus)
         pci_scan_device(bus, dev);
 }
 
+/* device_model_pci_bus: Implement device model PCI bus. */
 struct bus_type *device_model_pci_bus(void)
 {
     return pci_bus;
 }
 
+/* pci_init: Initialize PCI. */
 static int pci_init(void)
 {
     if (pci_bus)

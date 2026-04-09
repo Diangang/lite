@@ -51,6 +51,7 @@ static struct gdt_entry        gdt_entries[6];
 static struct tss_entry        tss;
 static uint8_t tss_stack[4096] __attribute__((aligned(16)));
 
+/* gdt_flush: Implement GDT flush. */
 static inline void gdt_flush(uint32_t gdt_ptr_addr, uint16_t tss_selector)
 {
     __asm__ volatile(
@@ -70,6 +71,7 @@ static inline void gdt_flush(uint32_t gdt_ptr_addr, uint16_t tss_selector)
     );
 }
 
+/* gdt_set_gate: Implement GDT set gate. */
 static void gdt_set_gate(int32_t num, uint32_t base, uint32_t limit, uint8_t access, uint8_t gran)
 {
     gdt_entries[num].base_low    = (base & 0xFFFF);
@@ -83,11 +85,13 @@ static void gdt_set_gate(int32_t num, uint32_t base, uint32_t limit, uint8_t acc
     gdt_entries[num].access      = access;
 }
 
+/* tss_set_kernel_stack: Implement TSS set kernel stack. */
 void tss_set_kernel_stack(uint32_t stack)
 {
     tss.esp0 = stack;
 }
 
+/* init_tss: Initialize TSS. */
 static void init_tss(void)
 {
     uint32_t base = (uint32_t)&tss;
@@ -108,6 +112,7 @@ static void init_tss(void)
     tss.iomap_base = sizeof(tss);
 }
 
+/* init_gdt: Initialize GDT. */
 void init_gdt(void)
 {
     gdt_ptr.limit = (sizeof(struct gdt_entry) * 6) - 1;

@@ -14,6 +14,7 @@ static struct file_operations blockdev_ops = {
     .ioctl = NULL
 };
 
+/* blockdev_inode_create: Implement blockdev inode create. */
 struct inode *blockdev_inode_create(struct block_device *bdev)
 {
     if (!bdev)

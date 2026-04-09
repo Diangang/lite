@@ -17,6 +17,7 @@ static struct pt_regs *timer_callback(struct pt_regs *regs)
     return regs;
 }
 
+/* init_timer: Initialize timer. */
 void init_timer(uint32_t frequency)
 {
     if (!frequency)
@@ -47,11 +48,13 @@ void init_timer(uint32_t frequency)
     outb(0x40, h);
 }
 
+/* timer_get_ticks: Implement timer get ticks. */
 uint32_t timer_get_ticks(void)
 {
     return time_get_jiffies();
 }
 
+/* timer_get_uptime: Implement timer get uptime. */
 uint32_t timer_get_uptime(void)
 {
     return time_get_uptime();

@@ -56,6 +56,7 @@ struct pt_regs *keyboard_callback(struct pt_regs *regs)
     return regs;
 }
 
+/* keyboard_driver_init: Initialize keyboard driver. */
 static int keyboard_driver_init(void)
 {
     /* Register IRQ1 (INT 33) handler */

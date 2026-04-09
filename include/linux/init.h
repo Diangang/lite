@@ -17,4 +17,10 @@ typedef int (*initcall_t)(void);
 
 #define module_init(fn) device_initcall(fn)
 
+struct multiboot_info;
+void start_kernel(struct multiboot_info* mbi, uint32_t magic);
+
+/* initramfs.c  */
+void populate_rootfs(void);
+
 #endif

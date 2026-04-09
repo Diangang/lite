@@ -23,21 +23,92 @@
 
 ## 2. 内核虚拟地址布局 (Kernel Virtual)
 
-### 2.1 内核线性映射 (高半区 0~128MB)
-启动开启分页时会短暂建立低端恒等映射用于过渡（当前实现映射前 4MB），并在 trampoline 中立即清理低端映射后进入内核高半区线性映射。Paging 初始化时为物理内存 `0x00000000 ~ 0x08000000`（128MB）建立线性映射到高半区：
-- VA = PA + `PAGE_OFFSET`
-- 页表项为 `PTE_PRESENT | PTE_READ_WRITE` (Supervisor-only)。
-- 内核代码/数据、InitRD、页表目录等通过高半区线性映射访问，内核主体起始虚拟地址为 `PAGE_OFFSET + 0x00100000 + sizeof(.text.boot)`。
+### 2.1 4GB 轴上的内核虚拟地址区段（Lite）
 
-### 2.2 内核堆 (3GB 起的虚拟映射)
+当前项目采用经典 32 位 `3G/1G split`：
+- 用户态：`0x00000000 ~ TASK_SIZE`（`TASK_SIZE = PAGE_OFFSET = 0xC0000000`）
+- 内核态：`PAGE_OFFSET ~ 0xFFFFFFFF`
+
+按 4GB 虚拟地址轴从低到高划分，可以理解为：
+
+```
+0xFFFFFFFF  +----------------------------------------------------+
+            | Fixmap reserved                                    |
+            | [FIXADDR_START .. 0xFFFFFFFF]                       |
+0xFF000000  +-------------------- FIXADDR_START ------------------+
+            | vmalloc                                             |
+            | [vmalloc_start .. vmalloc_end)                      |
+            | vmalloc_end = FIXADDR_START                         |
+            | vmalloc_start = align_up(directmap_end + 8MB, 4KB)  |
+            |   where 8MB = VMALLOC_OFFSET                        |
+            |                                                    |
+directmap_end+-------------------- directmap_end ------------------+
+            | Direct map (linear mapping of lowmem RAM)           |
+            | [PAGE_OFFSET .. directmap_end)                       |
+0xC0000000  +-------------------- PAGE_OFFSET --------------------+
+            | User space (per-process mappings)                   |
+0x00000000  +----------------------------------------------------+
+```
+
+其中：
+- `PAGE_OFFSET = 0xC0000000`，`VMALLOC_OFFSET = 8MB`，`FIXADDR_START = 0xFF000000`
+- `directmap_end = PAGE_OFFSET + align_up(bootmem_lowmem_end(), 4MB)`
+
+这些边界的计算在 `memlayout_*()` 中完成，并在 `paging_init()` 打印校验（例如会检查 direct map 与 vmalloc 不重叠）。
+
+### 2.2 内核线性映射（Direct map / lowmem）
+
+启动开启分页时会短暂建立低端恒等映射用于过渡（当前实现映射前 4MB），并在 trampoline 中立即清理低端映射后进入内核高半区执行。
+
+进入 C 阶段后，`paging_init()` 会建立内核的 direct map：
+- 映射关系：`VA = PA + PAGE_OFFSET`
+- 覆盖范围：`PA ∈ [0, bootmem_lowmem_end)`（按 4MB 边界向上取整）
+- 页表项：`PTE_PRESENT | PTE_READ_WRITE`（Supervisor-only）
+
+这条 direct map 用于覆盖 lowmem 范围内的 RAM。超过 `bootmem_lowmem_end` 的 RAM 目前不会纳入 direct map（也没有实现 Linux 风格的 highmem 临时映射机制）。
+
+### 2.3 内核堆 (PAGE_OFFSET 起的虚拟映射)
 内核堆虚拟基址固定在 `KHEAP_START = PAGE_OFFSET`（当前为 `0xC0000000`）。
 - `kmalloc` 动态向后分配，每次从页分配器取页并映射到该虚拟地址区间。
 - 这个地址作为内核态与用户态的一个重要软边界（用户态指针不得超过此边界）。
 
-### 2.3 Page Cache (文件系统页缓存)
+### 2.4 Page Cache (文件系统页缓存)
 - 新增的文件系统 Page Cache 直接使用 `alloc_page(GFP_KERNEL)` 获取物理页。
 - 读写文件数据时，依赖高半区线性映射通过物理地址（`p->phys_addr`）进行 `memcpy`。
 - **注意**：如果未来支持大于 128MB 的高端内存，Page Cache 读写需要引入临时映射（类似 Linux 的 `kmap_atomic`）。
+
+### 2.5 Linux 2.6 i386（参考）4GB 轴上的典型区段
+
+Linux 2.6（i386，经典 3G/1G split）同样有 `PAGE_OFFSET = 0xC0000000`，但当开启 `CONFIG_HIGHMEM` 时，会在 vmalloc 与 fixmap 之间再插入一段 “persistent kmap（pkmap）” 区域用于 highmem 的 `kmap()`。
+
+按 4GB 虚拟地址轴从低到高的典型顺序可概括为：
+
+```
+0xFFFFFFFF  +------------------------------------------------------------+
+            | FIXMAP area (fixed_addresses + boot/temp fixmaps)          |
+FIXADDR_TOP +-------------------------- FIXADDR_TOP ----------------------+
+            | permanent fixed mappings                                   |
+FIXADDR_START+------------------------- FIXADDR_START --------------------+
+            | boot fixmap / temp fixmap                                  |
+FIXADDR_BOOT_START
+            +---------------------- FIXADDR_BOOT_START -------------------+
+            | Persistent kmap area (pkmap)                                |
+            |   [PKMAP_BASE .. FIXADDR_BOOT_START)                        |
+PKMAP_BASE   +--------------------------- PKMAP_BASE ---------------------+
+            | VMALLOC area                                                 |
+            |   [VMALLOC_START .. VMALLOC_END)                             |
+VMALLOC_START+------------------------ VMALLOC_START ---------------------+
+            | lowmem direct map area                                      |
+            |   [PAGE_OFFSET .. high_memory)                               |
+PAGE_OFFSET  +-------------------------- PAGE_OFFSET ---------------------+
+0x00000000  +------------------------------------------------------------+
+```
+
+其中：
+- `PAGE_OFFSET` 在 i386 上通常也是 `0xC0000000`
+- `VMALLOC_START` 由 `high_memory + vmalloc_earlyreserve + 2*VMALLOC_OFFSET` 对齐得到
+- `VMALLOC_END` 在 `CONFIG_HIGHMEM=y` 时由 `PKMAP_BASE` 限定，否则由 `FIXADDR_START` 限定
+- `PKMAP_BASE`、`FIXADDR_START/TOP` 由 fixmap/highmem 相关宏计算得到
 
 ---
 

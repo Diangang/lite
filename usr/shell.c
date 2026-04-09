@@ -21,20 +21,24 @@ int strncmp(const char *s1, const char *s2, int n) {
     return *(const unsigned char*)s1 - *(const unsigned char*)s2;
 }
 
+/* strlen: Implement strlen. */
 static int strlen(const char *s) {
     int len = 0;
     while(s[len]) len++;
     return len;
 }
 
+/* print_char: Implement print char. */
 void print_char(char c) {
     write(1, &c, 1);
 }
 
+/* skip_spaces: Implement skip spaces. */
 void skip_spaces(char **p) {
     while (**p == ' ') (*p)++;
 }
 
+/* split_token: Implement split token. */
 char* split_token(char **p) {
     skip_spaces(p);
     char *token = *p;
@@ -58,6 +62,7 @@ struct linux_dirent {
     char           d_name[];
 };
 
+/* do_ls: Perform ls. */
 void do_ls(char *path) {
     if (!path || *path == '\0') path = ".";
 
@@ -84,6 +89,7 @@ void do_ls(char *path) {
     close(fd);
 }
 
+/* do_cat: Perform cat. */
 void do_cat(char *path) {
     if (!path || *path == '\0') {
         print("cat: missing path\n");
@@ -106,6 +112,7 @@ void do_cat(char *path) {
     close(fd);
 }
 
+/* do_writefile: Perform writefile. */
 void do_writefile(char *path, char *content) {
     if (!path || !content) {
         print("writefile: missing args\n");
@@ -123,6 +130,7 @@ void do_writefile(char *path, char *content) {
     close(fd);
 }
 
+/* do_run: Perform run. */
 void do_run(char *path) {
     if (!path || *path == '\0') {
         print("run: missing path\n");
@@ -142,6 +150,7 @@ void do_run(char *path) {
     }
 }
 
+/* do_rm: Perform rm. */
 void do_rm(char *path) {
     if (!path || *path == '\0') {
         print("rm: missing path\n");
@@ -156,6 +165,7 @@ void do_rm(char *path) {
     }
 }
 
+/* main: Implement main. */
 int main() {
     print("ush: user shell\n");
     char linebuf[256];

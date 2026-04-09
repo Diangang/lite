@@ -4,6 +4,7 @@
 #include "linux/fs.h"
 #include "linux/file.h"
 
+/* task_get_cwd: Implement task get cwd. */
 const char *task_get_cwd(void)
 {
     static char buf[256];
@@ -39,6 +40,7 @@ const char *task_get_cwd(void)
     return buf;
 }
 
+/* task_dump_cwd_pid: Implement task dump cwd pid. */
 uint32_t task_dump_cwd_pid(uint32_t pid, char *buf, uint32_t len)
 {
     if (!buf || len == 0)
@@ -59,6 +61,7 @@ uint32_t task_dump_cwd_pid(uint32_t pid, char *buf, uint32_t len)
     return off;
 }
 
+/* task_dump_fd_pid: Implement task dump fd pid. */
 uint32_t task_dump_fd_pid(uint32_t pid, uint32_t fd, char *buf, uint32_t len)
 {
     if (!buf || len == 0)

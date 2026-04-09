@@ -32,6 +32,7 @@ static uint32_t pf_out_of_range = 0;
 extern void load_page_directory(uint32_t*);
 extern void enable_paging(void);
 
+/* map_page_ex: Map page ex. */
 void map_page_ex(pgd_t* pgd, void* phys_addr, void* virt_addr, pteval_t flags)
 {
     if (!pgd)
@@ -65,11 +66,13 @@ void map_page_ex(pgd_t* pgd, void* phys_addr, void* virt_addr, pteval_t flags)
     __asm__ volatile("invlpg (%0)" :: "r" (virt_addr) : "memory");
 }
 
+/* map_page: Map page. */
 void map_page(void* phys_addr, void* virt_addr)
 {
     map_page_ex(page_directory, phys_addr, virt_addr, PTE_READ_WRITE | PTE_PRESENT);
 }
 
+/* page_mapped: Implement page mapped. */
 int page_mapped(void* virt_addr)
 {
     if (!page_directory)
@@ -89,6 +92,7 @@ int page_mapped(void* virt_addr)
     return pte_present(pte) ? 1 : 0;
 }
 
+/* virt_to_phys: Implement virt to phys. */
 uint32_t virt_to_phys(void* virt_addr)
 {
     if (!page_directory)
@@ -110,6 +114,7 @@ uint32_t virt_to_phys(void* virt_addr)
     return pte_pfn(pte) + (va & (PAGE_SIZE - 1));
 }
 
+/* virt_to_phys_pgd: Implement virt to phys page directory. */
 uint32_t virt_to_phys_pgd(pgd_t* pgd, void* virt_addr)
 {
     if (!pgd)
@@ -131,6 +136,7 @@ uint32_t virt_to_phys_pgd(pgd_t* pgd, void* virt_addr)
     return pte_pfn(pte) + (va & (PAGE_SIZE - 1));
 }
 
+/* get_pte_flags: Get page table entry flags. */
 pteval_t get_pte_flags(pgd_t* pgd, void* virt_addr)
 {
     if (!pgd)
@@ -152,6 +158,7 @@ pteval_t get_pte_flags(pgd_t* pgd, void* virt_addr)
     return pte;
 }
 
+/* set_pte_flags: Set page table entry flags. */
 void set_pte_flags(pgd_t* pgd, void* virt_addr, pteval_t flags)
 {
     if (!pgd)
@@ -177,6 +184,7 @@ void set_pte_flags(pgd_t* pgd, void* virt_addr, pteval_t flags)
     __asm__ volatile("invlpg (%0)" :: "r" (virt_addr) : "memory");
 }
 
+/* unmap_page_pgd: Unmap page page directory. */
 void unmap_page_pgd(pgd_t* pgd, void* virt_addr)
 {
     if (!pgd)
@@ -199,11 +207,13 @@ void unmap_page_pgd(pgd_t* pgd, void* virt_addr)
     __asm__ volatile("invlpg (%0)" :: "r" (virt_addr) : "memory");
 }
 
+/* set_page_user: Set page user. */
 void set_page_user(void* virt_addr)
 {
     set_page_user_pgd(page_directory, virt_addr);
 }
 
+/* set_page_user_pgd: Set page user page directory. */
 void set_page_user_pgd(pgd_t* pgd, void* virt_addr)
 {
     if (!pgd)
@@ -228,6 +238,7 @@ void set_page_user_pgd(pgd_t* pgd, void* virt_addr)
     __asm__ volatile("invlpg (%0)" :: "r" (virt_addr) : "memory");
 }
 
+/* set_page_readonly_pgd: Set page readonly page directory. */
 void set_page_readonly_pgd(pgd_t* pgd, void* virt_addr)
 {
     if (!pgd)
@@ -250,6 +261,7 @@ void set_page_readonly_pgd(pgd_t* pgd, void* virt_addr)
     __asm__ volatile("invlpg (%0)" :: "r" (virt_addr) : "memory");
 }
 
+/* pgd_clone_kernel: Implement page directory clone kernel. */
 pgd_t* pgd_clone_kernel(void)
 {
     if (!kernel_directory)
@@ -266,6 +278,7 @@ pgd_t* pgd_clone_kernel(void)
     return new_dir;
 }
 
+/* switch_pgd: Switch page directory. */
 void switch_pgd(pgd_t* pgd)
 {
     if (!pgd)
@@ -275,16 +288,19 @@ void switch_pgd(pgd_t* pgd)
     __asm__ volatile("mov %0, %%cr3" :: "r"(pgd_phys));
 }
 
+/* get_pgd_current: Get page directory current. */
 pgd_t* get_pgd_current(void)
 {
     return page_directory;
 }
 
+/* get_pgd_kernel: Get page directory kernel. */
 pgd_t* get_pgd_kernel(void)
 {
     return kernel_directory;
 }
 
+/* get_pte: Get page table entry. */
 static int get_pte(pgd_t* pgd, uint32_t va, pgdval_t* out_pde, pteval_t* out_pte)
 {
     if (!pgd)
@@ -306,6 +322,7 @@ static int get_pte(pgd_t* pgd, uint32_t va, pgdval_t* out_pde, pteval_t* out_pte
     return 1;
 }
 
+/* access_ok: Implement access ok. */
 int access_ok(pgd_t* pgd, void* addr, uint32_t len, int write)
 {
     if (!pgd)
@@ -353,6 +370,7 @@ int access_ok(pgd_t* pgd, void* addr, uint32_t len, int write)
     return 1;
 }
 
+/* resolve_cow: Resolve a copy-on-write fault for the faulting page. */
 static int resolve_cow(uint32_t page_base)
 {
     pteval_t pte = get_pte_flags(page_directory, (void*)page_base);
@@ -388,6 +406,7 @@ static int resolve_cow(uint32_t page_base)
     return 1;
 }
 
+/* __copy_from_user: Copy from user. */
 int __copy_from_user(void* dst, const void* src_user, uint32_t len)
 {
     if (!dst && len)
@@ -400,6 +419,7 @@ int __copy_from_user(void* dst, const void* src_user, uint32_t len)
     return 0;
 }
 
+/* __copy_to_user: Copy to user. */
 int __copy_to_user(void* dst_user, const void* src, uint32_t len)
 {
     if (!dst_user && len)
@@ -427,12 +447,14 @@ int __copy_to_user(void* dst_user, const void* src, uint32_t len)
     return 0;
 }
 
+/* get_cow_stats: Get copy-on-write stats. */
 void get_cow_stats(uint32_t *faults, uint32_t *copies)
 {
     if (faults) *faults = cow_faults;
     if (copies) *copies = cow_copies;
 }
 
+/* get_pf_stats: Get pf stats. */
 void get_pf_stats(uint32_t *total, uint32_t *present, uint32_t *not_present, uint32_t *write, uint32_t *user, uint32_t *kernel, uint32_t *reserved, uint32_t *prot, uint32_t *null, uint32_t *kernel_addr, uint32_t *out_of_range)
 {
     if (total) *total = pf_total;
@@ -448,6 +470,7 @@ void get_pf_stats(uint32_t *total, uint32_t *present, uint32_t *not_present, uin
     if (out_of_range) *out_of_range = pf_out_of_range;
 }
 
+/* pf_oom_dump: Implement pf oom dump. */
 static void pf_oom_dump(uint32_t faulting_address, uint32_t eip)
 {
     printf("PF OOM: addr=0x%x eip=0x%x memfree_kb=%d memtotal_kb=%d\n",
@@ -477,6 +500,7 @@ static void pf_oom_dump(uint32_t faulting_address, uint32_t eip)
            contig_page_data.zone_normal.present_pages);
 }
 
+/* do_page_fault: Handle page faults for kernel and user mappings. */
 struct pt_regs *do_page_fault(struct pt_regs *regs)
 {
     uint32_t faulting_address;
@@ -604,6 +628,7 @@ struct pt_regs *do_page_fault(struct pt_regs *regs)
     return regs;
 }
 
+/* paging_init: Build the kernel page tables and turn on paging support. */
 void paging_init(void)
 {
     uint32_t pgd_phys = (uint32_t)alloc_page(GFP_KERNEL);

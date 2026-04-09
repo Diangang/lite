@@ -5,6 +5,7 @@
 #include "linux/sched.h"
 #include "linux/wait.h"
 
+/* signal_wake_task: Implement signal wake task. */
 static void signal_wake_task(struct task_struct *t)
 {
     if (!t)
@@ -26,6 +27,7 @@ static void signal_wake_task(struct task_struct *t)
     }
 }
 
+/* signal_notify_exit: Implement signal notify exit. */
 void signal_notify_exit(struct task_struct *child)
 {
     if (!child || !child->parent)
@@ -35,6 +37,7 @@ void signal_notify_exit(struct task_struct *child)
     irq_restore(flags);
 }
 
+/* sys_kill: Implement sys kill. */
 int sys_kill(uint32_t id, int sig)
 {
     if (!(sig == 0 || sig == SIGCHLD || sig == SIGINT || sig == SIGKILL || sig == SIGTERM))

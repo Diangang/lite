@@ -7,6 +7,7 @@
 #define BH_HASH_SIZE (1u << BH_HASH_BITS)
 #define BH_MAX 1024
 
+/* bh_hashfn: Implement bh hashfn. */
 static struct buffer_head *bh_hash[BH_HASH_SIZE];
 static struct buffer_head *bh_all_head;
 static struct buffer_head *bh_all_tail;
@@ -20,6 +21,7 @@ static uint32_t bh_hashfn(struct block_device *bdev, uint32_t block, uint32_t si
     return v & (BH_HASH_SIZE - 1);
 }
 
+/* bh_lookup: Implement bh lookup. */
 static struct buffer_head *bh_lookup(struct block_device *bdev, uint32_t block, uint32_t size)
 {
     uint32_t h = bh_hashfn(bdev, block, size);
@@ -32,6 +34,7 @@ static struct buffer_head *bh_lookup(struct block_device *bdev, uint32_t block, 
     return NULL;
 }
 
+/* bh_all_add_tail: Implement bh all add tail. */
 static void bh_all_add_tail(struct buffer_head *bh)
 {
     bh->b_prev_all = bh_all_tail;
@@ -43,6 +46,7 @@ static void bh_all_add_tail(struct buffer_head *bh)
     bh_all_tail = bh;
 }
 
+/* bh_all_del: Implement bh all del. */
 static void bh_all_del(struct buffer_head *bh)
 {
     if (bh->b_prev_all)
@@ -57,6 +61,7 @@ static void bh_all_del(struct buffer_head *bh)
     bh->b_next_all = NULL;
 }
 
+/* bh_hash_insert: Implement bh hash insert. */
 static void bh_hash_insert(struct buffer_head *bh)
 {
     uint32_t h = bh_hashfn(bh->b_bdev, bh->b_blocknr, bh->b_size);
@@ -64,6 +69,7 @@ static void bh_hash_insert(struct buffer_head *bh)
     bh_hash[h] = bh;
 }
 
+/* bh_hash_remove: Implement bh hash remove. */
 static void bh_hash_remove(struct buffer_head *bh)
 {
     uint32_t h = bh_hashfn(bh->b_bdev, bh->b_blocknr, bh->b_size);
@@ -78,6 +84,7 @@ static void bh_hash_remove(struct buffer_head *bh)
     }
 }
 
+/* bh_evict_one: Implement bh evict one. */
 static int bh_evict_one(void)
 {
     struct buffer_head *bh = bh_all_head;
@@ -97,6 +104,7 @@ static int bh_evict_one(void)
     return -1;
 }
 
+/* bh_alloc: Implement bh alloc. */
 static struct buffer_head *bh_alloc(struct block_device *bdev, uint32_t block, uint32_t size)
 {
     if (bh_total >= BH_MAX) {
@@ -123,6 +131,7 @@ static struct buffer_head *bh_alloc(struct block_device *bdev, uint32_t block, u
     return bh;
 }
 
+/* bread: Implement bread. */
 struct buffer_head *bread(struct block_device *bdev, uint32_t block, uint32_t size)
 {
     if (!bdev || size == 0)
@@ -149,6 +158,7 @@ struct buffer_head *bread(struct block_device *bdev, uint32_t block, uint32_t si
     return bh;
 }
 
+/* brelse: Implement brelse. */
 void brelse(struct buffer_head *bh)
 {
     if (!bh)
@@ -157,6 +167,7 @@ void brelse(struct buffer_head *bh)
         bh->b_count--;
 }
 
+/* mark_buffer_dirty: Implement mark buffer dirty. */
 void mark_buffer_dirty(struct buffer_head *bh)
 {
     if (!bh)
@@ -164,6 +175,7 @@ void mark_buffer_dirty(struct buffer_head *bh)
     bh->b_state |= BH_Dirty;
 }
 
+/* sync_dirty_buffer: Sync dirty buffer. */
 int sync_dirty_buffer(struct buffer_head *bh)
 {
     if (!bh || !bh->b_bdev || !bh->b_data || bh->b_size == 0)
@@ -179,6 +191,7 @@ int sync_dirty_buffer(struct buffer_head *bh)
     return 0;
 }
 
+/* sync_dirty_buffers_all: Sync dirty buffers all. */
 int sync_dirty_buffers_all(void)
 {
     int flushed = 0;
@@ -193,6 +206,7 @@ int sync_dirty_buffers_all(void)
     return flushed;
 }
 
+/* invalidate_buffer: Invalidate buffer. */
 void invalidate_buffer(struct block_device *bdev, uint32_t block, uint32_t size)
 {
     if (!bdev || size == 0)

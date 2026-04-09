@@ -2,14 +2,70 @@
 #include "linux/bio.h"
 #include "linux/blk_queue.h"
 #include "linux/blk_request.h"
+#include "linux/device.h"
+#include "linux/init.h"
 #include "linux/slab.h"
 #include "linux/vmalloc.h"
 #include "linux/libc.h"
 
+/* bio_endio_sync: Implement bio endio sync. */
 static uint32_t blk_reads;
 static uint32_t blk_writes;
 static uint32_t blk_bytes_read;
 static uint32_t blk_bytes_written;
+static struct class block_class;
+
+static int block_class_init(void)
+{
+    memset(&block_class, 0, sizeof(block_class));
+    kobject_init(&block_class.kobj, "block", NULL);
+    INIT_LIST_HEAD(&block_class.list);
+    INIT_LIST_HEAD(&block_class.devices);
+    return class_register(&block_class);
+}
+core_initcall(block_class_init);
+
+int gendisk_init(struct gendisk *disk, const char *name, uint32_t major, uint32_t minor, struct block_device *bdev)
+{
+    if (!disk || !name || !bdev)
+        return -1;
+    memset(disk, 0, sizeof(*disk));
+    uint32_t len = (uint32_t)strlen(name);
+    if (len >= sizeof(disk->disk_name))
+        len = sizeof(disk->disk_name) - 1;
+    memcpy(disk->disk_name, name, len);
+    disk->disk_name[len] = 0;
+    disk->major = major;
+    disk->minor = minor;
+    disk->bdev = bdev;
+    disk->dev = NULL;
+    disk->parent = NULL;
+    bdev->disk = disk;
+    return 0;
+}
+
+struct device *block_register_disk(struct gendisk *disk, struct device *parent)
+{
+    if (!disk || !disk->bdev)
+        return NULL;
+    struct bus_type *bus = device_model_platform_bus();
+    struct class *cls = device_model_block_class();
+    if (!bus || !cls)
+        return NULL;
+    struct device *dev = device_register_simple_class_parent(disk->disk_name, "block", bus, cls, parent, disk);
+    if (!dev)
+        return NULL;
+    disk->dev = dev;
+    disk->parent = parent;
+    return dev;
+}
+
+struct gendisk *gendisk_from_dev(struct device *dev)
+{
+    if (!dev || !dev->type || strcmp(dev->type, "block"))
+        return NULL;
+    return (struct gendisk *)dev->driver_data;
+}
 
 static void bio_endio_sync(struct bio *bio, int error)
 {
@@ -18,6 +74,7 @@ static void bio_endio_sync(struct bio *bio, int error)
     bio->bi_status = error;
 }
 
+/* mem_bdev_request_fn: Process requests against the in-memory block device backend. */
 static void mem_bdev_request_fn(struct request_queue *q)
 {
     if (!q)
@@ -57,6 +114,7 @@ static void mem_bdev_request_fn(struct request_queue *q)
     }
 }
 
+/* block_device_init: Initialize block device. */
 int block_device_init(struct block_device *bdev, uint32_t size, uint32_t block_size)
 {
     if (!bdev || size == 0)
@@ -73,6 +131,7 @@ int block_device_init(struct block_device *bdev, uint32_t size, uint32_t block_s
     bdev->writes = 0;
     bdev->bytes_read = 0;
     bdev->bytes_written = 0;
+    bdev->disk = NULL;
 
     struct request_queue *q = (struct request_queue *)kmalloc(sizeof(struct request_queue));
     if (!q) {
@@ -89,6 +148,7 @@ int block_device_init(struct block_device *bdev, uint32_t size, uint32_t block_s
     return 0;
 }
 
+/* block_device_read: Implement block device read. */
 uint32_t block_device_read(struct block_device *bdev, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!bdev || !buffer || size == 0)
@@ -112,6 +172,7 @@ uint32_t block_device_read(struct block_device *bdev, uint32_t offset, uint32_t 
     return size;
 }
 
+/* block_device_write: Implement block device write. */
 uint32_t block_device_write(struct block_device *bdev, uint32_t offset, uint32_t size, const uint8_t *buffer)
 {
     if (!bdev || !buffer || size == 0)
@@ -135,6 +196,7 @@ uint32_t block_device_write(struct block_device *bdev, uint32_t offset, uint32_t
     return size;
 }
 
+/* get_block_stats: Get block stats. */
 void get_block_stats(uint32_t *reads, uint32_t *writes, uint32_t *bytes_read, uint32_t *bytes_written)
 {
     if (reads)

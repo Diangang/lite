@@ -5,6 +5,7 @@
 #include "linux/uaccess.h"
 #include "linux/wait.h"
 
+/* do_waitpid: Perform waitpid. */
 int do_waitpid(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0, uint32_t *out_info1)
 {
     int want_any = (id == (uint32_t)-1);
@@ -50,6 +51,7 @@ int do_waitpid(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0,
     }
 }
 
+/* sys_waitpid: Implement sys waitpid. */
 int sys_waitpid(uint32_t id, void *status, uint32_t status_len, int from_user)
 {
     int code = 0;

@@ -1,6 +1,7 @@
 #include "linux/libc.h"
 #include "linux/panic.h"
 
+/* panic: Panic on the subsystem. */
 void panic(const char *msg)
 {
     if (msg)

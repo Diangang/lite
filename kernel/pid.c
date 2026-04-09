@@ -2,6 +2,7 @@
 #include "linux/pid.h"
 #include <stddef.h>
 
+/* find_task_by_pid: Find task by pid. */
 struct task_struct *find_task_by_pid(uint32_t pid)
 {
     if (list_empty(&task_list_head))

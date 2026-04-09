@@ -68,17 +68,28 @@ struct class {
 
 void driver_init(void);
 struct bus_type *bus_register(const char *name, int (*match)(struct device *, struct device_driver *));
+int bus_register_static(struct bus_type *bus);
+uint32_t bus_count(void);
+struct bus_type *bus_at(uint32_t index);
+struct bus_type *bus_find(const char *name);
 int driver_register(struct device_driver *drv);
 int driver_unregister(struct device_driver *drv);
-int driver_bind_device(struct device_driver *drv, struct device *dev);
+int driver_probe_device(struct device_driver *drv, struct device *dev);
+int driver_attach(struct device_driver *drv);
 int device_register(struct device *dev);
 int device_unregister(struct device *dev);
+int device_add(struct device *dev);
+int device_del(struct device *dev);
 int device_set_parent(struct device *dev, struct device *parent);
 int device_unbind(struct device *dev);
-int device_rebind(struct device *dev);
+int device_release_driver(struct device *dev);
+int device_attach(struct device *dev);
+int device_reprobe(struct device *dev);
 
 struct device *device_register_simple(const char *name, const char *type, struct bus_type *bus, void *data);
+struct device *device_register_simple_parent(const char *name, const char *type, struct bus_type *bus, struct device *parent, void *data);
 struct device *device_register_simple_class(const char *name, const char *type, struct bus_type *bus, struct class *cls, void *data);
+struct device *device_register_simple_class_parent(const char *name, const char *type, struct bus_type *bus, struct class *cls, struct device *parent, void *data);
 struct device *device_register_simple_full(const char *name, const char *type, struct bus_type *bus, struct class *cls, void *data, uint16_t vendor_id, uint16_t device_id, uint8_t class_id, uint8_t subclass_id, uint8_t prog_if, uint8_t revision, uint8_t bus_num, uint8_t dev_num, uint8_t func_num);
 struct bus_type *device_model_platform_bus(void);
 struct bus_type *device_model_pci_bus(void);
@@ -86,6 +97,7 @@ struct device *device_model_platform_root(void);
 void device_model_set_platform_root(struct device *dev);
 struct class *device_model_console_class(void);
 struct class *device_model_tty_class(void);
+struct class *device_model_block_class(void);
 void init_driver(struct device_driver *drv, const char *name, struct bus_type *bus, int (*probe)(struct device *));
 void init_driver_ids(struct device_driver *drv, const char *name, struct bus_type *bus, const struct device_id *id_table, int (*probe)(struct device *));
 int class_register(struct class *cls);

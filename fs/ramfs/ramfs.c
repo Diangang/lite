@@ -8,6 +8,7 @@
 // We don't even need a private data struct anymore!
 enum { RAMFS_MAGIC = 0x52414D46 };
 
+/* ramfs_apply_umask: Implement ramfs apply umask. */
 static struct file_operations ramfs_dir_ops;
 static struct file_operations ramfs_file_ops;
 
@@ -17,6 +18,7 @@ static uint32_t ramfs_apply_umask(uint32_t mode)
     return mode & (~mask) & 0777;
 }
 
+/* ramfs_valid_name: Implement ramfs valid name. */
 static int ramfs_valid_name(const char *name)
 {
     if (!name || !*name)
@@ -28,6 +30,7 @@ static int ramfs_valid_name(const char *name)
     return 1;
 }
 
+/* ramfs_create_child: Implement ramfs create child. */
 struct inode *ramfs_create_child(struct inode *dir, const char *name, uint32_t type)
 {
     if (!dir || !name)
@@ -66,6 +69,7 @@ struct inode *ramfs_create_child(struct inode *dir, const char *name, uint32_t t
     return inode;
 }
 
+/* ramfs_unlink: Implement ramfs unlink. */
 static int ramfs_unlink(struct dentry *dir_dentry, const char *name)
 {
     if (!dir_dentry || !name)
@@ -115,6 +119,7 @@ static int ramfs_unlink(struct dentry *dir_dentry, const char *name)
     return 0;
 }
 
+/* ramfs_rmdir: Implement ramfs rmdir. */
 static int ramfs_rmdir(struct dentry *dir_dentry, const char *name)
 {
     if (!dir_dentry || !name)
@@ -181,6 +186,7 @@ static struct file_operations ramfs_file_ops = {
     .ioctl = NULL
 };
 
+/* ramfs_fill_super: Implement ramfs fill super. */
 static int ramfs_fill_super(struct super_block *sb, void *data, int silent)
 {
     (void)data;
@@ -221,6 +227,7 @@ static struct file_system_type ramfs_fs_type = {
     .next = NULL,
 };
 
+/* init_ramfs_fs: Initialize ramfs fs. */
 int init_ramfs_fs(void)
 {
     register_filesystem(&ramfs_fs_type);

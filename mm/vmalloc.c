@@ -13,6 +13,7 @@ struct vmalloc_block {
 };
 
 static struct vmalloc_block *vmalloc_list = NULL;
+/* vmalloc_init_range: Implement vmalloc init range. */
 static uint32_t vmalloc_base;
 static uint32_t vmalloc_end;
 
@@ -24,6 +25,7 @@ static void vmalloc_init_range(void)
     vmalloc_end = memlayout_vmalloc_end();
 }
 
+/* vmalloc: Implement vmalloc. */
 void *vmalloc(uint32_t size)
 {
     if (size == 0)
@@ -59,6 +61,7 @@ void *vmalloc(uint32_t size)
     return (void*)vaddr;
 }
 
+/* vfree: Implement vfree. */
 void vfree(void *addr)
 {
     if (!addr)
@@ -86,6 +89,7 @@ void vfree(void *addr)
     }
 }
 
+/* ioremap: Implement ioremap. */
 void *ioremap(uint32_t phys, uint32_t size)
 {
     if (size == 0)
@@ -107,11 +111,13 @@ void *ioremap(uint32_t phys, uint32_t size)
     return (void*)vaddr;
 }
 
+/* iounmap: Implement iounmap. */
 void iounmap(void *addr)
 {
     (void)addr;
 }
 
+/* kmap: Implement kmap. */
 void *kmap(uint32_t pfn)
 {
     uint32_t phys = pfn << PAGE_SHIFT;
@@ -121,6 +127,7 @@ void *kmap(uint32_t pfn)
     return (void*)memlayout_fixaddr_start();
 }
 
+/* kunmap: Implement kunmap. */
 void kunmap(void *addr)
 {
     (void)addr;

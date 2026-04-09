@@ -55,6 +55,7 @@ static proc_pid_entry_t proc_pids[PROC_PID_MAX];
 
 static int parse_u32(const char *s, uint32_t *out);
 
+/* buf_append: Implement buf append. */
 static void buf_append(char *buf, uint32_t *off, uint32_t cap, const char *s)
 {
     if (!buf || !off || cap == 0 || !s)
@@ -66,6 +67,7 @@ static void buf_append(char *buf, uint32_t *off, uint32_t cap, const char *s)
     }
 }
 
+/* buf_append_u32: Implement buf append u32. */
 static void buf_append_u32(char *buf, uint32_t *off, uint32_t cap, uint32_t v)
 {
     char tmp[32];
@@ -73,6 +75,7 @@ static void buf_append_u32(char *buf, uint32_t *off, uint32_t cap, uint32_t v)
     buf_append(buf, off, cap, tmp);
 }
 
+/* buf_append_hex: Implement buf append hex. */
 static void buf_append_hex(char *buf, uint32_t *off, uint32_t cap, uint32_t v)
 {
     char tmp[32];
@@ -81,6 +84,7 @@ static void buf_append_hex(char *buf, uint32_t *off, uint32_t cap, uint32_t v)
     buf_append(buf, off, cap, tmp);
 }
 
+/* proc_read_mounts: Implement proc read mounts. */
 static uint32_t proc_read_mounts(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
@@ -105,6 +109,7 @@ static uint32_t proc_read_mounts(struct inode *node, uint32_t offset, uint32_t s
     return size;
 }
 
+/* proc_read_tasks: Implement proc read tasks. */
 static uint32_t proc_read_tasks(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
@@ -118,6 +123,7 @@ static uint32_t proc_read_tasks(struct inode *node, uint32_t offset, uint32_t si
     return size;
 }
 
+/* proc_read_sched: Implement proc read sched. */
 static uint32_t proc_read_sched(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
@@ -141,6 +147,7 @@ static uint32_t proc_read_sched(struct inode *node, uint32_t offset, uint32_t si
     return size;
 }
 
+/* proc_read_irq: Implement proc read IRQ. */
 static uint32_t proc_read_irq(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
@@ -163,6 +170,7 @@ static uint32_t proc_read_irq(struct inode *node, uint32_t offset, uint32_t size
     return size;
 }
 
+/* proc_read_maps: Implement proc read maps. */
 static uint32_t proc_read_maps(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
@@ -176,6 +184,7 @@ static uint32_t proc_read_maps(struct inode *node, uint32_t offset, uint32_t siz
     return size;
 }
 
+/* proc_read_meminfo: Implement proc read meminfo. */
 static uint32_t proc_read_meminfo(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
@@ -257,6 +266,7 @@ static uint32_t proc_read_meminfo(struct inode *node, uint32_t offset, uint32_t 
     return size;
 }
 
+/* e820_type_name: Implement e820 type name. */
 static const char *e820_type_name(uint32_t type)
 {
     switch (type) {
@@ -275,6 +285,7 @@ static const char *e820_type_name(uint32_t type)
     }
 }
 
+/* proc_read_iomem: Implement proc read iomem. */
 static uint32_t proc_read_iomem(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
@@ -337,6 +348,7 @@ static uint32_t proc_read_iomem(struct inode *node, uint32_t offset, uint32_t si
     return size;
 }
 
+/* proc_read_cow: Implement proc read copy-on-write. */
 static uint32_t proc_read_cow(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
@@ -359,6 +371,7 @@ static uint32_t proc_read_cow(struct inode *node, uint32_t offset, uint32_t size
     return size;
 }
 
+/* proc_read_pfault: Implement proc read pfault. */
 static uint32_t proc_read_pfault(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
@@ -401,6 +414,7 @@ static uint32_t proc_read_pfault(struct inode *node, uint32_t offset, uint32_t s
     return size;
 }
 
+/* proc_read_vmscan: Implement proc read vmscan. */
 static uint32_t proc_read_vmscan(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
@@ -433,6 +447,7 @@ static uint32_t proc_read_vmscan(struct inode *node, uint32_t offset, uint32_t s
     return size;
 }
 
+/* proc_read_writeback: Implement proc read writeback. */
 static uint32_t proc_read_writeback(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
@@ -458,6 +473,7 @@ static uint32_t proc_read_writeback(struct inode *node, uint32_t offset, uint32_
     return size;
 }
 
+/* proc_read_blockstats: Implement proc read blockstats. */
 static uint32_t proc_read_blockstats(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
@@ -485,6 +501,7 @@ static uint32_t proc_read_blockstats(struct inode *node, uint32_t offset, uint32
     return size;
 }
 
+/* proc_read_diskstats: Implement proc read diskstats. */
 static uint32_t proc_read_diskstats(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
@@ -496,11 +513,12 @@ static uint32_t proc_read_diskstats(struct inode *node, uint32_t offset, uint32_
         struct device *dev = device_model_device_at(i);
         if (!dev || !dev->type || strcmp(dev->type, "block") != 0)
             continue;
-        struct block_device *bdev = (struct block_device *)dev->driver_data;
-        if (!bdev)
+        struct gendisk *disk = gendisk_from_dev(dev);
+        if (!disk || !disk->bdev)
             continue;
+        struct block_device *bdev = disk->bdev;
 
-        buf_append(tmp, &off, sizeof(tmp), dev->kobj.name);
+        buf_append(tmp, &off, sizeof(tmp), disk->disk_name);
         buf_append(tmp, &off, sizeof(tmp), " reads=");
         buf_append_u32(tmp, &off, sizeof(tmp), bdev->reads);
         buf_append(tmp, &off, sizeof(tmp), " writes=");
@@ -523,6 +541,7 @@ static uint32_t proc_read_diskstats(struct inode *node, uint32_t offset, uint32_
     return size;
 }
 
+/* proc_write_writeback: Implement proc write writeback. */
 static uint32_t proc_write_writeback(struct inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer)
 {
     (void)node;
@@ -533,6 +552,7 @@ static uint32_t proc_write_writeback(struct inode *node, uint32_t offset, uint32
     return size;
 }
 
+/* proc_read_pagecache: Implement proc read page cache. */
 static uint32_t proc_read_pagecache(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
@@ -556,6 +576,7 @@ static uint32_t proc_read_pagecache(struct inode *node, uint32_t offset, uint32_
     return size;
 }
 
+/* proc_write_vmscan: Implement proc write vmscan. */
 static uint32_t proc_write_vmscan(struct inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer)
 {
     (void)node;
@@ -569,6 +590,7 @@ static uint32_t proc_write_vmscan(struct inode *node, uint32_t offset, uint32_t 
     return size;
 }
 
+/* proc_read_pid_stat: Implement proc read pid stat. */
 static uint32_t proc_read_pid_stat(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!node)
@@ -585,6 +607,7 @@ static uint32_t proc_read_pid_stat(struct inode *node, uint32_t offset, uint32_t
     return size;
 }
 
+/* proc_read_pid_cmdline: Implement proc read pid cmdline. */
 static uint32_t proc_read_pid_cmdline(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!node)
@@ -600,6 +623,7 @@ static uint32_t proc_read_pid_cmdline(struct inode *node, uint32_t offset, uint3
     return size;
 }
 
+/* proc_read_pid_status: Implement proc read pid status. */
 static uint32_t proc_read_pid_status(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!node)
@@ -615,6 +639,7 @@ static uint32_t proc_read_pid_status(struct inode *node, uint32_t offset, uint32
     return size;
 }
 
+/* proc_read_pid_cwd: Implement proc read pid cwd. */
 static uint32_t proc_read_pid_cwd(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!node)
@@ -630,6 +655,7 @@ static uint32_t proc_read_pid_cwd(struct inode *node, uint32_t offset, uint32_t 
     return size;
 }
 
+/* proc_read_pid_fd: Implement proc read pid fd. */
 static uint32_t proc_read_pid_fd(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!node)
@@ -649,6 +675,7 @@ static uint32_t proc_read_pid_fd(struct inode *node, uint32_t offset, uint32_t s
     return size;
 }
 
+/* proc_read_pid_maps: Implement proc read pid maps. */
 static uint32_t proc_read_pid_maps(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!node)
@@ -665,6 +692,7 @@ static uint32_t proc_read_pid_maps(struct inode *node, uint32_t offset, uint32_t
     return size;
 }
 
+/* proc_pid_fd_readdir: Implement proc pid fd readdir. */
 static struct dirent *proc_pid_fd_readdir(struct file *file, uint32_t index)
 {
     struct inode *node = file->dentry->inode;
@@ -693,6 +721,7 @@ static struct dirent *proc_pid_fd_readdir(struct file *file, uint32_t index)
     return NULL;
 }
 
+/* proc_pid_fd_finddir: Implement proc pid fd finddir. */
 static struct inode *proc_pid_fd_finddir(struct inode *node, const char *name)
 {
     if (!node || !name)
@@ -715,6 +744,7 @@ static struct inode *proc_pid_fd_finddir(struct inode *node, const char *name)
     return &e->fd_files[fd];
 }
 
+/* proc_pid_readdir: Implement proc pid readdir. */
 static struct dirent *proc_pid_readdir(struct file *file, uint32_t index)
 {
     struct inode *node = file->dentry->inode;
@@ -759,6 +789,7 @@ static struct dirent *proc_pid_readdir(struct file *file, uint32_t index)
     return NULL;
 }
 
+/* proc_pid_finddir: Implement proc pid finddir. */
 static struct inode *proc_pid_finddir(struct inode *node, const char *name)
 {
     if (!node || !name)
@@ -784,6 +815,7 @@ static struct inode *proc_pid_finddir(struct inode *node, const char *name)
     return NULL;
 }
 
+/* parse_u32: Parse u32. */
 static int parse_u32(const char *s, uint32_t *out)
 {
     if (!s || !out)
@@ -884,6 +916,7 @@ static struct file_operations proc_pid_fd_ops = {
     .ioctl = NULL
 };
 
+/* proc_get_pid_dir: Implement proc get pid dir. */
 struct inode *proc_get_pid_dir(uint32_t pid)
 {
     for (uint32_t i = 0; i < PROC_PID_MAX; i++) {
@@ -983,6 +1016,7 @@ struct inode *proc_get_pid_dir(uint32_t pid)
     return NULL;
 }
 
+/* proc_readdir: Implement proc readdir. */
 static struct dirent *proc_readdir(struct file *file, uint32_t index)
 {
     struct inode *node = file->dentry->inode;
@@ -1065,6 +1099,7 @@ static struct dirent *proc_readdir(struct file *file, uint32_t index)
     return NULL;
 }
 
+/* proc_finddir: Implement proc finddir. */
 static struct inode *proc_finddir(struct inode *node, const char *name)
 {
     (void)node;
@@ -1256,11 +1291,13 @@ static struct file_operations proc_mounts_ops = {
     .ioctl = NULL
 };
 
+/* init_procfs: Initialize procfs. */
 void init_procfs(void)
 {
     vfs_mount_fs("/proc", "proc");
 }
 
+/* proc_fill_super: Implement proc fill super. */
 static int proc_fill_super(struct super_block *sb, void *data, int silent)
 {
     (void)data;
@@ -1423,6 +1460,7 @@ static struct file_system_type proc_fs_type = {
     .next = NULL,
 };
 
+/* init_proc_fs: Initialize proc fs. */
 static int init_proc_fs(void)
 {
     register_filesystem(&proc_fs_type);

@@ -1,5 +1,6 @@
 #include "linux/kref.h"
 
+/* kref_init: Initialize kref. */
 void kref_init(struct kref *kref)
 {
     if (!kref)
@@ -7,6 +8,7 @@ void kref_init(struct kref *kref)
     kref->refcount = 1;
 }
 
+/* kref_get: Implement kref get. */
 void kref_get(struct kref *kref)
 {
     if (!kref)
@@ -15,6 +17,7 @@ void kref_get(struct kref *kref)
         kref->refcount++;
 }
 
+/* kref_put: Implement kref put. */
 int kref_put(struct kref *kref, void (*release)(struct kref *kref))
 {
     if (!kref)

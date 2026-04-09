@@ -14,6 +14,7 @@ static uint32_t wb_discarded_pages = 0;
 static uint32_t pcache_hits = 0;
 static uint32_t pcache_misses = 0;
 
+/* blockdev_readpage: Implement blockdev readpage. */
 static int blockdev_readpage(struct inode *inode, uint32_t index, struct page_cache_entry *page)
 {
     if (!inode || !page)
@@ -27,6 +28,7 @@ static int blockdev_readpage(struct inode *inode, uint32_t index, struct page_ca
     return 0;
 }
 
+/* blockdev_writepage: Implement blockdev writepage. */
 static int blockdev_writepage(struct inode *inode, struct page_cache_entry *page)
 {
     if (!inode || !page)
@@ -45,6 +47,7 @@ static struct address_space_operations blockdev_aops = {
     .writepage = blockdev_writepage
 };
 
+/* address_space_init: Initialize address space. */
 void address_space_init(struct address_space *mapping, struct inode *host)
 {
     mapping->host = host;
@@ -57,6 +60,7 @@ void address_space_init(struct address_space *mapping, struct inode *host)
     mapping_list = mapping;
 }
 
+/* address_space_release: Implement address space release. */
 void address_space_release(struct address_space *mapping)
 {
     if (!mapping)
@@ -75,6 +79,7 @@ void address_space_release(struct address_space *mapping)
     }
 }
 
+/* find_get_page: Find get page. */
 static struct page_cache_entry *find_get_page(struct address_space *mapping, uint32_t index)
 {
     struct page_cache_entry *p = mapping->pages;
@@ -86,6 +91,7 @@ static struct page_cache_entry *find_get_page(struct address_space *mapping, uin
     return NULL;
 }
 
+/* add_to_page_cache: Implement add to page cache. */
 static struct page_cache_entry *add_to_page_cache(struct address_space *mapping, uint32_t index)
 {
     struct page_cache_entry *p = (struct page_cache_entry *)kmalloc(sizeof(struct page_cache_entry));
@@ -108,6 +114,7 @@ static struct page_cache_entry *add_to_page_cache(struct address_space *mapping,
     return p;
 }
 
+/* generic_file_read: Implement generic file read. */
 uint32_t generic_file_read(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!node || !buffer || size == 0)
@@ -165,6 +172,7 @@ uint32_t generic_file_read(struct inode *node, uint32_t offset, uint32_t size, u
     return bytes_read;
 }
 
+/* generic_file_write: Implement generic file write. */
 uint32_t generic_file_write(struct inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer)
 {
     if (!node || !buffer || size == 0)
@@ -229,6 +237,7 @@ uint32_t generic_file_write(struct inode *node, uint32_t offset, uint32_t size, 
     return bytes_written;
 }
 
+/* truncate_inode_pages: Implement truncate inode pages. */
 void truncate_inode_pages(struct address_space *mapping, uint32_t lstart)
 {
     if (!mapping)
@@ -258,6 +267,7 @@ void truncate_inode_pages(struct address_space *mapping, uint32_t lstart)
     }
 }
 
+/* page_cache_reclaim_one: Implement page cache reclaim one. */
 int page_cache_reclaim_one(void)
 {
     struct address_space *m = mapping_list;
@@ -287,6 +297,7 @@ int page_cache_reclaim_one(void)
     return 0;
 }
 
+/* writeback_flush_all: Implement writeback flush all. */
 int writeback_flush_all(void)
 {
     int flushed = 0;
@@ -311,6 +322,7 @@ int writeback_flush_all(void)
     return flushed;
 }
 
+/* get_writeback_stats: Get writeback stats. */
 void get_writeback_stats(uint32_t *dirty, uint32_t *cleaned, uint32_t *discarded)
 {
     if (dirty)
@@ -321,6 +333,7 @@ void get_writeback_stats(uint32_t *dirty, uint32_t *cleaned, uint32_t *discarded
         *discarded = wb_discarded_pages;
 }
 
+/* get_pagecache_stats: Get page cache stats. */
 void get_pagecache_stats(uint32_t *hits, uint32_t *misses)
 {
     if (hits)

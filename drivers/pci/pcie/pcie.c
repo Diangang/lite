@@ -3,6 +3,7 @@
 #include "linux/device.h"
 #include <stdint.h>
 
+/* pcie_scan_device: Implement PCIe scan device. */
 int pcie_scan_device(struct device *dev)
 {
     if (!dev)
@@ -24,6 +25,7 @@ int pcie_scan_device(struct device *dev)
     return 0;
 }
 
+/* pcie_init: Initialize PCIe. */
 static int pcie_init(void)
 {
     return 0;

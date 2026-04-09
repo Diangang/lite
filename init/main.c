@@ -3,7 +3,6 @@
 #include "asm/setup.h"
 #include "linux/libc.h"
 #include "linux/serial.h"
-#include "linux/vga.h"
 #include "linux/console.h"
 #include "linux/init.h"
 #include "linux/mm.h"
@@ -36,9 +35,68 @@ extern initcall_t __initcall_start[];
 extern initcall_t __initcall_end[];
 struct multiboot_info boot_mbi;
 
-static void rest_init(void);
-static void kernel_init(void);
+/* do_initcalls: Perform initcalls. */
+static void do_initcalls(void)
+{
+    initcall_t *call;
+    for (call = __initcall_start; call < __initcall_end; call++)
+        (*call)();
+}
 
+/* do_basic_setup: Perform basic setup. */
+static void do_basic_setup(void)
+{
+    driver_init();
+    do_initcalls();
+    init_syscall();
+    printf("Syscall handler installed.\n");
+}
+
+/* run_init_process: Run init process. */
+static int run_init_process(const char *path)
+{
+    printf("kernel_init: exec %s as PID 1\n", path);
+    return task_exec_user(path);
+}
+
+/* prepare_namespace: Mount the early filesystems and launch init. */
+static void prepare_namespace(void)
+{
+    vfs_init();
+    populate_rootfs();
+
+    vfs_mount_fs("/proc", "proc");
+    vfs_mount_fs("/dev", "devtmpfs");
+    ksysfs_init();
+    vfs_mount_fs_dev("/mnt", "minix", "/dev/ram1");
+
+    const char *init = get_init_process();
+    if (run_init_process(init) != 0) {
+        const char *fallbacks[] = {
+            "/sbin/init",
+            "/etc/init",
+            "/bin/init",
+            "/sbin/sh",
+            "/bin/sh"
+        };
+        for (uint32_t i = 0; i < (sizeof(fallbacks) / sizeof(fallbacks[0])); i++) {
+            if (!strcmp(init, fallbacks[i]))
+                continue;
+            if (run_init_process(fallbacks[i]) == 0)
+                return;
+        }
+        panic("No init found. Try passing init= option to kernel.");
+    }
+}
+
+/* kernel_init: Finish core setup and launch the first user-space init process. */
+static void kernel_init(void)
+{
+    do_basic_setup();
+    prepare_namespace();
+}
+
+/* rest_init: Create PID 1 and drop PID 0 into the idle loop. */
 static void rest_init(void)
 {
     /* 1. Create the kernel_init thread. It will become PID 1. */
@@ -53,15 +111,11 @@ static void rest_init(void)
         __asm__ volatile ("hlt");
 }
 
-void populate_rootfs(void);
-
+/* start_kernel: Run the top-level kernel initialization sequence. */
 void start_kernel(struct multiboot_info* mbi, uint32_t magic)
 {
     /* Initialize serial port FIRST so we can debug without VGA */
     init_serial();
-
-    /* Initialize terminal vga interface */
-    init_vga();
 
     if (magic != MULTIBOOT_BOOTLOADER_MAGIC)
         panic("Invalid Multiboot magic number!");
@@ -115,65 +169,9 @@ void start_kernel(struct multiboot_info* mbi, uint32_t magic)
 
     printf("Hello, Kernel World!\n");
     printf("This is a minimal kernel running on QEMU.\n");
-    printf("Memory address 0xB8000 is directly manipulated.\n");
+    printf("Console output uses the serial port (COM1).\n");
     printf("Enjoy your OS development journey!\n");
 
     /* Transition to rest_init and spawn PID 1 */
     rest_init();
-}
-
-static void do_initcalls(void)
-{
-    initcall_t *call;
-    for (call = __initcall_start; call < __initcall_end; call++)
-        (*call)();
-}
-
-static void do_basic_setup(void)
-{
-    driver_init();
-    do_initcalls();
-    init_syscall();
-    printf("Syscall handler installed.\n");
-}
-
-static int run_init_process(const char *path)
-{
-    printf("kernel_init: exec %s as PID 1\n", path);
-    return task_exec_user(path);
-}
-
-static void prepare_namespace(void)
-{
-    vfs_init();
-    populate_rootfs();
-
-    vfs_mount_fs("/proc", "proc");
-    vfs_mount_fs("/dev", "devtmpfs");
-    ksysfs_init();
-    vfs_mount_fs_dev("/mnt", "minix", "/dev/ram1");
-
-    const char *init = get_init_process();
-    if (run_init_process(init) != 0) {
-        const char *fallbacks[] = {
-            "/sbin/init",
-            "/etc/init",
-            "/bin/init",
-            "/sbin/sh",
-            "/bin/sh"
-        };
-        for (uint32_t i = 0; i < (sizeof(fallbacks) / sizeof(fallbacks[0])); i++) {
-            if (!strcmp(init, fallbacks[i]))
-                continue;
-            if (run_init_process(fallbacks[i]) == 0)
-                return;
-        }
-        panic("No init found. Try passing init= option to kernel.");
-    }
-}
-
-static void kernel_init(void)
-{
-    do_basic_setup();
-    prepare_namespace();
 }

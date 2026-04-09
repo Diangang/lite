@@ -2,6 +2,7 @@
 .global _start
 .extern main
 
+/* _start: Early entry point from the bootloader. */
 _start:
     call main
     # Exit with return value from main (in %eax)

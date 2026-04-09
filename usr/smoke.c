@@ -9,6 +9,7 @@ enum {
 static int failures;
 static int read_file(const char *path, char *buf, int cap);
 
+/* fail: Implement fail. */
 static void fail(const char *msg)
 {
     failures++;
@@ -17,6 +18,7 @@ static void fail(const char *msg)
     print("\n");
 }
 
+/* parse_memtotal_kb: Parse memtotal kb. */
 static int parse_memtotal_kb(void)
 {
     char buf[1024];
@@ -47,6 +49,7 @@ static int parse_memtotal_kb(void)
     return -1;
 }
 
+/* parse_memfree_kb: Parse memfree kb. */
 static int parse_memfree_kb(void)
 {
     char buf[1024];
@@ -77,6 +80,7 @@ static int parse_memfree_kb(void)
     return -1;
 }
 
+/* parse_sched_ticks: Parse sched ticks. */
 static int parse_sched_ticks(void)
 {
     char buf[256];
@@ -105,6 +109,7 @@ static int parse_sched_ticks(void)
     return -1;
 }
 
+/* parse_cow_stats: Parse copy-on-write stats. */
 static int parse_cow_stats(int *faults, int *copies)
 {
     char buf[128];
@@ -140,6 +145,7 @@ static int parse_cow_stats(int *faults, int *copies)
     return 0;
 }
 
+/* parse_kv_u32: Parse kv u32. */
 static int parse_kv_u32(const char *buf, int n, const char *key, int *out)
 {
     int key_len = 0;
@@ -167,6 +173,7 @@ static int parse_kv_u32(const char *buf, int n, const char *key, int *out)
     return -1;
 }
 
+/* parse_pfault_stats: Parse pfault stats. */
 static int parse_pfault_stats(int *total, int *present, int *not_present, int *write, int *user, int *prot)
 {
     char buf[256];
@@ -188,6 +195,7 @@ static int parse_pfault_stats(int *total, int *present, int *not_present, int *w
     return 0;
 }
 
+/* parse_vmscan_stats: Parse vmscan stats. */
 static int parse_vmscan_stats(int *wakeups, int *tries, int *reclaims, int *anon, int *file)
 {
     char buf[128];
@@ -207,6 +215,7 @@ static int parse_vmscan_stats(int *wakeups, int *tries, int *reclaims, int *anon
     return 0;
 }
 
+/* parse_writeback_stats: Parse writeback stats. */
 static int parse_writeback_stats(int *dirty, int *cleaned, int *discarded)
 {
     char buf[128];
@@ -222,6 +231,7 @@ static int parse_writeback_stats(int *dirty, int *cleaned, int *discarded)
     return 0;
 }
 
+/* parse_blockstats: Parse blockstats. */
 static int parse_blockstats(int *reads, int *writes, int *bytes_read, int *bytes_written)
 {
     char buf[160];
@@ -239,6 +249,7 @@ static int parse_blockstats(int *reads, int *writes, int *bytes_read, int *bytes
     return 0;
 }
 
+/* parse_pagecache_stats: Parse page cache stats. */
 static int parse_pagecache_stats(int *hits, int *misses)
 {
     char buf[128];
@@ -252,6 +263,7 @@ static int parse_pagecache_stats(int *hits, int *misses)
     return 0;
 }
 
+/* test_fork: Implement test fork. */
 void test_fork() {
     print("\n--- Test 1: Fork & Waitpid ---\n");
     int pid = fork();
@@ -277,6 +289,7 @@ void test_fork() {
     }
 }
 
+/* test_file_io: Implement test file io. */
 void test_file_io() {
     print("\n--- Test 2: File I/O ---\n");
     int fd = open("/test.txt", O_CREAT);
@@ -313,6 +326,7 @@ void test_file_io() {
         fail("unlink /test.txt");
 }
 
+/* test_pf: Implement test pf. */
 void test_pf() {
     print("\n--- Test 3: Page Fault Isolation ---\n");
     print("Forking a child to crash (write to NULL)...\n");
@@ -331,6 +345,7 @@ void test_pf() {
     }
 }
 
+/* test_mmap: Implement test mmap. */
 void test_mmap() {
     print("\n--- Test 4: MMAP ---\n");
     char *addr = (char *)mmap(0, 0x2000, 3, 0, 0, 0); // addr=0, length=0x2000, prot=3
@@ -359,6 +374,7 @@ void test_mmap() {
     }
 }
 
+/* test_mprotect_mremap: Implement test mprotect mremap. */
 void test_mprotect_mremap() {
     print("\n--- Test 5: MPROTECT & MREMAP ---\n");
     void *base = mmap(0, 8192, VMA_READ | VMA_WRITE, 0, -1, 0);
@@ -385,6 +401,7 @@ void test_mprotect_mremap() {
     print("mprotect+mremap OK\n");
 }
 
+/* test_bad_ptr: Implement test bad ptr. */
 void test_bad_ptr() {
     print("\n--- Test 6: Bad Pointer in Syscall ---\n");
     print("Passing invalid pointer (0x08000000) to write()...\n");
@@ -395,6 +412,7 @@ void test_bad_ptr() {
     }
 }
 
+/* test_sched: Implement test sched. */
 void test_sched() {
     print("\n--- Test 7: User Scheduler (fork + sleep + yield) ---\n");
     int pid_a = fork();
@@ -442,6 +460,7 @@ void test_sched() {
         fail("Unexpected scheduler test exit codes");
 }
 
+/* contains: Implement contains. */
 static int contains(const char *hay, int hay_len, const char *needle)
 {
     if (!hay || !needle)
@@ -465,6 +484,7 @@ static int contains(const char *hay, int hay_len, const char *needle)
     return 0;
 }
 
+/* count_substr: Implement count substr. */
 static int count_substr(const char *hay, int hay_len, const char *needle)
 {
     if (!hay || !needle)
@@ -491,6 +511,7 @@ static int count_substr(const char *hay, int hay_len, const char *needle)
     return count;
 }
 
+/* read_file: Read file. */
 static int read_file(const char *path, char *buf, int cap)
 {
     if (!path || !buf || cap <= 1)
@@ -506,6 +527,7 @@ static int read_file(const char *path, char *buf, int cap)
     return n;
 }
 
+/* write_file: Write file. */
 static int write_file(const char *path, const char *data, int len)
 {
     if (!path || !data || len <= 0)
@@ -518,6 +540,7 @@ static int write_file(const char *path, const char *data, int len)
     return n;
 }
 
+/* test_mounts: Implement test mounts. */
 void test_mounts() {
     print("\n--- Test 9: /proc/mounts ---\n");
     int fd = open("/proc/mounts", 0);
@@ -553,6 +576,7 @@ void test_mounts() {
         fail("Mount table missing entries");
 }
 
+/* test_rmdir: Implement test rmdir. */
 void test_rmdir() {
     print("\n--- Test 8: rmdir/unlink ---\n");
     int before = failures;
@@ -590,6 +614,7 @@ void test_rmdir() {
         print("rmdir/unlink OK.\n");
 }
 
+/* test_proc_meminfo_iomem: Implement test proc meminfo iomem. */
 void test_proc_meminfo_iomem() {
     print("\n--- Test 10: /proc meminfo/iomem ---\n");
     int ok = 1;
@@ -653,6 +678,7 @@ void test_proc_meminfo_iomem() {
         print("/proc meminfo/iomem OK.\n");
 }
 
+/* test_large_mmap_touch: Implement test large mmap touch. */
 void test_large_mmap_touch() {
     print("\n--- Test 11: Large MMAP Touch ---\n");
     int memtotal_kb = parse_memtotal_kb();
@@ -695,6 +721,7 @@ void test_large_mmap_touch() {
         print("Large mmap touch OK.\n");
 }
 
+/* test_pci_uevent: Implement test PCI uevent. */
 void test_pci_uevent() {
     print("\n--- Test 12: PCI uevent ---\n");
     char buf[2048];
@@ -756,6 +783,7 @@ void test_pci_uevent() {
     }
 }
 
+/* test_sysfs_layout: Implement test sysfs layout. */
 void test_sysfs_layout() {
     print("\n--- Test 13: sysfs layout ---\n");
     int ok = 1;
@@ -803,15 +831,82 @@ void test_sysfs_layout() {
         fail("/sys/bus/platform/drivers/console/name");
         ok = 0;
     }
+
+    fd = open("/sys/class/tty", 0);
+    if (fd < 0) {
+        fail("open /sys/class/tty");
+        ok = 0;
+    } else
+        close(fd);
+
+    n = read_file("/sys/class/tty/ttyS0/parent/type", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "serial")) {
+        fail("/sys/class/tty/ttyS0/parent/type");
+        ok = 0;
+    }
+
+    n = read_file("/sys/class/tty/ttyS0/tty_driver", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "serial")) {
+        fail("/sys/class/tty/ttyS0/tty_driver");
+        ok = 0;
+    }
+
+    n = read_file("/sys/class/tty/ttyS0/index", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "0")) {
+        fail("/sys/class/tty/ttyS0/index");
+        ok = 0;
+    }
+    n = read_file("/sys/class/tty/ttyS0/dev", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "4:64")) {
+        fail("/sys/class/tty/ttyS0/dev");
+        ok = 0;
+    }
+
+    fd = open("/sys/class/block", 0);
+    if (fd < 0) {
+        fail("open /sys/class/block");
+        ok = 0;
+    } else
+        close(fd);
+
+    n = read_file("/sys/class/block/ram0/type", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "block")) {
+        fail("/sys/class/block/ram0/type");
+        ok = 0;
+    }
+
+    n = read_file("/sys/class/block/ram0/parent/type", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "platform-root")) {
+        fail("/sys/class/block/ram0/parent/type");
+        ok = 0;
+    }
+
+    n = read_file("/sys/class/block/ram0/capacity", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "16384")) {
+        fail("/sys/class/block/ram0/capacity");
+        ok = 0;
+    }
+
+    n = read_file("/sys/class/block/ram0/queue", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "present")) {
+        fail("/sys/class/block/ram0/queue");
+        ok = 0;
+    }
+    n = read_file("/sys/class/block/ram0/dev", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "1:0")) {
+        fail("/sys/class/block/ram0/dev");
+        ok = 0;
+    }
     if (ok)
         print("sysfs layout OK.\n");
 }
 
+/* test_sysfs_bind_unbind_console: Implement test sysfs bind unbind console. */
 void test_sysfs_bind_unbind_console() {
     print("\n--- Test 14: sysfs bind/unbind ---\n");
     int ok = 1;
     char buf[128];
-    int n = read_file("/sys/devices/platform/console/driver", buf, sizeof(buf));
+    int n = read_file("/sys/devices/platform/serial0/console/driver", buf, sizeof(buf));
     if (n <= 0) {
         fail("read console driver");
         return;
@@ -824,7 +919,7 @@ void test_sysfs_bind_unbind_console() {
         fail("unbind console");
         return;
     }
-    n = read_file("/sys/devices/platform/console/driver", buf, sizeof(buf));
+    n = read_file("/sys/devices/platform/serial0/console/driver", buf, sizeof(buf));
     if (n <= 0 || !contains(buf, n, "unbound")) {
         fail("console driver should be unbound");
         ok = 0;
@@ -835,7 +930,7 @@ void test_sysfs_bind_unbind_console() {
         fail("bind console");
         return;
     }
-    n = read_file("/sys/devices/platform/console/driver", buf, sizeof(buf));
+    n = read_file("/sys/devices/platform/serial0/console/driver", buf, sizeof(buf));
     if (n <= 0 || !contains(buf, n, "console")) {
         fail("console driver should be bound");
         ok = 0;
@@ -844,6 +939,7 @@ void test_sysfs_bind_unbind_console() {
         print("sysfs bind/unbind OK.\n");
 }
 
+/* test_fork_blast: Implement test fork blast. */
 void test_fork_blast() {
     print("\n--- Test 15: Fork Blast (waitpid semantics) ---\n");
 
@@ -925,6 +1021,7 @@ void test_fork_blast() {
     print("fork blast OK.\n");
 }
 
+/* test_sleep_interrupt_sigchld: Implement test sleep interrupt sigchld. */
 void test_sleep_interrupt_sigchld() {
     print("\n--- Test 16: Sleep Interrupt (SIGCHLD) ---\n");
     int t0 = parse_sched_ticks();
@@ -957,6 +1054,7 @@ void test_sleep_interrupt_sigchld() {
     print("sleep interrupt OK.\n");
 }
 
+/* test_kill_sigterm: Implement test kill sigterm. */
 void test_kill_sigterm() {
     print("\n--- Test 17: Kill (SIGTERM) ---\n");
     int pid = fork();
@@ -988,6 +1086,7 @@ void test_kill_sigterm() {
     print("kill SIGTERM OK.\n");
 }
 
+/* test_kill_sigkill: Implement test kill sigkill. */
 void test_kill_sigkill() {
     print("\n--- Test 18: Kill (SIGKILL) ---\n");
     int pid = fork();
@@ -1019,6 +1118,7 @@ void test_kill_sigkill() {
     print("kill SIGKILL OK.\n");
 }
 
+/* test_kill_sigint: Implement test kill sigint. */
 void test_kill_sigint() {
     print("\n--- Test 19: Kill (SIGINT) ---\n");
     int pid = fork();
@@ -1050,6 +1150,7 @@ void test_kill_sigint() {
     print("kill SIGINT OK.\n");
 }
 
+/* test_kill_sig0: Implement test kill sig0. */
 void test_kill_sig0() {
     print("\n--- Test 20: Kill (SIG0) ---\n");
     int pid = fork();
@@ -1078,6 +1179,7 @@ void test_kill_sig0() {
     print("kill SIG0 OK.\n");
 }
 
+/* test_kill_pid1: Implement test kill pid1. */
 void test_kill_pid1() {
     print("\n--- Test 21: Kill PID 1 ---\n");
     // int SIGTERM = 15;
@@ -1089,6 +1191,7 @@ void test_kill_pid1() {
     print("kill pid1 OK.\n");
 }
 
+/* test_cow_isolation: Implement test copy-on-write isolation. */
 void test_cow_isolation() {
     print("\n--- Test 22: COW Isolation ---\n");
     for (int i = 0; i < 32; i++) {
@@ -1130,6 +1233,7 @@ void test_cow_isolation() {
     print("cow isolation OK.\n");
 }
 
+/* test_cow_stats: Implement test copy-on-write stats. */
 void test_cow_stats() {
     print("\n--- Test 23: COW Stats ---\n");
     int f0 = 0, c0 = 0;
@@ -1178,6 +1282,7 @@ void test_cow_stats() {
     print("cow stats OK.\n");
 }
 
+/* test_cow_single_copy: Implement test copy-on-write single copy. */
 void test_cow_single_copy() {
     print("\n--- Test 24: COW Single Copy ---\n");
     int f0 = 0, c0 = 0;
@@ -1227,6 +1332,7 @@ void test_cow_single_copy() {
     print("cow single copy OK.\n");
 }
 
+/* test_cow_release: Implement test copy-on-write release. */
 void test_cow_release() {
     print("\n--- Test 25: COW Release ---\n");
     int before = parse_memfree_kb();
@@ -1273,6 +1379,7 @@ void test_cow_release() {
     print("cow release OK.\n");
 }
 
+/* test_pfault_stats: Implement test pfault stats. */
 void test_pfault_stats() {
     print("\n--- Test 26: Page Fault Stats ---\n");
     int t0 = 0, p0 = 0, np0 = 0, w0 = 0, u0 = 0, prot0 = 0;
@@ -1337,6 +1444,7 @@ void test_pfault_stats() {
     print("pfault stats OK.\n");
 }
 
+/* test_vmscan_wakeups: Implement test vmscan wakeups. */
 void test_vmscan_wakeups() {
     print("\n--- Test 27: Vmscan Wakeups ---\n");
     int w0 = 0, t0 = 0, r0 = 0, a0 = 0, f0 = 0;
@@ -1390,6 +1498,7 @@ void test_vmscan_wakeups() {
     print("vmscan wakeups OK.\n");
 }
 
+/* test_file_cache_reclaim: Implement test file cache reclaim. */
 void test_file_cache_reclaim() {
     print("\n--- Test 28: File Cache Reclaim ---\n");
     int w0 = 0, t0 = 0, r0 = 0, a0 = 0, f0 = 0;
@@ -1460,6 +1569,7 @@ void test_file_cache_reclaim() {
     print("file reclaim OK.\n");
 }
 
+/* test_writeback: Implement test writeback. */
 void test_writeback() {
     print("\n--- Test 29: Writeback ---\n");
     int d0 = 0, c0 = 0, x0 = 0;
@@ -1507,6 +1617,7 @@ void test_writeback() {
     print("writeback OK.\n");
 }
 
+/* test_writeback_truncate: Implement test writeback truncate. */
 void test_writeback_truncate() {
     print("\n--- Test 31: Writeback Truncate ---\n");
     int d0 = 0, c0 = 0, x0 = 0;
@@ -1606,6 +1717,7 @@ void test_writeback_truncate() {
     print("writeback truncate OK.\n");
 }
 
+/* test_pagecache_stats: Implement test page cache stats. */
 void test_pagecache_stats() {
     print("\n--- Test 30: Page Cache Stats ---\n");
     int h0 = 0, m0 = 0;
@@ -1689,6 +1801,7 @@ void test_pagecache_stats() {
     print("pagecache stats OK.\n");
 }
 
+/* test_blockstats_ramdisk: Implement test blockstats ramdisk. */
 void test_blockstats_ramdisk() {
     print("\n--- Test 32: Blockstats (ram0) ---\n");
     int r0 = 0, w0 = 0, br0 = 0, bw0 = 0;
@@ -1766,6 +1879,7 @@ void test_blockstats_ramdisk() {
     print("blockstats ram0 OK.\n");
 }
 
+/* test_minix_mount_read: Implement test minix mount read. */
 void test_minix_mount_read() {
     print("\n--- Test 33: MinixFS Read ---\n");
     int fd = open("/mnt/hello.txt", 0);
@@ -1795,6 +1909,7 @@ void test_minix_mount_read() {
     print("minixfs read OK.\n");
 }
 
+/* test_nvme_device: Implement test NVMe device. */
 void test_nvme_device() {
     print("\n--- Test 34: NVMe Device --\n");
     int fd = open("/dev/nvme0n1", 0);
@@ -1806,6 +1921,7 @@ void test_nvme_device() {
     print("NVMe device detected OK.\n");
 }
 
+/* test_minix_mount_write: Implement test minix mount write. */
 void test_minix_mount_write() {
     print("\n--- Test 35: MinixFS Write --\n");
     int fd = open("/mnt/test_write.txt", O_CREAT);
@@ -1821,7 +1937,7 @@ void test_minix_mount_write() {
     }
     close(fd);
     print("minixfs write OK.\n");
-    
+
     fd = open("/mnt/test_write.txt", 0);
     if (fd < 0) {
         fail("open /mnt/test_write.txt for read");
@@ -1847,6 +1963,7 @@ void test_minix_mount_write() {
     print("minixfs write-read OK.\n");
 }
 
+/* main: Implement main. */
 int main() {
     print("================================\n");
     print("  Lite OS Automated Test Suite  \n");

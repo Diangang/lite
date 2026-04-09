@@ -1,5 +1,6 @@
 #include "../include/linux/rbtree.h"
 
+/* rb_rotate_left: Implement rb rotate left. */
 static void rb_rotate_left(struct rb_node *node, struct rb_root *root)
 {
 	struct rb_node *right = node->rb_right;
@@ -19,6 +20,7 @@ static void rb_rotate_left(struct rb_node *node, struct rb_root *root)
 	node->rb_parent = right;
 }
 
+/* rb_rotate_right: Implement rb rotate right. */
 static void rb_rotate_right(struct rb_node *node, struct rb_root *root)
 {
 	struct rb_node *left = node->rb_left;
@@ -38,6 +40,7 @@ static void rb_rotate_right(struct rb_node *node, struct rb_root *root)
 	node->rb_parent = left;
 }
 
+/* rb_insert_color: Implement rb insert color. */
 void rb_insert_color(struct rb_node *node, struct rb_root *root)
 {
 	struct rb_node *parent, *gparent;
@@ -93,6 +96,7 @@ void rb_insert_color(struct rb_node *node, struct rb_root *root)
 	root->rb_node->rb_color = RB_BLACK;
 }
 
+/* rb_erase_color: Implement rb erase color. */
 static void rb_erase_color(struct rb_node *node, struct rb_node *parent, struct rb_root *root)
 {
 	struct rb_node *other;
@@ -164,6 +168,7 @@ static void rb_erase_color(struct rb_node *node, struct rb_node *parent, struct 
 		node->rb_color = RB_BLACK;
 }
 
+/* rb_erase: Implement rb erase. */
 void rb_erase(struct rb_node *node, struct rb_root *root)
 {
 	struct rb_node *child, *parent;
@@ -235,6 +240,7 @@ color:
 		rb_erase_color(child, parent, root);
 }
 
+/* rb_first: Implement rb first. */
 struct rb_node *rb_first(struct rb_root *root)
 {
 	struct rb_node *n = root->rb_node;
@@ -246,6 +252,7 @@ struct rb_node *rb_first(struct rb_root *root)
 	return n;
 }
 
+/* rb_last: Implement rb last. */
 struct rb_node *rb_last(struct rb_root *root)
 {
 	struct rb_node *n = root->rb_node;
@@ -257,6 +264,7 @@ struct rb_node *rb_last(struct rb_root *root)
 	return n;
 }
 
+/* rb_next: Implement rb next. */
 struct rb_node *rb_next(struct rb_node *node)
 {
 	if (node->rb_right) {
@@ -272,6 +280,7 @@ struct rb_node *rb_next(struct rb_node *node)
 	return node->rb_parent;
 }
 
+/* rb_prev: Implement rb prev. */
 struct rb_node *rb_prev(struct rb_node *node)
 {
 	if (node->rb_left) {
@@ -287,6 +296,7 @@ struct rb_node *rb_prev(struct rb_node *node)
 	return node->rb_parent;
 }
 
+/* rb_replace_node: Implement rb replace node. */
 void rb_replace_node(struct rb_node *victim, struct rb_node *new_node, struct rb_root *root)
 {
 	struct rb_node *parent = victim->rb_parent;

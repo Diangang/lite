@@ -14,22 +14,26 @@ static char uevent_buf[4096];
 static uint32_t uevent_len = 0;
 static struct device *platform_root_dev = NULL;
 
+/* device_model_platform_root: Implement device model platform root. */
 struct device *device_model_platform_root(void)
 {
     return platform_root_dev;
 }
 
+/* device_model_set_platform_root: Implement device model set platform root. */
 void device_model_set_platform_root(struct device *dev)
 {
     platform_root_dev = dev;
 }
 
+/* device_release_kobj: Implement device release kobj. */
 static void device_release_kobj(struct kobject *kobj)
 {
     struct device *dev = CONTAINER_OF(kobj, struct device, kobj);
     kfree(dev);
 }
 
+/* kobject_child_add: Implement kobject child add. */
 static void kobject_child_add(struct kobject *parent, struct kobject *child)
 {
     if (!parent || !child)
@@ -38,6 +42,7 @@ static void kobject_child_add(struct kobject *parent, struct kobject *child)
     parent->children = child;
 }
 
+/* kobject_child_del: Implement kobject child del. */
 static void kobject_child_del(struct kobject *parent, struct kobject *child)
 {
     if (!parent || !child)
@@ -58,6 +63,7 @@ static void kobject_child_del(struct kobject *parent, struct kobject *child)
     }
 }
 
+/* device_set_parent: Implement device set parent. */
 int device_set_parent(struct device *dev, struct device *parent)
 {
     if (!dev)
@@ -71,6 +77,7 @@ int device_set_parent(struct device *dev, struct device *parent)
     return 0;
 }
 
+/* device_unbind: Implement device unbind. */
 int device_unbind(struct device *dev)
 {
     if (!dev)
@@ -85,11 +92,17 @@ int device_unbind(struct device *dev)
     return 0;
 }
 
-int device_rebind(struct device *dev)
+int device_release_driver(struct device *dev)
+{
+    return device_unbind(dev);
+}
+
+int device_attach(struct device *dev)
 {
     if (!dev || !dev->bus)
         return -1;
-    device_unbind(dev);
+    if (dev->driver)
+        return 0;
     struct device_driver *drv;
     list_for_each_entry(drv, &dev->bus->drivers, bus_list) {
         if (dev->bus->match && dev->bus->match(dev, drv)) {
@@ -105,7 +118,21 @@ int device_rebind(struct device *dev)
     return 0;
 }
 
-int device_register(struct device *dev)
+int device_reprobe(struct device *dev)
+{
+    if (!dev || !dev->bus)
+        return -1;
+    device_release_driver(dev);
+    return device_attach(dev);
+}
+
+/* device_rebind: Implement device rebind. */
+int device_rebind(struct device *dev)
+{
+    return device_reprobe(dev);
+}
+
+int device_add(struct device *dev)
 {
     if (!dev || !dev->bus)
         return -1;
@@ -125,10 +152,22 @@ int device_register(struct device *dev)
     }
     devtmpfs_register_device(dev);
     device_uevent_emit("add", dev);
-    device_rebind(dev);
+    device_attach(dev);
     return 0;
 }
 
+/* device_register: Implement device register. */
+int device_register(struct device *dev)
+{
+    return device_add(dev);
+}
+
+int device_del(struct device *dev)
+{
+    return device_unregister(dev);
+}
+
+/* device_unregister: Implement device unregister. */
 int device_unregister(struct device *dev)
 {
     if (!dev || !dev->bus)
@@ -147,6 +186,7 @@ int device_unregister(struct device *dev)
     return 0;
 }
 
+/* device_register_simple: Implement device register simple. */
 struct device *device_register_simple(const char *name, const char *type, struct bus_type *bus, void *data)
 {
     if (!bus)
@@ -167,6 +207,30 @@ struct device *device_register_simple(const char *name, const char *type, struct
     return dev;
 }
 
+/* device_register_simple_parent: Implement device register simple parent. */
+struct device *device_register_simple_parent(const char *name, const char *type, struct bus_type *bus, struct device *parent, void *data)
+{
+    if (!bus)
+        return NULL;
+    struct device *dev = (struct device*)kmalloc(sizeof(struct device));
+    if (!dev)
+        return NULL;
+    memset(dev, 0, sizeof(*dev));
+    kobject_init(&dev->kobj, name, device_release_kobj);
+    dev->type = type;
+    dev->bus = bus;
+    dev->driver = NULL;
+    dev->driver_data = data;
+    if (parent)
+        device_set_parent(dev, parent);
+    if (device_register(dev) != 0) {
+        kobject_put(&dev->kobj);
+        return NULL;
+    }
+    return dev;
+}
+
+/* device_register_simple_class: Implement device register simple class. */
 struct device *device_register_simple_class(const char *name, const char *type, struct bus_type *bus, struct class *cls, void *data)
 {
     if (!bus)
@@ -188,6 +252,31 @@ struct device *device_register_simple_class(const char *name, const char *type, 
     return dev;
 }
 
+/* device_register_simple_class_parent: Implement device register simple class parent. */
+struct device *device_register_simple_class_parent(const char *name, const char *type, struct bus_type *bus, struct class *cls, struct device *parent, void *data)
+{
+    if (!bus)
+        return NULL;
+    struct device *dev = (struct device*)kmalloc(sizeof(struct device));
+    if (!dev)
+        return NULL;
+    memset(dev, 0, sizeof(*dev));
+    kobject_init(&dev->kobj, name, device_release_kobj);
+    dev->type = type;
+    dev->bus = bus;
+    dev->driver = NULL;
+    dev->class = cls;
+    dev->driver_data = data;
+    if (parent)
+        device_set_parent(dev, parent);
+    if (device_register(dev) != 0) {
+        kobject_put(&dev->kobj);
+        return NULL;
+    }
+    return dev;
+}
+
+/* device_register_simple_full: Implement device register simple full. */
 struct device *device_register_simple_full(const char *name, const char *type, struct bus_type *bus, struct class *cls, void *data, uint16_t vendor_id, uint16_t device_id, uint8_t class_id, uint8_t subclass_id, uint8_t prog_if, uint8_t revision, uint8_t bus_num, uint8_t dev_num, uint8_t func_num)
 {
     if (!bus)
@@ -218,6 +307,7 @@ struct device *device_register_simple_full(const char *name, const char *type, s
     return dev;
 }
 
+/* device_model_device_count: Implement device model device count. */
 uint32_t device_model_device_count(void)
 {
     if (!devmodel_ready)
@@ -232,6 +322,7 @@ uint32_t device_model_device_count(void)
     return n;
 }
 
+/* device_model_device_at: Implement device model device at. */
 struct device *device_model_device_at(uint32_t index)
 {
     if (!devmodel_ready)
@@ -249,6 +340,7 @@ struct device *device_model_device_at(uint32_t index)
     return NULL;
 }
 
+/* device_model_find_device: Implement device model find device. */
 struct device *device_model_find_device(const char *name)
 {
     if (!devmodel_ready || !name)
@@ -263,6 +355,7 @@ struct device *device_model_find_device(const char *name)
     return NULL;
 }
 
+/* device_model_devices_kset: Implement device model devices kset. */
 struct kset *device_model_devices_kset(void)
 {
     if (!devmodel_ready)
@@ -270,6 +363,7 @@ struct kset *device_model_devices_kset(void)
     return &devices_kset;
 }
 
+/* device_model_drivers_kset: Implement device model drivers kset. */
 struct kset *device_model_drivers_kset(void)
 {
     if (!devmodel_ready)
@@ -277,6 +371,7 @@ struct kset *device_model_drivers_kset(void)
     return &drivers_kset;
 }
 
+/* device_model_classes_kset: Implement device model classes kset. */
 struct kset *device_model_classes_kset(void)
 {
     if (!devmodel_ready)
@@ -284,6 +379,7 @@ struct kset *device_model_classes_kset(void)
     return &classes_kset;
 }
 
+/* class_register: Implement class register. */
 int class_register(struct class *cls)
 {
     if (!cls)
@@ -292,6 +388,7 @@ int class_register(struct class *cls)
     return 0;
 }
 
+/* class_unregister: Implement class unregister. */
 int class_unregister(struct class *cls)
 {
     if (!cls)
@@ -301,6 +398,7 @@ int class_unregister(struct class *cls)
     return 0;
 }
 
+/* class_find: Implement class find. */
 struct class *class_find(const char *name)
 {
     if (!devmodel_ready || !name)
@@ -313,6 +411,7 @@ struct class *class_find(const char *name)
     return NULL;
 }
 
+/* device_uevent_emit: Implement device uevent emit. */
 void device_uevent_emit(const char *action, struct device *dev)
 {
     if (!action || !dev)
@@ -353,6 +452,7 @@ void device_uevent_emit(const char *action, struct device *dev)
     uevent_len += off;
 }
 
+/* device_uevent_read: Implement device uevent read. */
 uint32_t device_uevent_read(uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (!buffer)
@@ -366,16 +466,19 @@ uint32_t device_uevent_read(uint32_t offset, uint32_t size, uint8_t *buffer)
     return size;
 }
 
+/* device_model_inited: Implement device model inited. */
 int device_model_inited(void)
 {
     return devmodel_ready;
 }
 
+/* device_model_mark_inited: Implement device model mark inited. */
 void device_model_mark_inited(void)
 {
     devmodel_ready = 1;
 }
 
+/* device_model_kset_init: Initialize device model kset. */
 void device_model_kset_init(void)
 {
     kset_init(&devices_kset, "devices");

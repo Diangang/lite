@@ -20,7 +20,7 @@ SOURCES_C += block/blk-core.c
 SOURCES_C += fs/sysfs/sysfs.c init/initramfs.c
 SOURCES_C += drivers/base/core.c drivers/base/bus.c drivers/base/driver.c drivers/base/init.c drivers/pci/pci.c drivers/pci/pcie/pcie.c drivers/nvme/nvme.c drivers/input/keyboard.c drivers/block/blkdev.c drivers/block/ramdisk.c
 SOURCES_C += drivers/clocksource/timer.c drivers/tty/tty.c drivers/tty/serial/serial.c
-SOURCES_C += drivers/video/console/vga.c drivers/video/console/console.c drivers/video/console/console_driver.c
+SOURCES_C += drivers/video/console/console.c drivers/video/console/console_driver.c
 OBJECTS = $(SOURCES_S:.s=.o) $(SOURCES_C:.c=.o)
 DEPS = $(OBJECTS:.o=.d) $(USH_OBJS:.o=.d) $(INIT_OBJS:.o=.d) $(SMOKE_OBJS:.o=.d)
 

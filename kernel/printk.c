@@ -5,6 +5,7 @@
 #include "linux/libc.h"
 #include "linux/printk.h"
 
+/* printk_putc: Implement printk putc. */
 static char printk_log_buf[8192];
 static uint32_t printk_log_head;
 static uint32_t printk_log_count;
@@ -20,6 +21,7 @@ static void printk_putc(char c)
         printk_log_count++;
 }
 
+/* printk_puts: Implement printk puts. */
 static void printk_puts(const char *s)
 {
     if (!s)
@@ -28,12 +30,14 @@ static void printk_puts(const char *s)
         printk_putc(*s++);
 }
 
+/* printk_pad: Implement printk pad. */
 static void printk_pad(int n, char pad)
 {
     for (int i = 0; i < n; i++)
         printk_putc(pad);
 }
 
+/* printk_strlen: Implement printk strlen. */
 static int printk_strlen(const char *s)
 {
     int n = 0;
@@ -44,6 +48,7 @@ static int printk_strlen(const char *s)
     return n;
 }
 
+/* printk_u32_hex: Implement printk u32 hex. */
 static void printk_u32_hex(uint32_t v, int width, int upper, char pad)
 {
     char tmp[16];
@@ -68,6 +73,7 @@ static void printk_u32_hex(uint32_t v, int width, int upper, char pad)
         printk_putc(tmp[i]);
 }
 
+/* printk_u32_dec: Implement printk u32 dec. */
 static void printk_u32_dec(uint32_t v, int width, char pad)
 {
     char tmp[16];
@@ -87,6 +93,7 @@ static void printk_u32_dec(uint32_t v, int width, char pad)
         printk_putc(tmp[i]);
 }
 
+/* printk_s32_dec: Implement printk s32 dec. */
 static void printk_s32_dec(int32_t v, int width, char pad)
 {
     if (v < 0) {
@@ -115,6 +122,7 @@ static void printk_s32_dec(int32_t v, int width, char pad)
     printk_u32_dec((uint32_t)v, width, pad);
 }
 
+/* vprintk: Implement vprintk. */
 int vprintk(const char *format, va_list args)
 {
     if (!format)
@@ -199,6 +207,7 @@ int vprintk(const char *format, va_list args)
     return 0;
 }
 
+/* printk: Implement printk. */
 int printk(const char *format, ...)
 {
     va_list args;

@@ -7,11 +7,13 @@ int strcmp(const char *s1, const char *s2);
 int strncmp(const char *s1, const char *s2, size_t n);
 void *memcpy(void *dest, const void *src, size_t n);
 
+/* is_digit: Implement is digit. */
 static int is_digit(char c)
 {
 	return c >= '0' && c <= '9';
 }
 
+/* is_hex_digit: Implement is hex digit. */
 static int is_hex_digit(char c)
 {
 	return (c >= '0' && c <= '9') ||
@@ -19,6 +21,7 @@ static int is_hex_digit(char c)
 	       (c >= 'A' && c <= 'F');
 }
 
+/* hex_value: Implement hex value. */
 static int hex_value(char c)
 {
 	if (c >= '0' && c <= '9')
@@ -30,6 +33,7 @@ static int hex_value(char c)
 	return -1;
 }
 
+/* match_one: Implement match one. */
 static int match_one(char *s, char *p, substring_t args[])
 {
 	char *meta;
@@ -127,6 +131,7 @@ static int match_one(char *s, char *p, substring_t args[])
 	}
 }
 
+/* match_token: Implement match token. */
 int match_token(char *s, match_table_t table, substring_t args[])
 {
 	struct match_token *p;
@@ -137,6 +142,7 @@ int match_token(char *s, match_table_t table, substring_t args[])
 	return p->token;
 }
 
+/* match_number: Implement match number. */
 static int match_number(substring_t *s, int *result, int base)
 {
 	int sign = 1;
@@ -184,27 +190,32 @@ static int match_number(substring_t *s, int *result, int base)
 	return 0;
 }
 
+/* match_int: Implement match int. */
 int match_int(substring_t *s, int *result)
 {
 	return match_number(s, result, 0);
 }
 
+/* match_octal: Implement match octal. */
 int match_octal(substring_t *s, int *result)
 {
 	return match_number(s, result, 8);
 }
 
+/* match_hex: Implement match hex. */
 int match_hex(substring_t *s, int *result)
 {
 	return match_number(s, result, 16);
 }
 
+/* match_strcpy: Implement match strcpy. */
 void match_strcpy(char *to, substring_t *s)
 {
 	memcpy(to, s->from, (size_t)(s->to - s->from));
 	to[s->to - s->from] = '\0';
 }
 
+/* match_strdup: Implement match strdup. */
 char *match_strdup(substring_t *s)
 {
 	size_t len = (size_t)(s->to - s->from);

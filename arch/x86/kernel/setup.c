@@ -16,17 +16,13 @@ static int x86_platform_devices_init(void)
     if (!platform)
         return -1;
 
-    // Register static hardware devices that exist on this "board"
-    struct class *cls = device_model_console_class();
-    device_register_simple_class("console", "console", platform, cls, NULL);
-    struct class *tty_cls = device_model_tty_class();
-    device_register_simple_class("tty", "tty", platform, tty_cls, NULL);
-    device_register_simple_class("ttyS0", "serial", platform, tty_cls, NULL);
+    device_register_simple("serial0", "serial", platform, NULL);
 
     return 0;
 }
 subsys_initcall(x86_platform_devices_init);
 
+/* setup_arch: Set up arch. */
 void setup_arch(struct multiboot_info* mbi)
 {
     (void)mbi;
@@ -34,8 +30,7 @@ void setup_arch(struct multiboot_info* mbi)
     init_idt();
 }
 
-void start_kernel(struct multiboot_info* mbi, uint32_t magic);
-
+/* __attribute__: Implement attribute. */
 __attribute__((section(".text.entry")))
 void kernel_entry(uint32_t magic, struct multiboot_info* mbi)
 {

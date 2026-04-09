@@ -81,6 +81,7 @@ static void pic_remap(void)
     outb(0xA1, 0xFF); /* Disable all slave IRQs */
 }
 
+/* register_interrupt_handler: Register interrupt handler. */
 void register_interrupt_handler(uint8_t n, isr_t handler)
 {
     interrupt_handlers[n] = handler;
@@ -181,11 +182,13 @@ struct pt_regs *irq_handler(struct pt_regs *regs)
     return regs;
 }
 
+/* isr_get_count: Implement ISR get count. */
 uint32_t isr_get_count(uint8_t vector)
 {
     return interrupt_count[vector];
 }
 
+/* isr_install: Implement ISR install. */
 void isr_install(void)
 {
     idt_set_gate(0, (uint32_t)isr0, 0x08, 0x8E);
@@ -223,6 +226,7 @@ void isr_install(void)
     idt_set_gate(128, (uint32_t)isr128, 0x08, 0xEF);
 }
 
+/* irq_install: Implement IRQ install. */
 void irq_install(void)
 {
     pic_remap();

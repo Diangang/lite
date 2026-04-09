@@ -10,6 +10,62 @@ struct zonelist dma_zonelist;
 static struct page *mem_map = NULL;
 static uint32_t mem_map_pages = 0;
 
+/* build_all_zonelists: Build all zonelists. */
+void build_all_zonelists(void)
+{
+    contig_zonelist.nr_zones = 0;
+    if (contig_page_data.zone_dma.spanned_pages)
+        contig_zonelist.zones[contig_zonelist.nr_zones++] = &contig_page_data.zone_dma;
+    if (contig_page_data.zone_normal.spanned_pages)
+        contig_zonelist.zones[contig_zonelist.nr_zones++] = &contig_page_data.zone_normal;
+    contig_zonelist.highest_zone = contig_zonelist.nr_zones ? contig_zonelist.zones[contig_zonelist.nr_zones - 1]->type : ZONE_DMA;
+    contig_page_data.node_zonelists = &contig_zonelist;
+
+    dma_zonelist.nr_zones = 0;
+    if (contig_page_data.zone_dma.spanned_pages)
+        dma_zonelist.zones[dma_zonelist.nr_zones++] = &contig_page_data.zone_dma;
+    dma_zonelist.highest_zone = dma_zonelist.nr_zones ? dma_zonelist.zones[dma_zonelist.nr_zones - 1]->type : ZONE_DMA;
+}
+
+/* refresh_zone_watermarks: Implement refresh zone watermarks. */
+void refresh_zone_watermarks(void)
+{
+    uint32_t dma = contig_page_data.zone_dma.managed_pages;
+    contig_page_data.zone_dma.watermark[WMARK_MIN] = dma / 64;
+    contig_page_data.zone_dma.watermark[WMARK_LOW] = dma / 32;
+    contig_page_data.zone_dma.watermark[WMARK_HIGH] = dma / 16;
+
+    uint32_t normal = contig_page_data.zone_normal.managed_pages;
+    contig_page_data.zone_normal.watermark[WMARK_MIN] = normal / 64;
+    contig_page_data.zone_normal.watermark[WMARK_LOW] = normal / 32;
+    contig_page_data.zone_normal.watermark[WMARK_HIGH] = normal / 16;
+}
+
+/* pfn_to_page: Implement pfn to page. */
+struct page *pfn_to_page(uint32_t pfn)
+{
+    if (!mem_map || pfn >= mem_map_pages)
+        return NULL;
+    return &mem_map[pfn];
+}
+
+/* page_to_pfn: Implement page to pfn. */
+uint32_t page_to_pfn(struct page *page)
+{
+    if (!mem_map || !page)
+        return 0;
+    return (uint32_t)(page - mem_map);
+}
+
+/* pfn_to_zone: Implement pfn to zone. */
+struct zone *pfn_to_zone(uint32_t pfn)
+{
+    if (contig_page_data.zone_dma.spanned_pages && pfn < MAX_DMA_PFN)
+        return &contig_page_data.zone_dma;
+    return &contig_page_data.zone_normal;
+}
+
+/* init_zones: Initialize zones. */
 void init_zones(void)
 {
     uint32_t total = bootmem_total_pages();
@@ -62,54 +118,4 @@ void init_zones(void)
         contig_page_data.zone_normal.free_area[i].free_list = -1;
         contig_page_data.zone_normal.free_area[i].nr_free = 0;
     }
-}
-
-void build_all_zonelists(void)
-{
-    contig_zonelist.nr_zones = 0;
-    if (contig_page_data.zone_dma.spanned_pages)
-        contig_zonelist.zones[contig_zonelist.nr_zones++] = &contig_page_data.zone_dma;
-    if (contig_page_data.zone_normal.spanned_pages)
-        contig_zonelist.zones[contig_zonelist.nr_zones++] = &contig_page_data.zone_normal;
-    contig_zonelist.highest_zone = contig_zonelist.nr_zones ? contig_zonelist.zones[contig_zonelist.nr_zones - 1]->type : ZONE_DMA;
-    contig_page_data.node_zonelists = &contig_zonelist;
-
-    dma_zonelist.nr_zones = 0;
-    if (contig_page_data.zone_dma.spanned_pages)
-        dma_zonelist.zones[dma_zonelist.nr_zones++] = &contig_page_data.zone_dma;
-    dma_zonelist.highest_zone = dma_zonelist.nr_zones ? dma_zonelist.zones[dma_zonelist.nr_zones - 1]->type : ZONE_DMA;
-}
-
-void refresh_zone_watermarks(void)
-{
-    uint32_t dma = contig_page_data.zone_dma.managed_pages;
-    contig_page_data.zone_dma.watermark[WMARK_MIN] = dma / 64;
-    contig_page_data.zone_dma.watermark[WMARK_LOW] = dma / 32;
-    contig_page_data.zone_dma.watermark[WMARK_HIGH] = dma / 16;
-
-    uint32_t normal = contig_page_data.zone_normal.managed_pages;
-    contig_page_data.zone_normal.watermark[WMARK_MIN] = normal / 64;
-    contig_page_data.zone_normal.watermark[WMARK_LOW] = normal / 32;
-    contig_page_data.zone_normal.watermark[WMARK_HIGH] = normal / 16;
-}
-
-struct page *pfn_to_page(uint32_t pfn)
-{
-    if (!mem_map || pfn >= mem_map_pages)
-        return NULL;
-    return &mem_map[pfn];
-}
-
-uint32_t page_to_pfn(struct page *page)
-{
-    if (!mem_map || !page)
-        return 0;
-    return (uint32_t)(page - mem_map);
-}
-
-struct zone *pfn_to_zone(uint32_t pfn)
-{
-    if (contig_page_data.zone_dma.spanned_pages && pfn < MAX_DMA_PFN)
-        return &contig_page_data.zone_dma;
-    return &contig_page_data.zone_normal;
 }

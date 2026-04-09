@@ -62,6 +62,7 @@ irq_common_stub:
 
 /* IRQ 0 - Timer */
 .global irq0
+/* irq0: Implement irq0. */
 irq0:
     push $0         /* Dummy error code */
     push $32        /* Interrupt number 32 */
@@ -69,6 +70,7 @@ irq0:
 
 /* IRQ 1 - Keyboard */
 .global irq1
+/* irq1: Implement irq1. */
 irq1:
     push $0         /* Dummy error code */
     push $33        /* Interrupt number 33 */
@@ -76,6 +78,7 @@ irq1:
 
 /* IRQ 4 - Serial COM1 */
 .global irq4
+/* irq4: Implement irq4. */
 irq4:
     push $0         /* Dummy error code */
     push $36        /* Interrupt number 36 */
@@ -134,6 +137,7 @@ ISR_NOERRCODE 31
 
 /* Syscall (int 0x80): do not implicitly disable interrupts */
 .global isr128
+/* isr128: Implement isr128. */
 isr128:
     push $0
     push $128

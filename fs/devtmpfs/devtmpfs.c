@@ -17,6 +17,7 @@ struct devtmpfs_node {
     char name[32];
     struct inode *inode;
 };
+/* dev_console_read: Implement dev console read. */
 static struct devtmpfs_node devtmpfs_nodes[MAX_DEVICES];
 static uint32_t devtmpfs_node_count;
 static int devtmpfs_ready;
@@ -30,6 +31,7 @@ static uint32_t dev_console_read(struct inode *node, uint32_t offset, uint32_t s
     return tty_read_blocking((char*)buffer, size);
 }
 
+/* dev_console_write: Implement dev console write. */
 static uint32_t dev_console_write(struct inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer)
 {
     (void)node;
@@ -37,6 +39,7 @@ static uint32_t dev_console_write(struct inode *node, uint32_t offset, uint32_t 
     return console_write(buffer, size);
 }
 
+/* dev_console_ioctl: Implement dev console ioctl. */
 static int dev_console_ioctl(struct inode *node, uint32_t request, uint32_t arg)
 {
     (void)node;
@@ -49,6 +52,7 @@ static int dev_console_ioctl(struct inode *node, uint32_t request, uint32_t arg)
     return -1;
 }
 
+/* dev_tty_read: Implement dev TTY read. */
 static uint32_t dev_tty_read(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
@@ -58,6 +62,7 @@ static uint32_t dev_tty_read(struct inode *node, uint32_t offset, uint32_t size,
     return tty_read_blocking((char*)buffer, size);
 }
 
+/* dev_tty_write: Implement dev TTY write. */
 static uint32_t dev_tty_write(struct inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer)
 {
     (void)node;
@@ -65,11 +70,13 @@ static uint32_t dev_tty_write(struct inode *node, uint32_t offset, uint32_t size
     return tty_write(buffer, size);
 }
 
+/* dev_tty_ioctl: Implement dev TTY ioctl. */
 static int dev_tty_ioctl(struct inode *node, uint32_t request, uint32_t arg)
 {
     return dev_console_ioctl(node, request, arg);
 }
 
+/* devtmpfs_readdir: Implement devtmpfs readdir. */
 static struct dirent *devtmpfs_readdir(struct file *file, uint32_t index)
 {
     struct inode *node = file->dentry->inode;
@@ -81,6 +88,7 @@ static struct dirent *devtmpfs_readdir(struct file *file, uint32_t index)
     return &dev_dirent;
 }
 
+/* devtmpfs_finddir: Implement devtmpfs finddir. */
 static struct inode *devtmpfs_finddir(struct inode *node, const char *name)
 {
     (void)node;
@@ -123,16 +131,19 @@ static struct file_operations devtmpfs_dir_ops = {
     .ioctl = NULL
 };
 
+/* devtmpfs_get_console: Implement devtmpfs get console. */
 struct inode *devtmpfs_get_console(void)
 {
     return &dev_console;
 }
 
+/* devtmpfs_get_tty: Implement devtmpfs get TTY. */
 struct inode *devtmpfs_get_tty(void)
 {
     return &dev_tty;
 }
 
+/* devtmpfs_add_node: Implement devtmpfs add node. */
 static int devtmpfs_add_node(const char *name, struct inode *inode)
 {
     if (!name || !*name || !inode)
@@ -153,6 +164,7 @@ static int devtmpfs_add_node(const char *name, struct inode *inode)
     return 0;
 }
 
+/* devtmpfs_remove_node: Implement devtmpfs remove node. */
 static int devtmpfs_remove_node(const char *name)
 {
     if (!name || !*name)
@@ -168,6 +180,7 @@ static int devtmpfs_remove_node(const char *name)
     return -1;
 }
 
+/* devtmpfs_add_for_device: Implement devtmpfs add for device. */
 static void devtmpfs_add_for_device(struct device *dev)
 {
     if (!dev || !dev->kobj.name[0])
@@ -179,12 +192,14 @@ static void devtmpfs_add_for_device(struct device *dev)
     if (!strcmp(dev->kobj.name, "ttyS0"))
         devtmpfs_add_node("ttyS0", &dev_tty);
     if (dev->type && !strcmp(dev->type, "block")) {
-        struct inode *inode = blockdev_inode_create((struct block_device *)dev->driver_data);
+        struct gendisk *disk = gendisk_from_dev(dev);
+        struct inode *inode = disk ? blockdev_inode_create(disk->bdev) : NULL;
         if (inode)
             devtmpfs_add_node(dev->kobj.name, inode);
     }
 }
 
+/* devtmpfs_register_device: Implement devtmpfs register device. */
 void devtmpfs_register_device(struct device *dev)
 {
     if (!devtmpfs_ready)
@@ -192,6 +207,7 @@ void devtmpfs_register_device(struct device *dev)
     devtmpfs_add_for_device(dev);
 }
 
+/* devtmpfs_unregister_device: Implement devtmpfs unregister device. */
 void devtmpfs_unregister_device(struct device *dev)
 {
     if (!devtmpfs_ready || !dev)
@@ -206,6 +222,7 @@ void devtmpfs_unregister_device(struct device *dev)
         devtmpfs_remove_node(dev->kobj.name);
 }
 
+/* devtmpfs_fill_super: Implement devtmpfs fill super. */
 static int devtmpfs_fill_super(struct super_block *sb, void *data, int silent)
 {
     (void)data;
@@ -269,6 +286,7 @@ static struct file_system_type devtmpfs_fs_type = {
     .next = NULL,
 };
 
+/* init_devtmpfs_fs: Initialize devtmpfs fs. */
 static int init_devtmpfs_fs(void)
 {
     register_filesystem(&devtmpfs_fs_type);

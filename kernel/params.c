@@ -1,6 +1,7 @@
 #include "linux/libc.h"
 #include "linux/params.h"
 
+/* set_init_process: Set init process. */
 char saved_command_line[256];
 static char init_process[64];
 
@@ -13,6 +14,7 @@ static void set_init_process(const char *value, size_t len)
     init_process[len] = '\0';
 }
 
+/* parse_command_line: Parse command line. */
 static void parse_command_line(void)
 {
     size_t i = 0;
@@ -37,6 +39,7 @@ static void parse_command_line(void)
     }
 }
 
+/* setup_command_line: Set up command line. */
 void setup_command_line(const char *cmdline)
 {
     size_t len = 0;
@@ -54,6 +57,7 @@ void setup_command_line(const char *cmdline)
     parse_command_line();
 }
 
+/* get_init_process: Get init process. */
 const char *get_init_process(void)
 {
     return init_process;

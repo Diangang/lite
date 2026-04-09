@@ -2,14 +2,31 @@
 #define LINUX_TTY_H
 
 #include <stdint.h>
+#include "linux/list.h"
+
+struct device;
+
+struct tty_driver {
+    char name[32];
+    uint32_t num;
+    struct list_head list;
+};
+
+struct tty_device {
+    struct tty_driver *driver;
+    uint32_t index;
+    char name[32];
+    uint32_t major;
+    uint32_t minor;
+    void *driver_data;
+};
 
 #define TTY_FLAG_ECHO  0x1
 #define TTY_FLAG_CANON 0x2
 
 enum tty_output_target {
-    TTY_OUTPUT_VGA = 1 << 0,
-    TTY_OUTPUT_SERIAL = 1 << 1,
-    TTY_OUTPUT_ALL = TTY_OUTPUT_VGA | TTY_OUTPUT_SERIAL
+    TTY_OUTPUT_SERIAL = 1 << 0,
+    TTY_OUTPUT_ALL = TTY_OUTPUT_SERIAL
 };
 
 void tty_init(void);
@@ -24,5 +41,8 @@ void tty_set_output_targets(uint32_t targets);
 uint32_t tty_get_output_targets(void);
 void tty_put_char(char c);
 uint32_t tty_write(const uint8_t *buf, uint32_t len);
+int tty_register_driver(struct tty_driver *drv, const char *name, uint32_t num);
+struct device *tty_register_device(struct tty_driver *drv, uint32_t index, struct device *parent, const char *name, void *data);
+struct tty_device *tty_device_from_dev(struct device *dev);
 
 #endif

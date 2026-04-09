@@ -1,6 +1,7 @@
 #include "../include/linux/idr.h"
 #include "../include/linux/slab.h"
 
+/* idr_init: Initialize idr. */
 void idr_init(struct idr *idp)
 {
 	idp->slots = NULL;
@@ -8,6 +9,7 @@ void idr_init(struct idr *idp)
 	idp->next_id = 0;
 }
 
+/* idr_pre_get: Implement idr pre get. */
 int idr_pre_get(struct idr *idp, unsigned int gfp_mask)
 {
 	(void)idp;
@@ -15,6 +17,7 @@ int idr_pre_get(struct idr *idp, unsigned int gfp_mask)
 	return 1;
 }
 
+/* idr_expand: Implement idr expand. */
 static int idr_expand(struct idr *idp, int new_size)
 {
 	void **new_slots = kmalloc(sizeof(void *) * (size_t)new_size);
@@ -30,6 +33,7 @@ static int idr_expand(struct idr *idp, int new_size)
 	return 0;
 }
 
+/* idr_get_new_above: Implement idr get new above. */
 int idr_get_new_above(struct idr *idp, void *ptr, int starting_id, int *id)
 {
 	if (starting_id < 0)
@@ -65,6 +69,7 @@ int idr_get_new_above(struct idr *idp, void *ptr, int starting_id, int *id)
 	return -1;
 }
 
+/* idr_get_new: Implement idr get new. */
 int idr_get_new(struct idr *idp, void *ptr, int *id)
 {
 	int start = idp->next_id;
@@ -73,6 +78,7 @@ int idr_get_new(struct idr *idp, void *ptr, int *id)
 	return idr_get_new_above(idp, ptr, 0, id);
 }
 
+/* idr_find: Implement idr find. */
 void *idr_find(struct idr *idp, int id)
 {
 	if (id < 0 || id >= idp->size)
@@ -80,6 +86,7 @@ void *idr_find(struct idr *idp, int id)
 	return idp->slots[id];
 }
 
+/* idr_remove: Implement idr remove. */
 void idr_remove(struct idr *idp, int id)
 {
 	if (id < 0 || id >= idp->size)

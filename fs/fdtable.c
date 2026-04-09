@@ -2,6 +2,7 @@
 #include "linux/fdtable.h"
 #include "linux/file.h"
 
+/* files_init: Initialize files. */
 void files_init(struct task_struct *task)
 {
     if (!task)
@@ -12,6 +13,7 @@ void files_init(struct task_struct *task)
     }
 }
 
+/* files_close_all: Implement files close all. */
 void files_close_all(struct task_struct *task)
 {
     if (!task)
@@ -26,6 +28,7 @@ void files_close_all(struct task_struct *task)
     }
 }
 
+/* files_clone: Implement files clone. */
 void files_clone(struct task_struct *dst, struct task_struct *src)
 {
     if (!dst || !src)
@@ -38,6 +41,7 @@ void files_clone(struct task_struct *dst, struct task_struct *src)
     }
 }
 
+/* get_unused_fd: Get unused fd. */
 int get_unused_fd(struct file *file)
 {
     if (!current || !file)
@@ -52,6 +56,7 @@ int get_unused_fd(struct file *file)
     return -1;
 }
 
+/* fget: Implement fget. */
 struct file *fget(int fd)
 {
     if (!current)
@@ -65,6 +70,7 @@ struct file *fget(int fd)
     return current->files.fd[fd].file;
 }
 
+/* close_fd: Close fd. */
 int close_fd(int fd)
 {
     if (fd < 3)
@@ -78,6 +84,7 @@ int close_fd(int fd)
     return 0;
 }
 
+/* install_stdio: Implement install stdio. */
 void install_stdio(struct inode *console)
 {
     if (!current)

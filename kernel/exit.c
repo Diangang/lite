@@ -8,6 +8,7 @@
 #include "linux/signal.h"
 #include "linux/wait.h"
 
+/* task_free_user_memory: Implement task free user memory. */
 static void task_free_user_memory(struct task_struct *task)
 {
     if (!task)
@@ -18,6 +19,7 @@ static void task_free_user_memory(struct task_struct *task)
     task->mm = NULL;
 }
 
+/* task_release_resources: Implement task release resources. */
 static void task_release_resources(struct task_struct *task)
 {
     if (!task)
@@ -34,6 +36,7 @@ static void task_release_resources(struct task_struct *task)
     }
 }
 
+/* reparent_children: Implement reparent children. */
 static int reparent_children(struct task_struct *parent, struct task_struct *reaper)
 {
     if (list_empty(&task_list_head) || !reaper || !parent)
@@ -52,6 +55,7 @@ static int reparent_children(struct task_struct *parent, struct task_struct *rea
     return wake;
 }
 
+/* task_zombify: Implement task zombify. */
 void task_zombify(struct task_struct *task, int code, int reason, uint32_t info0, uint32_t info1)
 {
     if (!task)
@@ -70,6 +74,7 @@ void task_zombify(struct task_struct *task, int code, int reason, uint32_t info0
     task->state = TASK_ZOMBIE;
 }
 
+/* exit_notify: Implement exit notify. */
 void exit_notify(struct task_struct *task, int code, int reason, uint32_t info0, uint32_t info1)
 {
     if (!task)
@@ -102,11 +107,13 @@ void exit_notify(struct task_struct *task, int code, int reason, uint32_t info0,
     need_resched = 1;
 }
 
+/* release_task: Implement release task. */
 void release_task(struct task_struct *task)
 {
     task_destroy(task);
 }
 
+/* task_destroy: Implement task destroy. */
 void task_destroy(struct task_struct *task)
 {
     if (!task)
@@ -127,6 +134,7 @@ void task_destroy(struct task_struct *task)
     kfree(task);
 }
 
+/* do_exit: Perform exit. */
 void do_exit(int code)
 {
     if (!current)
@@ -136,6 +144,7 @@ void do_exit(int code)
     do_exit_reason(code, TASK_EXIT_NORMAL, 0, 0);
 }
 
+/* do_exit_reason: Perform exit reason. */
 void do_exit_reason(int code, int reason, uint32_t info0, uint32_t info1)
 {
     if (!current)
@@ -145,6 +154,7 @@ void do_exit_reason(int code, int reason, uint32_t info0, uint32_t info1)
     exit_notify(current, code, reason, info0, info1);
 }
 
+/* sys_exit: Implement sys exit. */
 void sys_exit(int code)
 {
     do_exit(code);

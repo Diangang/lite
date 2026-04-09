@@ -28,6 +28,7 @@ struct cpio_newc_header {
     char c_check[8];
 };
 
+/* parse_hex: Parse hex. */
 static uint32_t parse_hex(const char *str, int len) {
     uint32_t val = 0;
     for (int i = 0; i < len; i++) {
@@ -41,6 +42,7 @@ static uint32_t parse_hex(const char *str, int len) {
 
 #define ALIGN4(val) (((val) + 3) & ~3)
 
+/* populate_rootfs: Unpack the initramfs archive into the ramfs root. */
 void populate_rootfs(void) {
     if (!(boot_mbi.flags & 0x00000008))
         panic("No modules provided by bootloader. Skipping initramfs");

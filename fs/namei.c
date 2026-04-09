@@ -35,6 +35,7 @@ static int vfs_append_component(char *out, uint32_t *len, uint32_t cap, const ch
     return 1;
 }
 
+/* vfs_pop_component: Implement vfs pop component. */
 static void vfs_pop_component(char *out, uint32_t *len)
 {
     if (!out || !len)
@@ -56,6 +57,7 @@ static void vfs_pop_component(char *out, uint32_t *len)
     }
 }
 
+/* vfs_normalize_path: Implement vfs normalize path. */
 int vfs_normalize_path(const char *path, char *out, uint32_t cap)
 {
     if (!path || !out || cap < 2)
@@ -150,6 +152,7 @@ struct dentry *path_walk(const char *path)
     return curr;
 }
 
+/* vfs_resolve: Implement vfs resolve. */
 struct inode *vfs_resolve(const char *path)
 {
     struct dentry *d = path_walk(path);
@@ -158,6 +161,7 @@ struct inode *vfs_resolve(const char *path)
     return NULL;
 }
 
+/* vfs_mkdir: Implement vfs mkdir. */
 int vfs_mkdir(const char *path)
 {
     if (!path || !*path)
@@ -228,6 +232,7 @@ int vfs_mkdir(const char *path)
     return 0;
 }
 
+/* vfs_unlink: Implement vfs unlink. */
 int vfs_unlink(const char *path)
 {
     if (!path || !*path)
@@ -286,6 +291,7 @@ int vfs_unlink(const char *path)
     return -1;
 }
 
+/* vfs_rmdir: Implement vfs rmdir. */
 int vfs_rmdir(const char *path)
 {
     if (!path || !*path)
@@ -339,6 +345,7 @@ int vfs_rmdir(const char *path)
     return -1;
 }
 
+/* sys_mkdir: Implement sys mkdir. */
 int sys_mkdir(const char *pathname, int from_user)
 {
     char tmp[128];
@@ -353,6 +360,7 @@ int sys_mkdir(const char *pathname, int from_user)
     return vfs_mkdir(tmp) == 0 ? 0 : -1;
 }
 
+/* sys_unlink: Implement sys unlink. */
 int sys_unlink(const char *pathname, int from_user)
 {
     char tmp[128];
@@ -367,6 +375,7 @@ int sys_unlink(const char *pathname, int from_user)
     return vfs_unlink(tmp);
 }
 
+/* sys_rmdir: Implement sys rmdir. */
 int sys_rmdir(const char *pathname, int from_user)
 {
     char tmp[128];

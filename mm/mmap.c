@@ -9,11 +9,13 @@
 #include "linux/irqflags.h"
 #include "linux/rmap.h"
 
+/* align_up: Implement align up. */
 static uint32_t align_up(uint32_t value)
 {
     return (value + 0xFFF) & ~0xFFF;
 }
 
+/* task_free_user_page_mapped: Implement task free user page mapped. */
 static int task_free_user_page_mapped(struct mm_struct *mm, pgd_t *dir, uint32_t va_page)
 {
     if (!dir)
@@ -38,6 +40,7 @@ static int task_free_user_page_mapped(struct mm_struct *mm, pgd_t *dir, uint32_t
     return 1;
 }
 
+/* vma_list_free: Implement VMA list free. */
 static void vma_list_free(struct mm_struct *mm)
 {
     if (!mm)
@@ -57,6 +60,7 @@ static uint32_t vma_find_gap(struct mm_struct *mm, uint32_t size, uint32_t limit
 static struct vm_area_struct *vma_find_heap(struct mm_struct *mm);
 static struct vm_area_struct *vma_find_covering(struct mm_struct *mm, uint32_t start, uint32_t end);
 
+/* mm_create: Implement memory manager create. */
 struct mm_struct *mm_create(void)
 {
     struct mm_struct *mm = (struct mm_struct*)kmalloc(sizeof(struct mm_struct));
@@ -67,6 +71,7 @@ struct mm_struct *mm_create(void)
     return mm;
 }
 
+/* mm_destroy: Implement memory manager destroy. */
 void mm_destroy(struct mm_struct *mm)
 {
     if (!mm)
@@ -112,6 +117,7 @@ void mm_destroy(struct mm_struct *mm)
     kfree(mm);
 }
 
+/* do_mmap: Perform mmap. */
 uint32_t do_mmap(struct mm_struct *mm, uint32_t addr, uint32_t length, uint32_t prot)
 {
     if (!mm)
@@ -148,6 +154,7 @@ uint32_t do_mmap(struct mm_struct *mm, uint32_t addr, uint32_t length, uint32_t 
     return addr;
 }
 
+/* sys_mmap: Implement sys mmap. */
 uint32_t sys_mmap(uint32_t addr, uint32_t length, uint32_t prot)
 {
     if (!current || !current->mm)
@@ -155,6 +162,7 @@ uint32_t sys_mmap(uint32_t addr, uint32_t length, uint32_t prot)
     return do_mmap(current->mm, addr, length, prot);
 }
 
+/* do_munmap: Perform munmap. */
 int do_munmap(struct mm_struct *mm, uint32_t addr, uint32_t length)
 {
     if (!mm)
@@ -227,6 +235,7 @@ int do_munmap(struct mm_struct *mm, uint32_t addr, uint32_t length)
     return 0;
 }
 
+/* sys_munmap: Implement sys munmap. */
 int sys_munmap(uint32_t addr, uint32_t length)
 {
     if (!current || !current->mm)
@@ -234,6 +243,7 @@ int sys_munmap(uint32_t addr, uint32_t length)
     return do_munmap(current->mm, addr, length);
 }
 
+/* update_mapped_page_flags: Update mapped page flags. */
 static int update_mapped_page_flags(struct mm_struct *mm, uint32_t start, uint32_t end, uint32_t prot)
 {
     if (!mm || !mm->pgd)
@@ -260,6 +270,7 @@ static int update_mapped_page_flags(struct mm_struct *mm, uint32_t start, uint32
     return 0;
 }
 
+/* do_mprotect: Perform mprotect. */
 uint32_t do_mprotect(struct mm_struct *mm, uint32_t addr, uint32_t length, uint32_t prot)
 {
     if (!mm)
@@ -298,6 +309,7 @@ uint32_t do_mprotect(struct mm_struct *mm, uint32_t addr, uint32_t length, uint3
     return 1;
 }
 
+/* sys_mprotect: Implement sys mprotect. */
 uint32_t sys_mprotect(uint32_t addr, uint32_t length, uint32_t prot)
 {
     if (!current || !current->mm)
@@ -305,6 +317,7 @@ uint32_t sys_mprotect(uint32_t addr, uint32_t length, uint32_t prot)
     return do_mprotect(current->mm, addr, length, prot);
 }
 
+/* do_mremap: Perform mremap. */
 uint32_t do_mremap(struct mm_struct *mm, uint32_t addr, uint32_t old_length, uint32_t new_length)
 {
     if (!mm)
@@ -351,6 +364,7 @@ uint32_t do_mremap(struct mm_struct *mm, uint32_t addr, uint32_t old_length, uin
     return addr;
 }
 
+/* sys_mremap: Implement sys mremap. */
 uint32_t sys_mremap(uint32_t addr, uint32_t old_length, uint32_t new_length)
 {
     if (!current || !current->mm)
@@ -358,6 +372,7 @@ uint32_t sys_mremap(uint32_t addr, uint32_t old_length, uint32_t new_length)
     return do_mremap(current->mm, addr, old_length, new_length);
 }
 
+/* vma_add: Implement VMA add. */
 static void vma_add(struct mm_struct *mm, uint32_t start, uint32_t end, uint32_t flags)
 {
     if (!mm)
@@ -374,6 +389,7 @@ static void vma_add(struct mm_struct *mm, uint32_t start, uint32_t end, uint32_t
     mm->mmap = v;
 }
 
+/* vma_range_free: Implement VMA range free. */
 static int vma_range_free(struct mm_struct *mm, uint32_t start, uint32_t end)
 {
     if (!mm)
@@ -389,6 +405,7 @@ static int vma_range_free(struct mm_struct *mm, uint32_t start, uint32_t end)
     return 1;
 }
 
+/* vma_find_covering: Implement VMA find covering. */
 static struct vm_area_struct *vma_find_covering(struct mm_struct *mm, uint32_t start, uint32_t end)
 {
     if (!mm)
@@ -402,6 +419,7 @@ static struct vm_area_struct *vma_find_covering(struct mm_struct *mm, uint32_t s
     return NULL;
 }
 
+/* vma_find_gap: Implement VMA find gap. */
 static uint32_t vma_find_gap(struct mm_struct *mm, uint32_t size, uint32_t limit)
 {
     if (!mm)
@@ -424,6 +442,7 @@ static uint32_t vma_find_gap(struct mm_struct *mm, uint32_t size, uint32_t limit
     return 0;
 }
 
+/* vma_find_heap: Implement VMA find heap. */
 static struct vm_area_struct *vma_find_heap(struct mm_struct *mm)
 {
     if (!mm)
@@ -439,6 +458,7 @@ static struct vm_area_struct *vma_find_heap(struct mm_struct *mm)
     return NULL;
 }
 
+/* mm_reset_mmap: Implement memory manager reset mmap. */
 void mm_reset_mmap(struct mm_struct *mm)
 {
     if (!mm)
@@ -446,6 +466,7 @@ void mm_reset_mmap(struct mm_struct *mm)
     vma_list_free(mm);
 }
 
+/* mm_add_vma: Implement memory manager add VMA. */
 void mm_add_vma(struct mm_struct *mm, uint32_t start, uint32_t end, uint32_t flags)
 {
     if (!mm)
@@ -453,6 +474,7 @@ void mm_add_vma(struct mm_struct *mm, uint32_t start, uint32_t end, uint32_t fla
     vma_add(mm, start, end, flags);
 }
 
+/* vma_allows: Implement VMA allows. */
 int vma_allows(struct mm_struct *mm, uint32_t addr, int is_write, int is_exec)
 {
     if (!mm)
@@ -473,6 +495,7 @@ int vma_allows(struct mm_struct *mm, uint32_t addr, int is_write, int is_exec)
     return 0;
 }
 
+/* mm_init_brk: Implement memory manager init brk. */
 void mm_init_brk(struct mm_struct *mm, uint32_t heap_base, uint32_t stack_base)
 {
     if (!mm)
@@ -491,6 +514,7 @@ void mm_init_brk(struct mm_struct *mm, uint32_t heap_base, uint32_t stack_base)
         vma_add(mm, heap_base, heap_base, VMA_READ | VMA_WRITE);
 }
 
+/* do_brk: Perform brk. */
 uint32_t do_brk(struct mm_struct *mm, uint32_t new_end)
 {
     if (!mm)
@@ -520,6 +544,7 @@ uint32_t do_brk(struct mm_struct *mm, uint32_t new_end)
     return mm->brk;
 }
 
+/* sys_brk: Implement sys brk. */
 uint32_t sys_brk(uint32_t new_end)
 {
     if (!current || !current->mm)

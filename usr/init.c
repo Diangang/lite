@@ -1,5 +1,6 @@
 #include "ulib.h"
 
+/* main: Implement main. */
 int main() {
     print("init: fork+exec /sbin/sh\n");
 

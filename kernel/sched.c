@@ -14,6 +14,7 @@ wait_queue_t exit_waitq = {0};
 int need_resched = 0;
 uint32_t sched_switch_count = 0;
 
+/* wait_queue_init: Wait for queue init. */
 void wait_queue_init(wait_queue_t *q)
 {
     if (!q)
@@ -21,12 +22,14 @@ void wait_queue_init(wait_queue_t *q)
     q->head = NULL;
 }
 
+/* task_idle: Implement task idle. */
 static void task_idle(void)
 {
     for (;;)
         __asm__ volatile ("hlt");
 }
 
+/* wait_queue_block: Wait for queue block. */
 void wait_queue_block(wait_queue_t *q)
 {
     if (!q)
@@ -38,6 +41,7 @@ void wait_queue_block(wait_queue_t *q)
     irq_restore(flags);
 }
 
+/* wait_queue_block_locked: Wait for queue block locked. */
 void wait_queue_block_locked(wait_queue_t *q)
 {
     if (!q)
@@ -55,6 +59,7 @@ void wait_queue_block_locked(wait_queue_t *q)
     current->state = TASK_BLOCKED;
 }
 
+/* wait_queue_wake_all: Wait for queue wake all. */
 void wait_queue_wake_all(wait_queue_t *q)
 {
     if (!q)
@@ -81,6 +86,7 @@ void wait_queue_wake_all(wait_queue_t *q)
     irq_restore(flags);
 }
 
+/* wait_queue_remove: Wait for queue remove. */
 void wait_queue_remove(wait_queue_t *q, struct task_struct *task)
 {
     if (!q)
@@ -107,6 +113,7 @@ void wait_queue_remove(wait_queue_t *q, struct task_struct *task)
     irq_restore(flags);
 }
 
+/* task_tick: Implement task tick. */
 void task_tick(void)
 {
     uint32_t now = timer_get_ticks();
@@ -134,6 +141,7 @@ void task_tick(void)
         need_resched = 1;
 }
 
+/* task_schedule: Implement task schedule. */
 struct pt_regs *task_schedule(struct pt_regs *regs)
 {
     if (!current)
@@ -177,6 +185,7 @@ struct pt_regs *task_schedule(struct pt_regs *regs)
     return current->thread.regs;
 }
 
+/* task_sleep: Implement task sleep. */
 void task_sleep(uint32_t ticks)
 {
     if (!current)
@@ -189,12 +198,14 @@ void task_sleep(uint32_t ticks)
     task_yield();
 }
 
+/* task_yield: Implement task yield. */
 void task_yield(void)
 {
     need_resched = 1;
     __asm__ volatile("int $0x20");
 }
 
+/* task_should_resched: Implement task should resched. */
 int task_should_resched(void)
 {
     if (!current)
@@ -204,11 +215,13 @@ int task_should_resched(void)
     return need_resched != 0;
 }
 
+/* task_get_switch_count: Implement task get switch count. */
 uint32_t task_get_switch_count(void)
 {
     return sched_switch_count;
 }
 
+/* task_get_current_comm: Implement task get current comm. */
 const char *task_get_current_comm(void)
 {
     if (!current)
@@ -218,6 +231,7 @@ const char *task_get_current_comm(void)
     return current->comm;
 }
 
+/* task_get_current_id: Implement task get current id. */
 uint32_t task_get_current_id(void)
 {
     if (!current)
@@ -225,6 +239,7 @@ uint32_t task_get_current_id(void)
     return current->pid;
 }
 
+/* task_current_is_user: Implement task current is user. */
 int task_current_is_user(void)
 {
     if (!current)
@@ -232,6 +247,7 @@ int task_current_is_user(void)
     return current->mm != NULL;
 }
 
+/* task_list: Implement task list. */
 void task_list(void)
 {
     if (list_empty(&task_list_head))
@@ -253,6 +269,7 @@ void task_list(void)
     }
 }
 
+/* init_task: Initialize task. */
 static void init_task(void)
 {
     struct task_struct *task = (struct task_struct*)kmalloc(sizeof(struct task_struct));
@@ -294,6 +311,7 @@ static void init_task(void)
     tss_set_kernel_stack((uint32_t)current->thread.sp0);
 }
 
+/* sched_init: Initialize sched. */
 void sched_init(void)
 {
     init_task();

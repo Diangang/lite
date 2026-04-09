@@ -36,11 +36,13 @@ void idt_set_gate(uint8_t num, uint32_t base, uint16_t sel, uint8_t flags)
     idt_entries[num].flags     = flags;
 }
 
+/* idt_flush: Implement IDT flush. */
 static inline void idt_flush(uint32_t idt_ptr_addr)
 {
     __asm__ volatile("lidt (%0)" : : "r"(idt_ptr_addr) : "memory");
 }
 
+/* init_idt: Initialize IDT. */
 void init_idt(void)
 {
     idt_ptr.limit = sizeof(struct idt_entry) * 256 - 1;

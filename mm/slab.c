@@ -37,11 +37,13 @@ static struct slab *slab_free_list = NULL;
 static struct slab *slab_map[SLAB_MAX_PAGES];
 static uint32_t slab_pages = 0;
 
+/* align_up: Implement align up. */
 static size_t align_up(size_t value, size_t align)
 {
     return (value + align - 1) & ~(align - 1);
 }
 
+/* slab_alloc_meta: Implement slab alloc meta. */
 static struct slab *slab_alloc_meta(void)
 {
     if (!slab_free_list)
@@ -52,6 +54,7 @@ static struct slab *slab_alloc_meta(void)
     return s;
 }
 
+/* slab_alloc_page: Implement slab alloc page. */
 static void *slab_alloc_page(struct slab *s)
 {
     if (slab_pages >= SLAB_MAX_PAGES)
@@ -66,6 +69,7 @@ static void *slab_alloc_page(struct slab *s)
     return (void*)vaddr;
 }
 
+/* slab_from_ptr: Implement slab from ptr. */
 static struct slab *slab_from_ptr(void *ptr)
 {
     if (!ptr)
@@ -79,6 +83,7 @@ static struct slab *slab_from_ptr(void *ptr)
     return NULL;
 }
 
+/* slab_init_objects: Implement slab init objects. */
 static void slab_init_objects(struct slab *s, size_t size)
 {
     uint8_t *base = (uint8_t*)s->vaddr;
@@ -93,6 +98,7 @@ static void slab_init_objects(struct slab *s, size_t size)
     }
 }
 
+/* kmem_cache_create: Implement kmem cache create. */
 struct kmem_cache *kmem_cache_create(size_t size)
 {
     struct kmem_cache *cache = (struct kmem_cache*)kmalloc(sizeof(*cache));
@@ -105,11 +111,13 @@ struct kmem_cache *kmem_cache_create(size_t size)
     return cache;
 }
 
+/* kmem_cache_destroy: Implement kmem cache destroy. */
 void kmem_cache_destroy(struct kmem_cache *cache)
 {
     (void)cache;
 }
 
+/* kmem_cache_alloc: Implement kmem cache alloc. */
 void *kmem_cache_alloc(struct kmem_cache *cache)
 {
     if (!cache)
@@ -136,6 +144,7 @@ void *kmem_cache_alloc(struct kmem_cache *cache)
     return obj;
 }
 
+/* kmem_cache_free: Implement kmem cache free. */
 void kmem_cache_free(struct kmem_cache *cache, void *ptr)
 {
     if (!cache || !ptr)
@@ -149,6 +158,7 @@ void kmem_cache_free(struct kmem_cache *cache, void *ptr)
         s->inuse--;
 }
 
+/* size_to_order: Implement size to order. */
 static unsigned int size_to_order(size_t size)
 {
     unsigned int order = 0;
@@ -160,6 +170,7 @@ static unsigned int size_to_order(size_t size)
     return order;
 }
 
+/* kmalloc_large: Implement kmalloc large. */
 static void *kmalloc_large(size_t size)
 {
     size_t total = size + sizeof(struct large_hdr);
@@ -175,6 +186,7 @@ static void *kmalloc_large(size_t size)
     return (void*)(vaddr + sizeof(*hdr));
 }
 
+/* kmalloc: Implement kmalloc. */
 void *kmalloc(size_t size)
 {
     if (size == 0)
@@ -186,6 +198,7 @@ void *kmalloc(size_t size)
     return kmalloc_large(size);
 }
 
+/* kfree: Implement kfree. */
 void kfree(void *ptr)
 {
     if (!ptr)
@@ -201,6 +214,7 @@ void kfree(void *ptr)
     free_pages(hdr->phys, hdr->order);
 }
 
+/* kheap_print_stats: Implement kheap print stats. */
 void kheap_print_stats(void)
 {
     for (int i = 0; i < SLAB_MAX_CACHE; i++) {
@@ -219,6 +233,7 @@ void kheap_print_stats(void)
     }
 }
 
+/* kmem_cache_init: Initialize kmem cache. */
 void kmem_cache_init(void)
 {
     for (int i = 0; i < SLAB_MAX_PAGES - 1; i++)

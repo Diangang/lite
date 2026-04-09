@@ -28,6 +28,7 @@ struct linux_dirent {
     char d_name[];
 } __attribute__((packed));
 
+/* sys_getdents: Implement sys getdents. */
 int sys_getdents(int fd, void *dirp, uint32_t count, int from_user)
 {
     struct file *f = fget(fd);
@@ -90,6 +91,7 @@ int sys_getdents(int fd, void *dirp, uint32_t count, int from_user)
     return (int)off;
 }
 
+/* finddir_fs: Implement finddir fs. */
 struct inode *finddir_fs(struct inode *node, const char *name)
 {
     if (!node || !name)
@@ -99,6 +101,7 @@ struct inode *finddir_fs(struct inode *node, const char *name)
     return node->f_ops->finddir(node, name);
 }
 
+/* generic_readdir: Implement generic readdir. */
 static struct dirent generic_dirent;
 
 struct dirent *generic_readdir(struct file *file, uint32_t index)

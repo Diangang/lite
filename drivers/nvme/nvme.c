@@ -60,6 +60,7 @@ struct nvme_namespace {
     uint64_t size;
     uint32_t block_size;
     struct block_device *bdev;
+    struct gendisk *disk;
 };
 
 static struct device_driver drv_nvme;
@@ -73,58 +74,60 @@ static const struct device_id nvme_ids[] = {
 
 
 
+/* nvme_init_namespace: Implement NVMe init namespace. */
 static int nvme_init_namespace(struct nvme_controller *ctrl)
 {
     struct nvme_namespace *ns = kmalloc(sizeof(*ns));
     if (!ns)
         return -1;
-    
     ns->ctrl = ctrl;
     ns->nsid = 1;
     ns->block_size = 512;
-    
+    ns->disk = NULL;
+
     // TODO: Implement namespace identification
     ns->size = 16 * 1024 * 1024; // 16MB for testing
-    
+
     // Create block device
     ns->bdev = kmalloc(sizeof(*ns->bdev));
     if (!ns->bdev) {
         kfree(ns);
         return -1;
     }
-    
+    ns->disk = kmalloc(sizeof(*ns->disk));
+    if (!ns->disk) {
+        kfree(ns->bdev);
+        kfree(ns);
+        return -1;
+    }
+
     if (block_device_init(ns->bdev, ns->size, ns->block_size) != 0) {
+        kfree(ns->disk);
         kfree(ns->bdev);
         kfree(ns);
         return -1;
     }
-    
-    // Use PCI bus for device registration (since platform bus might not be ready yet)
-    struct bus_type *pci_bus = device_model_pci_bus();
-    if (!pci_bus) {
-        printf("NVMe init namespace: failed to get PCI bus\n");
+    if (gendisk_init(ns->disk, "nvme0n1", 259, 0, ns->bdev) != 0) {
+        kfree(ns->disk);
         kfree(ns->bdev);
         kfree(ns);
         return -1;
     }
-    
-    // Create device structure for devtmpfs
-    struct device *dev = device_register_simple("nvme0n1", "block", pci_bus, ns->bdev);
-    if (!dev) {
+
+    if (!block_register_disk(ns->disk, ctrl->dev)) {
         printf("NVMe init namespace: failed to register device\n");
+        kfree(ns->disk);
         kfree(ns->bdev);
         kfree(ns);
         return -1;
     }
-    
-    // Register device to devtmpfs
-    devtmpfs_register_device(dev);
-    
+
     nvme_ns = ns;
     printf("NVMe namespace 1 registered as /dev/nvme0n1\n");
     return 0;
 }
 
+/* nvme_probe: Implement NVMe probe. */
 static int nvme_probe(struct device *dev)
 {
     if (!dev) {
@@ -132,18 +135,18 @@ static int nvme_probe(struct device *dev)
         return -1;
     }
     device_uevent_emit("nvmebind", dev);
-    
+
     // Skip MMIO mapping and controller initialization for testing
     // Just create the block device directly
     printf("NVMe probe: Creating block device for testing\n");
-    
+
     // Allocate controller structure
     struct nvme_controller *ctrl = kmalloc(sizeof(*ctrl));
     if (!ctrl) {
         printf("NVMe probe: kmalloc controller failed\n");
         return 0;
     }
-    
+
     ctrl->dev = dev;
     ctrl->mmio = NULL;
     ctrl->cap = 0;
@@ -153,7 +156,7 @@ static int nvme_probe(struct device *dev)
     ctrl->page_size = 4096;
     ctrl->admin_q = NULL;
     ctrl->io_q = NULL;
-    
+
     // Initialize namespace
     printf("NVMe probe: Calling nvme_init_namespace\n");
     int ret = nvme_init_namespace(ctrl);
@@ -164,14 +167,15 @@ static int nvme_probe(struct device *dev)
         return 0;
     }
     printf("NVMe probe: namespace initialization success\n");
-    
+
     nvme_ctrl = ctrl;
     printf("NVMe controller initialized successfully (testing mode)\n");
     device_uevent_emit("nvmeinit", dev);
-    
+
     return 0;
 }
 
+/* nvme_driver_init: Initialize NVMe driver. */
 static int nvme_driver_init(void)
 {
     struct bus_type *pci = device_model_pci_bus();

@@ -44,6 +44,7 @@ struct bootmem_data {
     uint32_t current;
 };
 
+/* align_up: Implement align up. */
 extern uint32_t end;
 
 static struct bootmem_data bootmem;
@@ -56,6 +57,7 @@ static uint32_t align_up(uint32_t value, uint32_t align)
     return (value + mask) & ~mask;
 }
 
+/* align_down: Implement align down. */
 static uint32_t align_down(uint32_t value, uint32_t align)
 {
     if (align == 0)
@@ -64,6 +66,7 @@ static uint32_t align_down(uint32_t value, uint32_t align)
     return value & ~mask;
 }
 
+/* bootmem_reserve: Implement bootmem reserve. */
 void bootmem_reserve(uint32_t base, uint32_t size)
 {
     if (bootmem.resv_count >= BOOTMEM_MAX_REGIONS)
@@ -73,6 +76,7 @@ void bootmem_reserve(uint32_t base, uint32_t size)
     bootmem.resv_count++;
 }
 
+/* bootmem_is_reserved: Implement bootmem is reserved. */
 int bootmem_is_reserved(uint32_t base, uint32_t size)
 {
     uint32_t end_addr = base + size;
@@ -88,6 +92,7 @@ int bootmem_is_reserved(uint32_t base, uint32_t size)
     return 0;
 }
 
+/* bootmem_add_available: Implement bootmem add available. */
 static void bootmem_add_available(uint32_t base, uint32_t size)
 {
     if (bootmem.avail_count >= BOOTMEM_MAX_REGIONS)
@@ -97,6 +102,7 @@ static void bootmem_add_available(uint32_t base, uint32_t size)
     bootmem.avail_count++;
 }
 
+/* bootmem_add_e820: Implement bootmem add e820. */
 static void bootmem_add_e820(uint32_t base, uint32_t size, uint32_t type)
 {
     if (size == 0)
@@ -109,6 +115,7 @@ static void bootmem_add_e820(uint32_t base, uint32_t size, uint32_t type)
     bootmem.e820_count++;
 }
 
+/* bootmem_sort_e820: Implement bootmem sort e820. */
 static void bootmem_sort_e820(void)
 {
     for (uint32_t i = 0; i + 1 < bootmem.e820_count; i++) {
@@ -122,6 +129,7 @@ static void bootmem_sort_e820(void)
     }
 }
 
+/* bootmem_sort_available: Implement bootmem sort available. */
 static void bootmem_sort_available(void)
 {
     for (uint32_t i = 0; i + 1 < bootmem.avail_count; i++) {
@@ -135,16 +143,50 @@ static void bootmem_sort_available(void)
     }
 }
 
+static void bootmem_coalesce_available(void)
+{
+    if (bootmem.avail_count < 2)
+        return;
+    uint32_t out = 0;
+    for (uint32_t i = 0; i < bootmem.avail_count; i++) {
+        uint32_t base = bootmem.available[i].base;
+        uint32_t size = bootmem.available[i].size;
+        if (size == 0)
+            continue;
+        if (out == 0) {
+            bootmem.available[out].base = base;
+            bootmem.available[out].size = size;
+            out = 1;
+            continue;
+        }
+        struct bootmem_region *cur = &bootmem.available[out - 1];
+        uint32_t cur_end = cur->base + cur->size;
+        uint32_t end = base + size;
+        if (base <= cur_end) {
+            if (end > cur_end)
+                cur->size = end - cur->base;
+            continue;
+        }
+        bootmem.available[out].base = base;
+        bootmem.available[out].size = size;
+        out++;
+    }
+    bootmem.avail_count = out;
+}
+
+/* bootmem_min_u32: Implement bootmem min u32. */
 static uint32_t bootmem_min_u32(uint32_t a, uint32_t b)
 {
     return a < b ? a : b;
 }
 
+/* bootmem_max_u32: Implement bootmem max u32. */
 static uint32_t bootmem_max_u32(uint32_t a, uint32_t b)
 {
     return a > b ? a : b;
 }
 
+/* bootmem_find_reserved_overlap: Implement bootmem find reserved overlap. */
 static int bootmem_find_reserved_overlap(uint32_t base, uint32_t size, uint32_t *overlap_end)
 {
     uint32_t end_addr = base + size;
@@ -162,6 +204,158 @@ static int bootmem_find_reserved_overlap(uint32_t base, uint32_t size, uint32_t 
     return 0;
 }
 
+/* bootmem_alloc: Implement bootmem alloc. */
+void *bootmem_alloc(uint32_t size, uint32_t align)
+{
+    uint32_t req_align = align ? align : PAGE_SIZE;
+    if (size == 0)
+        return NULL;
+
+    for (uint32_t i = 0; i < bootmem.avail_count; i++) {
+        uint32_t rbase = bootmem.available[i].base;
+        uint32_t rend = rbase + bootmem.available[i].size;
+        if (rbase >= bootmem.end)
+            continue;
+        if (rend > bootmem.end)
+            rend = bootmem.end;
+
+        uint32_t addr = align_up(bootmem_max_u32(bootmem.current, rbase), req_align);
+        while (addr < rend) {
+            if (addr + size > rend)
+                break;
+            uint32_t overlap_end = 0;
+            if (bootmem_find_reserved_overlap(addr, size, &overlap_end)) {
+                addr = align_up(overlap_end, req_align);
+                continue;
+            }
+            bootmem.current = addr + size;
+            bootmem_reserve(addr, size);
+            return (void*)addr;
+        }
+    }
+    return NULL;
+}
+
+/* bootmem_start: Implement bootmem start. */
+uint32_t bootmem_start(void)
+{
+    return bootmem.start;
+}
+
+/* bootmem_end: Implement bootmem end. */
+uint32_t bootmem_end(void)
+{
+    return bootmem.end;
+}
+
+/* bootmem_total_pages: Implement bootmem total pages. */
+uint32_t bootmem_total_pages(void)
+{
+    return bootmem.total_pages;
+}
+
+/* bootmem_present_pages: Implement bootmem present pages. */
+uint32_t bootmem_present_pages(uint32_t start_pfn, uint32_t end_pfn)
+{
+    if (end_pfn > bootmem.total_pages)
+        end_pfn = bootmem.total_pages;
+    if (start_pfn >= end_pfn)
+        return 0;
+
+    uint32_t start_addr = start_pfn * PAGE_SIZE;
+    uint32_t end_addr = end_pfn * PAGE_SIZE;
+    if (start_addr >= bootmem.lowmem_end)
+        return 0;
+    if (end_addr > bootmem.lowmem_end)
+        end_addr = bootmem.lowmem_end;
+
+    uint32_t pages = 0;
+    for (uint32_t i = 0; i < bootmem.avail_count; i++) {
+        uint32_t rbase = bootmem.available[i].base;
+        uint32_t rend = rbase + bootmem.available[i].size;
+        if (rend <= start_addr)
+            continue;
+        if (rbase >= end_addr)
+            break;
+        uint32_t a = bootmem_max_u32(rbase, start_addr);
+        uint32_t b = bootmem_min_u32(rend, end_addr);
+        a = align_up(a, PAGE_SIZE);
+        b = align_down(b, PAGE_SIZE);
+        if (b > a)
+            pages += (b - a) / PAGE_SIZE;
+    }
+    return pages;
+}
+
+/* bootmem_lowmem_end: Implement bootmem lowmem end. */
+uint32_t bootmem_lowmem_end(void)
+{
+    return bootmem.lowmem_end;
+}
+
+/* bootmem_ram_kb: Implement bootmem ram kb. */
+uint32_t bootmem_ram_kb(void)
+{
+    return bootmem.ram_kb;
+}
+
+/* bootmem_reserved_kb: Implement bootmem reserved kb. */
+uint32_t bootmem_reserved_kb(void)
+{
+    return bootmem.reserved_kb;
+}
+
+/* bootmem_e820_entries: Implement bootmem e820 entries. */
+uint32_t bootmem_e820_entries(void)
+{
+    return bootmem.e820_count;
+}
+
+/* bootmem_e820_get: Implement bootmem e820 get. */
+int bootmem_e820_get(uint32_t idx, uint32_t *base, uint32_t *size, uint32_t *type)
+{
+    if (idx >= bootmem.e820_count)
+        return -1;
+    if (base)
+        *base = bootmem.e820[idx].base;
+    if (size)
+        *size = bootmem.e820[idx].size;
+    if (type)
+        *type = bootmem.e820[idx].type;
+    return 0;
+}
+
+/* bootmem_kernel_phys_start: Implement bootmem kernel phys start. */
+uint32_t bootmem_kernel_phys_start(void)
+{
+    return bootmem.kernel_phys_start;
+}
+
+/* bootmem_kernel_phys_end: Implement bootmem kernel phys end. */
+uint32_t bootmem_kernel_phys_end(void)
+{
+    return bootmem.kernel_phys_end;
+}
+
+/* bootmem_module_count: Implement bootmem module count. */
+uint32_t bootmem_module_count(void)
+{
+    return bootmem.mods_count;
+}
+
+/* bootmem_module_get: Implement bootmem module get. */
+int bootmem_module_get(uint32_t idx, uint32_t *start, uint32_t *end)
+{
+    if (idx >= bootmem.mods_count)
+        return -1;
+    if (start)
+        *start = bootmem.mods[idx].start;
+    if (end)
+        *end = bootmem.mods[idx].end;
+    return 0;
+}
+
+/* bootmem_init: Initialize bootmem. */
 void bootmem_init(struct multiboot_info *mbi)
 {
     memset(&bootmem, 0, sizeof(bootmem));
@@ -222,6 +416,7 @@ void bootmem_init(struct multiboot_info *mbi)
         }
     }
     bootmem_sort_available();
+    bootmem_coalesce_available();
     bootmem_sort_e820();
 
     const uint32_t lowmem_limit = 0x38000000;
@@ -237,141 +432,4 @@ void bootmem_init(struct multiboot_info *mbi)
         bootmem.current = bootmem.start;
     if (bootmem.current > bootmem.end)
         bootmem.current = bootmem.end;
-}
-
-void *bootmem_alloc(uint32_t size, uint32_t align)
-{
-    uint32_t req_align = align ? align : PAGE_SIZE;
-    if (size == 0)
-        return NULL;
-
-    for (uint32_t i = 0; i < bootmem.avail_count; i++) {
-        uint32_t rbase = bootmem.available[i].base;
-        uint32_t rend = rbase + bootmem.available[i].size;
-        if (rbase >= bootmem.end)
-            continue;
-        if (rend > bootmem.end)
-            rend = bootmem.end;
-
-        uint32_t addr = align_up(bootmem_max_u32(bootmem.current, rbase), req_align);
-        while (addr < rend) {
-            if (addr + size > rend)
-                break;
-            uint32_t overlap_end = 0;
-            if (bootmem_find_reserved_overlap(addr, size, &overlap_end)) {
-                addr = align_up(overlap_end, req_align);
-                continue;
-            }
-            bootmem.current = addr + size;
-            bootmem_reserve(addr, size);
-            return (void*)addr;
-        }
-    }
-    return NULL;
-}
-
-uint32_t bootmem_start(void)
-{
-    return bootmem.start;
-}
-
-uint32_t bootmem_end(void)
-{
-    return bootmem.end;
-}
-
-uint32_t bootmem_total_pages(void)
-{
-    return bootmem.total_pages;
-}
-
-uint32_t bootmem_present_pages(uint32_t start_pfn, uint32_t end_pfn)
-{
-    if (end_pfn > bootmem.total_pages)
-        end_pfn = bootmem.total_pages;
-    if (start_pfn >= end_pfn)
-        return 0;
-
-    uint32_t start_addr = start_pfn * PAGE_SIZE;
-    uint32_t end_addr = end_pfn * PAGE_SIZE;
-    if (start_addr >= bootmem.lowmem_end)
-        return 0;
-    if (end_addr > bootmem.lowmem_end)
-        end_addr = bootmem.lowmem_end;
-
-    uint32_t pages = 0;
-    for (uint32_t i = 0; i < bootmem.avail_count; i++) {
-        uint32_t rbase = bootmem.available[i].base;
-        uint32_t rend = rbase + bootmem.available[i].size;
-        if (rend <= start_addr)
-            continue;
-        if (rbase >= end_addr)
-            break;
-        uint32_t a = bootmem_max_u32(rbase, start_addr);
-        uint32_t b = bootmem_min_u32(rend, end_addr);
-        a = align_up(a, PAGE_SIZE);
-        b = align_down(b, PAGE_SIZE);
-        if (b > a)
-            pages += (b - a) / PAGE_SIZE;
-    }
-    return pages;
-}
-
-uint32_t bootmem_lowmem_end(void)
-{
-    return bootmem.lowmem_end;
-}
-
-uint32_t bootmem_ram_kb(void)
-{
-    return bootmem.ram_kb;
-}
-
-uint32_t bootmem_reserved_kb(void)
-{
-    return bootmem.reserved_kb;
-}
-
-uint32_t bootmem_e820_entries(void)
-{
-    return bootmem.e820_count;
-}
-
-int bootmem_e820_get(uint32_t idx, uint32_t *base, uint32_t *size, uint32_t *type)
-{
-    if (idx >= bootmem.e820_count)
-        return -1;
-    if (base)
-        *base = bootmem.e820[idx].base;
-    if (size)
-        *size = bootmem.e820[idx].size;
-    if (type)
-        *type = bootmem.e820[idx].type;
-    return 0;
-}
-
-uint32_t bootmem_kernel_phys_start(void)
-{
-    return bootmem.kernel_phys_start;
-}
-
-uint32_t bootmem_kernel_phys_end(void)
-{
-    return bootmem.kernel_phys_end;
-}
-
-uint32_t bootmem_module_count(void)
-{
-    return bootmem.mods_count;
-}
-
-int bootmem_module_get(uint32_t idx, uint32_t *start, uint32_t *end)
-{
-    if (idx >= bootmem.mods_count)
-        return -1;
-    if (start)
-        *start = bootmem.mods[idx].start;
-    if (end)
-        *end = bootmem.mods[idx].end;
-    return 0;
 }

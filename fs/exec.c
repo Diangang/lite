@@ -17,6 +17,7 @@
 #include "linux/console.h"
 #include "linux/rmap.h"
 
+/* enter_user_mode: Implement enter user mode. */
 static void enter_user_mode(uint32_t entry, uint32_t user_stack)
 {
     __asm__ volatile(
@@ -41,6 +42,7 @@ static void enter_user_mode(uint32_t entry, uint32_t user_stack)
     );
 }
 
+/* __attribute__: Implement attribute. */
 typedef struct __attribute__((packed)) {
     unsigned char e_ident[16];
     uint16_t e_type;
@@ -58,6 +60,7 @@ typedef struct __attribute__((packed)) {
     uint16_t e_shstrndx;
 } Elf32_Ehdr;
 
+/* __attribute__: Implement attribute. */
 typedef struct __attribute__((packed)) {
     uint32_t p_type;
     uint32_t p_offset;
@@ -69,16 +72,19 @@ typedef struct __attribute__((packed)) {
     uint32_t p_align;
 } Elf32_Phdr;
 
+/* align_down: Implement align down. */
 static uint32_t align_down(uint32_t value)
 {
     return value & ~0xFFF;
 }
 
+/* align_up: Implement align up. */
 static uint32_t align_up(uint32_t value)
 {
     return (value + 0xFFF) & ~0xFFF;
 }
 
+/* ensure_private_table: Implement ensure private table. */
 static void ensure_private_table(pgd_t* dir, uint32_t pde_idx)
 {
     if (dir[pde_idx] & PTE_PRESENT) {
@@ -99,6 +105,7 @@ static void ensure_private_table(pgd_t* dir, uint32_t pde_idx)
     }
 }
 
+/* ensure_private_table_range: Implement ensure private table range. */
 static void ensure_private_table_range(pgd_t* dir, uint32_t start, uint32_t end)
 {
     uint32_t start_idx = pgd_index(start);
@@ -107,6 +114,7 @@ static void ensure_private_table_range(pgd_t* dir, uint32_t start, uint32_t end)
         ensure_private_table(dir, i);
 }
 
+/* kernel_load_user_program: Implement kernel load user program. */
 int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_stack, pgd_t** out_dir,
                              uint32_t* out_base, uint32_t* out_pages, uint32_t* out_stack_base)
 {
@@ -272,6 +280,7 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
     return 0;
 }
 
+/* user_task: Implement user task. */
 void user_task(void)
 {
     uint32_t entry = 0;
@@ -297,6 +306,7 @@ void user_task(void)
     panic("Returned from user mode?!");
 }
 
+/* task_exec_user: Replace the current task image with a user-space program. */
 int task_exec_user(const char *program)
 {
     if (!program)
@@ -335,6 +345,7 @@ int task_exec_user(const char *program)
     return -1;
 }
 
+/* sys_execve: Implement sys execve. */
 int sys_execve(const char *program, struct pt_regs *regs)
 {
     if (!program || !*program || !regs)

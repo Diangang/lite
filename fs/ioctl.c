@@ -3,6 +3,7 @@
 #include "linux/file.h"
 #include "linux/fdtable.h"
 
+/* ioctl_fs: Implement ioctl fs. */
 int ioctl_fs(struct inode *node, uint32_t request, uint32_t arg)
 {
     if (!node || !node->f_ops || node->f_ops->ioctl == NULL)
@@ -10,6 +11,7 @@ int ioctl_fs(struct inode *node, uint32_t request, uint32_t arg)
     return node->f_ops->ioctl(node, request, arg);
 }
 
+/* sys_ioctl: Implement sys ioctl. */
 int sys_ioctl(int fd, uint32_t request, uint32_t arg)
 {
     struct file *f = fget(fd);

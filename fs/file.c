@@ -5,6 +5,7 @@
 #include "linux/ramfs.h"
 #include "linux/pagemap.h"
 
+/* vfs_open: Implement vfs open. */
 struct file *vfs_open(const char *path, uint32_t flags)
 {
     struct dentry *dentry = path_walk(path);
@@ -70,6 +71,7 @@ struct file *vfs_open(const char *path, uint32_t flags)
     return f;
 }
 
+/* vfs_open_dentry: Implement vfs open dentry. */
 struct file *vfs_open_dentry(struct dentry *dentry, uint32_t flags)
 {
     if (!dentry || !dentry->inode)
@@ -86,6 +88,7 @@ struct file *vfs_open_dentry(struct dentry *dentry, uint32_t flags)
     return f;
 }
 
+/* vfs_open_node: Implement vfs open node. */
 struct file *vfs_open_node(struct inode *node, uint32_t flags)
 {
     if (!node)
@@ -98,6 +101,7 @@ struct file *vfs_open_node(struct inode *node, uint32_t flags)
     return f;
 }
 
+/* vfs_read: Implement vfs read. */
 uint32_t vfs_read(struct file *f, uint8_t *buf, uint32_t len)
 {
     if (!f || !f->dentry || !f->dentry->inode)
@@ -109,6 +113,7 @@ uint32_t vfs_read(struct file *f, uint8_t *buf, uint32_t len)
     return n;
 }
 
+/* vfs_write: Implement vfs write. */
 uint32_t vfs_write(struct file *f, const uint8_t *buf, uint32_t len)
 {
     if (!f || !f->dentry || !f->dentry->inode)
@@ -120,6 +125,7 @@ uint32_t vfs_write(struct file *f, const uint8_t *buf, uint32_t len)
     return n;
 }
 
+/* vfs_ioctl: Implement vfs ioctl. */
 int vfs_ioctl(struct file *f, uint32_t request, uint32_t arg)
 {
     if (!f || !f->dentry || !f->dentry->inode)
@@ -127,6 +133,7 @@ int vfs_ioctl(struct file *f, uint32_t request, uint32_t arg)
     return ioctl_fs(f->dentry->inode, request, arg);
 }
 
+/* vfs_close: Implement vfs close. */
 void vfs_close(struct file *f)
 {
     if (!f)
@@ -141,6 +148,7 @@ void vfs_close(struct file *f)
     kfree(f);
 }
 
+/* file_open_node: Implement file open node. */
 struct file *file_open_node(struct inode *node, uint32_t flags)
 {
     if (!node)
@@ -148,6 +156,7 @@ struct file *file_open_node(struct inode *node, uint32_t flags)
     return vfs_open_node(node, flags);
 }
 
+/* file_open_path: Implement file open path. */
 struct file *file_open_path(const char *path, uint32_t flags)
 {
     if (!path)
@@ -155,6 +164,7 @@ struct file *file_open_path(const char *path, uint32_t flags)
     return vfs_open(path, flags);
 }
 
+/* file_read: Implement file read. */
 uint32_t file_read(struct file *f, uint8_t *buf, uint32_t len)
 {
     if (!f || !buf || len == 0)
@@ -162,6 +172,7 @@ uint32_t file_read(struct file *f, uint8_t *buf, uint32_t len)
     return vfs_read(f, buf, len);
 }
 
+/* file_write: Implement file write. */
 uint32_t file_write(struct file *f, const uint8_t *buf, uint32_t len)
 {
     if (!f || !buf || len == 0)
@@ -169,6 +180,7 @@ uint32_t file_write(struct file *f, const uint8_t *buf, uint32_t len)
     return vfs_write(f, buf, len);
 }
 
+/* file_ioctl: Implement file ioctl. */
 int file_ioctl(struct file *f, uint32_t request, uint32_t arg)
 {
     if (!f)
@@ -176,6 +188,7 @@ int file_ioctl(struct file *f, uint32_t request, uint32_t arg)
     return vfs_ioctl(f, request, arg);
 }
 
+/* file_dup: Implement file dup. */
 struct file *file_dup(struct file *f)
 {
     if (!f)
@@ -184,6 +197,7 @@ struct file *file_dup(struct file *f)
     return f;
 }
 
+/* file_close: Implement file close. */
 void file_close(struct file *f)
 {
     if (!f)

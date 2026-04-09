@@ -3,6 +3,7 @@
 #include "linux/exit.h"
 #include "internal.h"
 
+/* task_dump_tasks: Implement task dump tasks. */
 uint32_t task_dump_tasks(char *buf, uint32_t len)
 {
     if (!buf || len == 0)
@@ -43,6 +44,7 @@ uint32_t task_dump_tasks(char *buf, uint32_t len)
     return off;
 }
 
+/* task_dump_stat_pid: Implement task dump stat pid. */
 uint32_t task_dump_stat_pid(uint32_t pid, char *buf, uint32_t len)
 {
     if (!buf || len == 0)
@@ -77,6 +79,7 @@ uint32_t task_dump_stat_pid(uint32_t pid, char *buf, uint32_t len)
     return off;
 }
 
+/* task_dump_cmdline_pid: Implement task dump cmdline pid. */
 uint32_t task_dump_cmdline_pid(uint32_t pid, char *buf, uint32_t len)
 {
     if (!buf || len == 0)
@@ -98,6 +101,7 @@ uint32_t task_dump_cmdline_pid(uint32_t pid, char *buf, uint32_t len)
     return off;
 }
 
+/* task_dump_status_pid: Implement task dump status pid. */
 uint32_t task_dump_status_pid(uint32_t pid, char *buf, uint32_t len)
 {
     if (!buf || len == 0)

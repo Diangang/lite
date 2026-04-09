@@ -6,12 +6,14 @@
 /* Global inode allocator for pseudo filesystems */
 static uint32_t last_ino = 100; // Start at 100 to avoid conflicts with special statically assigned ones like root(1) or proc entries
 
+/* get_next_ino: Get next ino. */
 uint32_t get_next_ino(void)
 {
     // In a real SMP kernel, this would be an atomic operation or per-CPU counter
     return ++last_ino;
 }
 
+/* vfs_check_access: Implement vfs check access. */
 int vfs_check_access(struct inode *node, int want_read, int want_write, int want_exec)
 {
     if (!node)
@@ -36,6 +38,7 @@ int vfs_check_access(struct inode *node, int want_read, int want_write, int want
     return 1;
 }
 
+/* vfs_chmod: Implement vfs chmod. */
 int vfs_chmod(const char *path, uint32_t mode)
 {
     struct inode *node = vfs_resolve(path);
@@ -48,6 +51,7 @@ int vfs_chmod(const char *path, uint32_t mode)
     return 0;
 }
 
+/* sys_chmod: Implement sys chmod. */
 int sys_chmod(const char *pathname, uint32_t mode, int from_user)
 {
     char tmp[128];

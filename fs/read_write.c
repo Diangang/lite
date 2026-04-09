@@ -5,6 +5,7 @@
 #include "linux/libc.h"
 #include "linux/uaccess.h"
 
+/* read_fs: Read fs. */
 uint32_t read_fs(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     if (node->f_ops && node->f_ops->read != NULL)
@@ -12,6 +13,7 @@ uint32_t read_fs(struct inode *node, uint32_t offset, uint32_t size, uint8_t *bu
     return 0;
 }
 
+/* write_fs: Write fs. */
 uint32_t write_fs(struct inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer)
 {
     if (node->f_ops && node->f_ops->write != NULL)
@@ -19,6 +21,7 @@ uint32_t write_fs(struct inode *node, uint32_t offset, uint32_t size, const uint
     return 0;
 }
 
+/* sys_write: Implement sys write. */
 int sys_write(int fd, const void *buf, uint32_t len, int from_user)
 {
     if (len > 4096)
@@ -56,6 +59,7 @@ int sys_write(int fd, const void *buf, uint32_t len, int from_user)
     return (int)off;
 }
 
+/* sys_read: Implement sys read. */
 int sys_read(int fd, void *buf, uint32_t len, int from_user)
 {
     if (len > 4096)

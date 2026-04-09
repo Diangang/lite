@@ -13,6 +13,7 @@
 #include "asm/page.h"
 #include "linux/uaccess.h"
 
+/* syscall_handler: Handle syscall. */
 static struct pt_regs *syscall_handler(struct pt_regs *regs)
 {
     uint32_t irq_flags = irq_save();
@@ -147,6 +148,7 @@ static struct pt_regs *syscall_handler(struct pt_regs *regs)
     return regs;
 }
 
+/* init_syscall: Initialize syscall. */
 void init_syscall(void)
 {
     register_interrupt_handler(128, syscall_handler);

@@ -1,27 +1,7 @@
 #include "linux/device.h"
 #include "linux/libc.h"
 
-static void try_bind_device(struct bus_type *bus, struct device *dev)
-{
-    if (!bus || !dev)
-        return;
-    if (dev->driver)
-        return;
-    struct device_driver *drv;
-    list_for_each_entry(drv, &bus->drivers, bus_list) {
-        if (bus->match && bus->match(dev, drv)) {
-            dev->driver = drv;
-            if (drv->probe && drv->probe(dev) != 0) {
-                dev->driver = NULL;
-                continue;
-            }
-            device_uevent_emit("bind", dev);
-            return;
-        }
-    }
-}
-
-int driver_bind_device(struct device_driver *drv, struct device *dev)
+int driver_probe_device(struct device_driver *drv, struct device *dev)
 {
     if (!drv || !dev || !drv->bus)
         return -1;
@@ -40,6 +20,26 @@ int driver_bind_device(struct device_driver *drv, struct device *dev)
     return 0;
 }
 
+/* driver_bind_device: Implement driver bind device. */
+int driver_bind_device(struct device_driver *drv, struct device *dev)
+{
+    return driver_probe_device(drv, dev);
+}
+
+int driver_attach(struct device_driver *drv)
+{
+    if (!drv || !drv->bus)
+        return -1;
+    struct device *dev;
+    list_for_each_entry(dev, &drv->bus->devices, bus_list) {
+        if (dev->driver)
+            continue;
+        driver_probe_device(drv, dev);
+    }
+    return 0;
+}
+
+/* driver_register: Implement driver register. */
 int driver_register(struct device_driver *drv)
 {
     if (!drv || !drv->bus)
@@ -52,13 +52,11 @@ int driver_register(struct device_driver *drv)
     kset_add(device_model_drivers_kset(), &drv->kobj);
     INIT_LIST_HEAD(&drv->bus_list);
     list_add_tail(&drv->bus_list, &drv->bus->drivers);
-    struct device *dev;
-    list_for_each_entry(dev, &drv->bus->devices, bus_list) {
-        try_bind_device(drv->bus, dev);
-    }
+    driver_attach(drv);
     return 0;
 }
 
+/* driver_unregister: Implement driver unregister. */
 int driver_unregister(struct device_driver *drv)
 {
     if (!drv || !drv->bus)
@@ -74,6 +72,7 @@ int driver_unregister(struct device_driver *drv)
     return 0;
 }
 
+/* init_driver: Initialize driver. */
 void init_driver(struct device_driver *drv, const char *name, struct bus_type *bus, int (*probe)(struct device *))
 {
     if (!drv)
@@ -91,6 +90,7 @@ void init_driver(struct device_driver *drv, const char *name, struct bus_type *b
     drv->probe = probe;
 }
 
+/* init_driver_ids: Initialize driver ids. */
 void init_driver_ids(struct device_driver *drv, const char *name, struct bus_type *bus, const struct device_id *id_table, int (*probe)(struct device *))
 {
     init_driver(drv, name, bus, probe);

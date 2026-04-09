@@ -18,6 +18,7 @@ struct swap_slot {
     uint8_t *data;
 };
 
+/* swap_init: Initialize swap. */
 static struct swap_slot swap_slots[SWAP_SLOTS];
 
 void swap_init(void)
@@ -30,6 +31,7 @@ void swap_init(void)
     }
 }
 
+/* swap_out_page: Implement swap out page. */
 int swap_out_page(struct page *page)
 {
     if (!page)
@@ -76,6 +78,7 @@ int swap_out_page(struct page *page)
     return 0;
 }
 
+/* swap_in_mm: Implement swap in memory manager. */
 int swap_in_mm(struct mm_struct *mm, uint32_t vaddr)
 {
     if (!mm)

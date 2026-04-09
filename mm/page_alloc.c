@@ -13,6 +13,7 @@ static int32_t* buddy_next = NULL;
 static unsigned int buddy_max_order = 0;
 static int buddy_ready = 0;
 
+/* zone_free_pages: Implement zone free pages. */
 unsigned long zone_free_pages(struct zone *zone)
 {
     unsigned long free_pages = 0;
@@ -23,6 +24,7 @@ unsigned long zone_free_pages(struct zone *zone)
     return free_pages;
 }
 
+/* buddy_list_add: Implement buddy list add. */
 static void buddy_list_add(struct zone *zone, unsigned int order, int32_t page)
 {
     if (!zone)
@@ -39,6 +41,7 @@ static void buddy_list_add(struct zone *zone, unsigned int order, int32_t page)
     }
 }
 
+/* buddy_list_remove: Implement buddy list remove. */
 static void buddy_list_remove(struct zone *zone, unsigned int order, int32_t page)
 {
     if (!zone)
@@ -64,6 +67,7 @@ static void buddy_list_remove(struct zone *zone, unsigned int order, int32_t pag
     }
 }
 
+/* buddy_alloc: Implement buddy alloc. */
 static int32_t buddy_alloc(struct zone *zone, unsigned int order)
 {
     for (unsigned int o = order; o <= buddy_max_order; o++) {
@@ -103,6 +107,7 @@ static int32_t buddy_alloc(struct zone *zone, unsigned int order)
     return -1;
 }
 
+/* buddy_free_block: Implement buddy free block. */
 static void buddy_free_block(struct zone *zone, uint32_t page, unsigned int order)
 {
     if (!zone)
@@ -128,6 +133,7 @@ static void buddy_free_block(struct zone *zone, uint32_t page, unsigned int orde
     buddy_list_add(zone, order, page);
 }
 
+/* zone_watermark_ok: Implement zone watermark ok. */
 static int zone_watermark_ok(struct zone *zone, unsigned int order, int mark)
 {
     unsigned long free_pages = zone_free_pages(zone);
@@ -138,6 +144,7 @@ static int zone_watermark_ok(struct zone *zone, unsigned int order, int mark)
 }
 
 
+/* __alloc_pages_nodemask: Allocate pages nodemask. */
 struct page *__alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
                                     struct zonelist *zonelist, void *nodemask)
 {
@@ -197,6 +204,7 @@ struct page *__alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
     return printf("PAGE_ALLOC: Out of memory!\n"), NULL;
 }
 
+/* alloc_pages: Allocate pages. */
 void *alloc_pages(gfp_t gfp, unsigned int order)
 {
     for (int tries = 0; tries < 4; tries++) {
@@ -214,12 +222,14 @@ void *alloc_pages(gfp_t gfp, unsigned int order)
     return NULL;
 }
 
+/* __get_free_pages: Get free pages. */
 unsigned long __get_free_pages(gfp_t gfp, unsigned int order)
 {
     void *p = alloc_pages(gfp, order);
     return (unsigned long)p;
 }
 
+/* get_zeroed_page: Get zeroed page. */
 unsigned long get_zeroed_page(gfp_t gfp)
 {
     unsigned long p = __get_free_pages(gfp, 0);
@@ -228,6 +238,7 @@ unsigned long get_zeroed_page(gfp_t gfp)
     return p;
 }
 
+/* __free_pages: Free pages. */
 void __free_pages(struct page *page, unsigned int order)
 {
     if (!page)
@@ -237,6 +248,7 @@ void __free_pages(struct page *page, unsigned int order)
     free_pages(addr, order);
 }
 
+/* free_pages: Free pages. */
 void free_pages(unsigned long addr, unsigned int order)
 {
     if (addr >= PAGE_OFFSET)
@@ -272,6 +284,7 @@ void free_pages(unsigned long addr, unsigned int order)
     buddy_free_block(zone, frame, order);
 }
 
+/* get_page: Get page. */
 void get_page(unsigned long addr)
 {
     uint32_t frame = addr / PAGE_SIZE;
@@ -285,6 +298,7 @@ void get_page(unsigned long addr)
         pg->refcount++;
 }
 
+/* page_ref_count: Implement page ref count. */
 unsigned int page_ref_count(unsigned long addr)
 {
     uint32_t frame = addr / PAGE_SIZE;
@@ -295,6 +309,7 @@ unsigned int page_ref_count(unsigned long addr)
     return pg->refcount;
 }
 
+/* show_mem: Show mem. */
 void show_mem(void)
 {
     if (!cached_mbi)
@@ -344,11 +359,13 @@ void show_mem(void)
     }
 }
 
+/* buddy_max_order_get: Implement buddy max order get. */
 unsigned int buddy_max_order_get(void)
 {
     return buddy_max_order;
 }
 
+/* totalram_pages: Implement totalram pages. */
 unsigned long totalram_pages(void)
 {
     if (managed_pages_total)
@@ -356,6 +373,7 @@ unsigned long totalram_pages(void)
     return total_pages;
 }
 
+/* freeram_pages: Implement freeram pages. */
 unsigned long freeram_pages(void)
 {
     unsigned long free_pages = 0;
@@ -366,11 +384,13 @@ unsigned long freeram_pages(void)
     return free_pages;
 }
 
+/* free_area_init: Free area init. */
 void free_area_init(struct multiboot_info* mbi)
 {
     free_area_init_core(mbi);
 }
 
+/* free_area_init_core: Free area init core. */
 void free_area_init_core(struct multiboot_info* mbi)
 {
     cached_mbi = mbi;
@@ -398,9 +418,11 @@ void free_area_init_core(struct multiboot_info* mbi)
         buddy_next[i] = -1;
     uint32_t present = bootmem_present_pages(0, total_pages);
     uint32_t span_mb = (bootmem_lowmem_end() + (1024 * 1024) - 1) / (1024 * 1024);
-    printf("PAGE_ALLOC: spanned %d pages, present %d pages (lowmem=%d MB)\n", total_pages, present, span_mb);
+    printf("PAGE_ALLOC: spanned %u pages, present %u pages (lowmem=%u MB)\n",
+           total_pages, present, span_mb);
 }
 
+/* mem_init: Initialize mem. */
 void mem_init(void)
 {
     if (!total_pages || !buddy_next)

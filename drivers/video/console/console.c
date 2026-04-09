@@ -1,30 +1,43 @@
 #include "linux/console.h"
-#include "linux/serial.h"
-#include "linux/vga.h"
 #include "linux/libc.h"
 
-static uint32_t console_targets = 0;
+static struct console *console_list;
 
-void console_set_targets(uint32_t targets)
+uint32_t console_write(const uint8_t *buf, uint32_t len);
+
+int register_console(struct console *con)
 {
-    console_targets |= targets;
+    if (!con || !con->write)
+        return -1;
+    con->next = console_list;
+    console_list = con;
+    return 0;
 }
 
-uint32_t console_get_targets(void)
+void unregister_console(struct console *con)
 {
-    return console_targets;
+    struct console **pp = &console_list;
+    while (*pp) {
+        if (*pp == con) {
+            *pp = con->next;
+            con->next = (struct console *)0;
+            return;
+        }
+        pp = &(*pp)->next;
+    }
 }
 
 void console_put_char(char c)
 {
-    if (console_targets & CONSOLE_TARGET_VGA) vga_put_char(c);
-    if (console_targets & CONSOLE_TARGET_SERIAL) serial_put_char(c);
+    unsigned char b = (unsigned char)c;
+    console_write((const uint8_t *)&b, 1);
 }
 
 uint32_t console_write(const uint8_t *buf, uint32_t len)
 {
     if (!buf || len == 0)
         return 0;
-    for (uint32_t i = 0; i < len; i++) console_put_char((char)buf[i]);
+    for (struct console *con = console_list; con; con = con->next)
+        con->write(buf, len);
     return len;
 }

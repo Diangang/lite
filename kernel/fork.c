@@ -12,6 +12,7 @@
 #include "linux/irqflags.h"
 #include "linux/rmap.h"
 
+/* vma_clone_list: Implement VMA clone list. */
 static struct vm_area_struct *vma_clone_list(struct vm_area_struct *src)
 {
     struct vm_area_struct *head = NULL;
@@ -38,6 +39,7 @@ static struct vm_area_struct *vma_clone_list(struct vm_area_struct *src)
     return head;
 }
 
+/* mm_clone_cow: Implement memory manager clone copy-on-write. */
 static struct mm_struct *mm_clone_cow(struct mm_struct *src)
 {
     if (!src)
@@ -98,6 +100,7 @@ static struct mm_struct *mm_clone_cow(struct mm_struct *src)
     return mm;
 }
 
+/* copy_thread: Copy thread. */
 struct pt_regs *copy_thread(uint32_t *stack, void (*entry)(void), struct pt_regs *parent_regs)
 {
     if (!stack)
@@ -125,6 +128,7 @@ struct pt_regs *copy_thread(uint32_t *stack, void (*entry)(void), struct pt_regs
     return child_regs;
 }
 
+/* set_task_comm: Set task comm. */
 void set_task_comm(struct task_struct *task, const char *program)
 {
     if (!task)
@@ -140,6 +144,7 @@ void set_task_comm(struct task_struct *task, const char *program)
     task->comm[i] = 0;
 }
 
+/* sys_fork: Implement sys fork. */
 int sys_fork(struct pt_regs *regs)
 {
     if (!current || !current->mm || !regs)
@@ -208,6 +213,7 @@ int sys_fork(struct pt_regs *regs)
     return (int)task->pid;
 }
 
+/* task_create_internal: Implement task create internal. */
 static int task_create_internal(void (*entry)(void), const char *program)
 {
     struct task_struct *task = (struct task_struct*)kmalloc(sizeof(struct task_struct));
@@ -273,16 +279,19 @@ static int task_create_internal(void (*entry)(void), const char *program)
     return (int)task->pid;
 }
 
+/* kernel_thread: Implement kernel thread. */
 int kernel_thread(void (*entry)(void))
 {
     return task_create_internal(entry, NULL);
 }
 
+/* kernel_create_user: Implement kernel create user. */
 int kernel_create_user(const char *program)
 {
     return task_create_internal(user_task, program);
 }
 
+/* fork_init: Fork init. */
 void fork_init(void)
 {
     if (!current || list_empty(&task_list_head))
