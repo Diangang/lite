@@ -12,7 +12,8 @@ struct tty_driver {
     struct list_head list;
 };
 
-struct tty_device {
+/* Linux-compatible naming: per-line port/device representation. */
+struct tty_port {
     struct tty_driver *driver;
     uint32_t index;
     char name[32];
@@ -43,6 +44,6 @@ void tty_put_char(char c);
 uint32_t tty_write(const uint8_t *buf, uint32_t len);
 int tty_register_driver(struct tty_driver *drv, const char *name, uint32_t num);
 struct device *tty_register_device(struct tty_driver *drv, uint32_t index, struct device *parent, const char *name, void *data);
-struct tty_device *tty_device_from_dev(struct device *dev);
+struct tty_port *tty_port_from_dev(struct device *dev);
 
 #endif

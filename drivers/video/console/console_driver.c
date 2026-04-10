@@ -1,20 +1,12 @@
 #include "linux/device.h"
 #include "linux/init.h"
 #include "linux/libc.h"
+#include "linux/platform_device.h"
+#include "linux/errno.h"
 
 static struct class console_class;
-static struct device_driver drv_console;
-static const struct device_id console_ids[] = {
-    { .name = "console", .type = "console" },
-    { .name = NULL, .type = NULL }
-};
 
-/* console_probe: Implement console probe. */
-static int console_probe(struct device *dev)
-{
-    (void)dev;
-    return 0;
-}
+static struct device *console_class_dev;
 
 static int console_class_init(void)
 {
@@ -26,28 +18,46 @@ static int console_class_init(void)
 }
 core_initcall(console_class_init);
 
-static int console_device_init(void)
+static int console_platform_probe(struct platform_device *pdev)
 {
-    struct bus_type *platform = device_model_platform_bus();
+    (void)pdev;
     struct class *cls = device_model_console_class();
-    if (!platform || !cls)
-        return -1;
+    if (!cls)
+        return -EPROBE_DEFER;
+
     struct device *parent = device_model_find_device("serial0");
-    if (!device_register_simple_class_parent("console", "console", platform, cls, parent, NULL))
+    if (!parent)
+        return -EPROBE_DEFER;
+
+    if (console_class_dev)
+        return 0;
+
+    /* Class device: no bus (Linux-like). Parent points at the console backend. */
+    console_class_dev = device_register_simple_class_parent("console", "console", NULL, cls, parent, NULL);
+    if (!console_class_dev)
         return -1;
+
+    /* Provide a stable devtmpfs key: /dev/console (Linux uses 5:1). */
+    console_class_dev->dev_major = 5;
+    console_class_dev->dev_minor = 1;
+    console_class_dev->devnode_name = console_class_dev->kobj.name;
     return 0;
 }
-device_initcall(console_device_init);
 
-/* console_driver_init: Initialize console driver. */
+static const struct platform_device_id console_platform_ids[] = {
+    { .name = "console", .driver_data = 0 },
+    { .name = NULL, .driver_data = 0 }
+};
+
+static struct platform_driver console_platform_driver = {
+    .name = "console",
+    .id_table = console_platform_ids,
+    .probe = console_platform_probe,
+    .remove = NULL,
+};
+
 static int console_driver_init(void)
 {
-    struct bus_type *platform = device_model_platform_bus();
-    if (!platform)
-        return -1;
-
-    init_driver_ids(&drv_console, "console", platform, console_ids, console_probe);
-    driver_register(&drv_console);
-    return 0;
+    return platform_driver_register(&console_platform_driver);
 }
 module_init(console_driver_init);

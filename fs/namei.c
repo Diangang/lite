@@ -93,63 +93,115 @@ struct dentry *path_walk(const char *path)
     if (!path || !*path)
         return NULL;
 
-    struct dentry *curr;
-    if (path[0] == '/') {
-        curr = current ? current->fs.root : NULL;
-        if (!curr)
-            curr = vfs_root_dentry;
-    } else {
-        curr = current ? current->fs.pwd : NULL;
-        if (!curr)
-            curr = vfs_root_dentry;
-    }
-
-    if (!curr)
+    /* Minimal symlink following:
+     * - Only supports absolute symlink targets (which is sufficient for sysfs links).
+     * - Caps recursion depth to avoid loops.
+     */
+    char cur_path[512];
+    uint32_t plen = (uint32_t)strlen(path);
+    if (plen >= sizeof(cur_path))
         return NULL;
+    memcpy(cur_path, path, plen + 1);
 
-    const char *p = path;
-    while (*p == '/') p++;
-
-    while (*p) {
-        const char *s = p;
-        while (*p && *p != '/') p++;
-        uint32_t len = (uint32_t)(p - s);
-
-        char part[128];
-        if (len >= sizeof(part))
-            return NULL;
-        memcpy(part, s, len);
-        part[len] = 0;
-
-        if (strcmp(part, ".") == 0) {
-            // curr stays the same
-        } else if (strcmp(part, "..") == 0) {
-            if (curr->parent) curr = curr->parent;
+    for (int depth = 0; depth < 8; depth++) {
+        struct dentry *curr;
+        if (cur_path[0] == '/') {
+            curr = current ? current->fs.root : NULL;
+            if (!curr)
+                curr = vfs_root_dentry;
         } else {
-            struct dentry *next = d_lookup(curr, part);
-            if (!next) {
-                // Not in cache, try underlying FS
-                if (curr->inode && curr->inode->f_ops && curr->inode->f_ops->finddir) {
-                    struct inode *child_inode = curr->inode->f_ops->finddir(curr->inode, part);
-                    if (child_inode) {
-                        next = d_alloc(curr, part);
-                        next->inode = child_inode;
-                    }
-                }
-            }
-            if (!next)
-                return NULL; // Not found
-            curr = next;
+            curr = current ? current->fs.pwd : NULL;
+            if (!curr)
+                curr = vfs_root_dentry;
         }
 
-        // Traverse mount point if it's mounted over
-        if (curr->mount && curr->mount->root)
-        curr = curr->mount->root;
+        if (!curr)
+            return NULL;
 
+        const char *p = cur_path;
         while (*p == '/') p++;
+
+        int restarted = 0;
+        while (*p) {
+            const char *s = p;
+            while (*p && *p != '/') p++;
+            uint32_t len = (uint32_t)(p - s);
+
+            char part[128];
+            if (len >= sizeof(part))
+                return NULL;
+            memcpy(part, s, len);
+            part[len] = 0;
+
+            if (strcmp(part, ".") == 0) {
+                // curr stays the same
+            } else if (strcmp(part, "..") == 0) {
+                if (curr->parent)
+                    curr = curr->parent;
+            } else {
+                struct dentry *next = d_lookup(curr, part);
+                if (!next) {
+                    /* Not in cache, try underlying FS. */
+                    if (curr->inode && curr->inode->f_ops && curr->inode->f_ops->finddir) {
+                        struct inode *child_inode = curr->inode->f_ops->finddir(curr->inode, part);
+                        if (child_inode) {
+                            next = d_alloc(curr, part);
+                            next->inode = child_inode;
+                        }
+                    }
+                }
+                if (!next)
+                    return NULL; // Not found
+                curr = next;
+            }
+
+            /* Traverse mount point if it's mounted over. */
+            if (curr->mount && curr->mount->root)
+                curr = curr->mount->root;
+
+            /* If this component resolves to a symlink, follow it. */
+            if (curr->inode && (curr->inode->flags == FS_SYMLINK) && curr->inode->f_ops && curr->inode->f_ops->read) {
+                char target[256];
+                uint32_t n = curr->inode->f_ops->read(curr->inode, 0, sizeof(target) - 1, (uint8_t *)target);
+                if (n == 0 || n >= sizeof(target))
+                    return NULL;
+                target[n] = 0;
+                if (target[0] != '/')
+                    return NULL; /* Only absolute targets supported. */
+
+                const char *rest = p;
+                while (*rest == '/')
+                    rest++;
+
+                char new_path[512];
+                uint32_t tlen = (uint32_t)strlen(target);
+                uint32_t rlen = (uint32_t)strlen(rest);
+                if (tlen + 1 + rlen + 1 > sizeof(new_path))
+                    return NULL;
+
+                memcpy(new_path, target, tlen);
+                uint32_t off = tlen;
+                if (rlen) {
+                    if (off && new_path[off - 1] != '/')
+                        new_path[off++] = '/';
+                    memcpy(new_path + off, rest, rlen);
+                    off += rlen;
+                }
+                new_path[off] = 0;
+
+                memcpy(cur_path, new_path, off + 1);
+                restarted = 1;
+                break;
+            }
+
+            while (*p == '/') p++;
+        }
+
+        if (!restarted)
+            return curr;
     }
 
-    return curr;
+    return NULL;
 }
 
 /* vfs_resolve: Implement vfs resolve. */

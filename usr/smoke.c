@@ -730,13 +730,14 @@ void test_pci_uevent() {
         fail("Could not read /sys/kernel/uevent");
         return;
     }
-    int count = count_substr(buf, n, "add pci");
-    int bind_count = count_substr(buf, n, "bind pci");
-    if (count == 0 && bind_count == 0)
+    int pci_any = count_substr(buf, n, "SUBSYSTEM=pci");
+    int count = count_substr(buf, n, "ACTION=add");
+    int bind_count = count_substr(buf, n, "ACTION=bind");
+    if (pci_any == 0 || (count == 0 && bind_count == 0))
         fail("No PCI add/bind events found");
     else if (count == 0)
         print("WARN: No PCI add events found.\n");
-    int bar_count = count_substr(buf, n, "bar pci");
+    int bar_count = count_substr(buf, n, "ACTION=bar");
     if (bar_count > 0) {
         print("PCI bar event count=");
         print_int(bar_count);
@@ -744,7 +745,7 @@ void test_pci_uevent() {
     } else {
         print("WARN: No PCI bar events found.\n");
     }
-    int bar_fail = count_substr(buf, n, "barfail pci");
+    int bar_fail = count_substr(buf, n, "ACTION=barfail");
     if (bar_fail > 0) {
         print("WARN: PCI bar fail count=");
         print_int(bar_fail);
@@ -756,19 +757,19 @@ void test_pci_uevent() {
         print_int(bridge_count);
         print("\n");
     }
-    int enable_count = count_substr(buf, n, "enable pci");
+    int enable_count = count_substr(buf, n, "ACTION=enable");
     if (enable_count > 0) {
         print("PCI enable event count=");
         print_int(enable_count);
         print("\n");
     }
-    int pcie_count = count_substr(buf, n, "pciecap pci");
+    int pcie_count = count_substr(buf, n, "ACTION=pciecap");
     if (pcie_count > 0) {
         print("PCIe capability count=");
         print_int(pcie_count);
         print("\n");
     }
-    int nvme_count = count_substr(buf, n, "nvme pci");
+    int nvme_count = count_substr(buf, n, "ACTION=nvme");
     if (nvme_count > 0) {
         print("NVMe class device count=");
         print_int(nvme_count);
@@ -876,7 +877,7 @@ void test_sysfs_layout() {
     }
 
     n = read_file("/sys/class/block/ram0/parent/type", buf, sizeof(buf));
-    if (n <= 0 || !contains(buf, n, "platform-root")) {
+    if (n <= 0 || !contains(buf, n, "virtual")) {
         fail("/sys/class/block/ram0/parent/type");
         ok = 0;
     }
@@ -906,7 +907,7 @@ void test_sysfs_bind_unbind_console() {
     print("\n--- Test 14: sysfs bind/unbind ---\n");
     int ok = 1;
     char buf[128];
-    int n = read_file("/sys/devices/platform/serial0/console/driver", buf, sizeof(buf));
+    int n = read_file("/sys/devices/platform/console0/driver", buf, sizeof(buf));
     if (n <= 0) {
         fail("read console driver");
         return;
@@ -914,23 +915,23 @@ void test_sysfs_bind_unbind_console() {
     if (!contains(buf, n, "console"))
         print("WARN: console not bound initially\n");
 
-    int w = write_file("/sys/bus/platform/drivers/console/unbind", "console\n", 8);
+    int w = write_file("/sys/bus/platform/drivers/console/unbind", "console0\n", 9);
     if (w <= 0) {
         fail("unbind console");
         return;
     }
-    n = read_file("/sys/devices/platform/serial0/console/driver", buf, sizeof(buf));
+    n = read_file("/sys/devices/platform/console0/driver", buf, sizeof(buf));
     if (n <= 0 || !contains(buf, n, "unbound")) {
         fail("console driver should be unbound");
         ok = 0;
     }
 
-    w = write_file("/sys/bus/platform/drivers/console/bind", "console\n", 8);
+    w = write_file("/sys/bus/platform/drivers/console/bind", "console0\n", 9);
     if (w <= 0) {
         fail("bind console");
         return;
     }
-    n = read_file("/sys/devices/platform/serial0/console/driver", buf, sizeof(buf));
+    n = read_file("/sys/devices/platform/console0/driver", buf, sizeof(buf));
     if (n <= 0 || !contains(buf, n, "console")) {
         fail("console driver should be bound");
         ok = 0;

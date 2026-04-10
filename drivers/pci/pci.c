@@ -1,5 +1,6 @@
 #include "linux/pci.h"
 #include "linux/pcie.h"
+#include "linux/kernel.h"
 #include "linux/libc.h"
 #include "linux/init.h"
 #include "linux/slab.h"
@@ -17,6 +18,19 @@ static uint32_t pci_io_alloc = 0x1000;
 static uint64_t pci_mem_alloc = 0x80000000;
 static uint64_t pci_pref_alloc = 0x90000000;
 static uint8_t pci_next_bus = 1;
+
+static void pci_device_release(struct device *dev)
+{
+    struct pci_dev *pdev = container_of(dev, struct pci_dev, dev);
+    kfree(pdev);
+}
+
+struct pci_dev *pci_get_pci_dev(struct device *dev)
+{
+    if (!dev || !dev->type || strcmp(dev->type, "pci"))
+        return NULL;
+    return container_of(dev, struct pci_dev, dev);
+}
 
 /* pci_align32: Implement PCI align32. */
 static uint32_t pci_align32(uint32_t val, uint32_t align)
@@ -120,14 +134,19 @@ static uint32_t pci_alloc_mem32(uint8_t bus, uint32_t size, int pref, int *ok)
 }
 
 /* pci_enable_device: Implement PCI enable device. */
-static void pci_enable_device(struct device *dev)
+static void pci_enable_device(struct pci_dev *pdev)
 {
-    uint16_t cmd = pci_config_read16_device(dev, 0x04);
+    if (!pdev)
+        return;
+    uint16_t cmd = 0;
+    if (pci_read_config_word(pdev, 0x04, &cmd) != 0)
+        return;
     cmd |= 0x0001;
     cmd |= 0x0002;
     cmd |= 0x0004;
-    pci_config_write32_device(dev, 0x04, (uint32_t)cmd);
-    device_uevent_emit("enable", dev);
+    if (pci_write_config_word(pdev, 0x04, cmd) != 0)
+        return;
+    device_uevent_emit("enable", &pdev->dev);
 }
 
 /* pci_config_addr: Implement PCI config addr. */
@@ -166,36 +185,48 @@ uint8_t pci_config_read8(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset)
     return (uint8_t)((val >> shift) & 0xFF);
 }
 
-/* pci_config_read32_device: Implement PCI config read32 device. */
-uint32_t pci_config_read32_device(struct device *dev, uint8_t offset)
+int pci_read_config_dword(struct pci_dev *pdev, uint8_t offset, uint32_t *value)
 {
-    if (!dev)
-        return 0xFFFFFFFF;
-    return pci_config_read32(dev->bus_num, dev->dev_num, dev->func_num, offset);
+    if (!pdev || !value)
+        return -1;
+    *value = pci_config_read32(pdev->bus, (uint8_t)(pdev->devfn >> 3), (uint8_t)(pdev->devfn & 0x7), offset);
+    return 0;
 }
 
-/* pci_config_read16_device: Implement PCI config read16 device. */
-uint16_t pci_config_read16_device(struct device *dev, uint8_t offset)
+int pci_read_config_word(struct pci_dev *pdev, uint8_t offset, uint16_t *value)
 {
-    if (!dev)
-        return 0xFFFF;
-    return pci_config_read16(dev->bus_num, dev->dev_num, dev->func_num, offset);
+    if (!pdev || !value)
+        return -1;
+    *value = pci_config_read16(pdev->bus, (uint8_t)(pdev->devfn >> 3), (uint8_t)(pdev->devfn & 0x7), offset);
+    return 0;
 }
 
-/* pci_config_read8_device: Implement PCI config read8 device. */
-uint8_t pci_config_read8_device(struct device *dev, uint8_t offset)
+int pci_read_config_byte(struct pci_dev *pdev, uint8_t offset, uint8_t *value)
 {
-    if (!dev)
-        return 0xFF;
-    return pci_config_read8(dev->bus_num, dev->dev_num, dev->func_num, offset);
+    if (!pdev || !value)
+        return -1;
+    *value = pci_config_read8(pdev->bus, (uint8_t)(pdev->devfn >> 3), (uint8_t)(pdev->devfn & 0x7), offset);
+    return 0;
 }
 
-/* pci_config_write32_device: Implement PCI config write32 device. */
-void pci_config_write32_device(struct device *dev, uint8_t offset, uint32_t value)
+int pci_write_config_word(struct pci_dev *pdev, uint8_t offset, uint16_t value)
 {
-    if (!dev)
-        return;
-    pci_config_write32(dev->bus_num, dev->dev_num, dev->func_num, offset, value);
+    if (!pdev)
+        return -1;
+    uint32_t old = pci_config_read32(pdev->bus, (uint8_t)(pdev->devfn >> 3), (uint8_t)(pdev->devfn & 0x7), offset);
+    uint8_t shift = (offset & 2) * 8;
+    old &= ~((uint32_t)0xFFFF << shift);
+    old |= ((uint32_t)value) << shift;
+    pci_config_write32(pdev->bus, (uint8_t)(pdev->devfn >> 3), (uint8_t)(pdev->devfn & 0x7), offset, old);
+    return 0;
+}
+
+int pci_write_config_dword(struct pci_dev *pdev, uint8_t offset, uint32_t value)
+{
+    if (!pdev)
+        return -1;
+    pci_config_write32(pdev->bus, (uint8_t)(pdev->devfn >> 3), (uint8_t)(pdev->devfn & 0x7), offset, value);
+    return 0;
 }
 
 /* pci_hex: Implement PCI hex. */
@@ -224,20 +255,22 @@ static void pci_make_name(char *buf, uint8_t bus, uint8_t dev, uint8_t func)
 
 static void pci_scan_bus(uint8_t bus);
 /* pci_assign_bridge_bus: Implement PCI assign bridge bus. */
-static uint8_t pci_assign_bridge_bus(struct device *pdev, uint8_t parent_bus)
+static uint8_t pci_assign_bridge_bus(struct pci_dev *pdev, uint8_t parent_bus)
 {
-    uint32_t bus_reg = pci_config_read32_device(pdev, 0x18);
+    uint32_t bus_reg = 0;
+    if (pci_read_config_dword(pdev, 0x18, &bus_reg) != 0)
+        return 0;
     uint8_t secondary = (uint8_t)((bus_reg >> 8) & 0xFF);
     if (secondary == 0 || secondary == parent_bus) {
         if (pci_next_bus == 0)
             return 0;
         secondary = pci_next_bus++;
         uint32_t new_reg = (bus_reg & 0xFF000000) | ((uint32_t)0xFF << 16) | ((uint32_t)secondary << 8) | parent_bus;
-        pci_config_write32_device(pdev, 0x18, new_reg);
-        device_uevent_emit("busnum", pdev);
+        pci_write_config_dword(pdev, 0x18, new_reg);
+        device_uevent_emit("busnum", &pdev->dev);
     }
     if (secondary)
-        pci_bus_parent[secondary] = pdev;
+        pci_bus_parent[secondary] = &pdev->dev;
     return secondary;
 }
 
@@ -256,49 +289,74 @@ static void pci_register_function(uint8_t bus, uint8_t dev, uint8_t func)
     uint8_t header = pci_config_read8(bus, dev, func, 0x0E) & 0x7F;
     char name[16];
     pci_make_name(name, bus, dev, func);
-    struct device *pdev = device_register_simple_full(name, "pci", pci_bus, NULL, NULL, vendor, device, class_id, subclass_id, prog_if, revision, bus, dev, func);
+    struct pci_dev *pdev = (struct pci_dev *)kmalloc(sizeof(*pdev));
     if (!pdev)
         return;
+    memset(pdev, 0, sizeof(*pdev));
+    device_initialize(&pdev->dev, name);
+    pdev->dev.release = pci_device_release;
+    pdev->dev.type = "pci";
+    pdev->dev.bus = pci_bus;
+
+    /* Cached fields (Linux-style naming) for compare/learning. */
+    pdev->vendor = vendor;
+    pdev->device = device;
+    pdev->class = class_id;
+    pdev->subclass = subclass_id;
+    pdev->prog_if = prog_if;
+    pdev->revision = revision;
+    pdev->bus = bus;
+    pdev->devfn = (uint8_t)((dev << 3) | (func & 0x7));
+
+    if (device_add(&pdev->dev) != 0) {
+        kobject_put(&pdev->dev.kobj);
+        return;
+    }
     if (pci_bus_parent[bus])
-        device_set_parent(pdev, pci_bus_parent[bus]);
+        device_set_parent(&pdev->dev, pci_bus_parent[bus]);
     if (class_id == 0x01 && subclass_id == 0x08)
-        device_uevent_emit("nvme", pdev);
+        device_uevent_emit("nvme", &pdev->dev);
     if (header == 0) {
         for (int i = 0; i < 6; i++) {
             uint8_t off = 0x10 + i * 4;
-            uint32_t orig = pci_config_read32_device(pdev, off);
+            uint32_t orig = 0;
+            pci_read_config_dword(pdev, off, &orig);
             pdev->bar[i] = orig;
             pdev->bar_size[i] = 0;
             if (orig == 0 || orig == 0xFFFFFFFF)
                 continue;
             if (orig & 0x1) {
-                pci_config_write32_device(pdev, off, 0xFFFFFFFF);
-                uint32_t mask = pci_config_read32_device(pdev, off);
-                pci_config_write32_device(pdev, off, orig);
+                pci_write_config_dword(pdev, off, 0xFFFFFFFF);
+                uint32_t mask = 0;
+                pci_read_config_dword(pdev, off, &mask);
+                pci_write_config_dword(pdev, off, orig);
                 uint32_t size = ~(mask & ~0x3) + 1;
                 pdev->bar_size[i] = size;
                 if (size) {
                     int ok = 0;
                     uint32_t base = pci_alloc_io(bus, size, &ok);
                     if (ok) {
-                        pci_config_write32_device(pdev, off, base | 0x1);
+                        pci_write_config_dword(pdev, off, base | 0x1);
                         pdev->bar[i] = base | 0x1;
-                        device_uevent_emit("bar", pdev);
+                        device_uevent_emit("bar", &pdev->dev);
                     } else {
-                        device_uevent_emit("barfail", pdev);
+                        device_uevent_emit("barfail", &pdev->dev);
                     }
                 }
                 continue;
             }
             uint8_t type = (orig >> 1) & 0x3;
             if (type == 2 && i + 1 < 6) {
-                uint32_t orig_high = pci_config_read32_device(pdev, off + 4);
-                pci_config_write32_device(pdev, off, 0xFFFFFFFF);
-                pci_config_write32_device(pdev, off + 4, 0xFFFFFFFF);
-                uint32_t mask_low = pci_config_read32_device(pdev, off);
-                uint32_t mask_high = pci_config_read32_device(pdev, off + 4);
-                pci_config_write32_device(pdev, off, orig);
-                pci_config_write32_device(pdev, off + 4, orig_high);
+                uint32_t orig_high = 0;
+                uint32_t mask_low = 0;
+                uint32_t mask_high = 0;
+                pci_read_config_dword(pdev, off + 4, &orig_high);
+                pci_write_config_dword(pdev, off, 0xFFFFFFFF);
+                pci_write_config_dword(pdev, off + 4, 0xFFFFFFFF);
+                pci_read_config_dword(pdev, off, &mask_low);
+                pci_read_config_dword(pdev, off + 4, &mask_high);
+                pci_write_config_dword(pdev, off, orig);
+                pci_write_config_dword(pdev, off + 4, orig_high);
                 uint64_t mask = ((uint64_t)mask_high << 32) | (mask_low & ~0xF);
                 uint64_t size64 = (~mask) + 1;
                 pdev->bar[i + 1] = orig_high;
@@ -310,31 +368,32 @@ static void pci_register_function(uint8_t bus, uint8_t dev, uint8_t func)
                     if (ok) {
                         uint32_t base_low = (uint32_t)(base64 & 0xFFFFFFFF);
                         uint32_t base_high = (uint32_t)(base64 >> 32);
-                        pci_config_write32_device(pdev, off, base_low);
-                        pci_config_write32_device(pdev, off + 4, base_high);
+                        pci_write_config_dword(pdev, off, base_low);
+                        pci_write_config_dword(pdev, off + 4, base_high);
                         pdev->bar[i] = base_low;
                         pdev->bar[i + 1] = base_high;
-                        device_uevent_emit("bar", pdev);
+                        device_uevent_emit("bar", &pdev->dev);
                     } else {
-                        device_uevent_emit("barfail", pdev);
+                        device_uevent_emit("barfail", &pdev->dev);
                     }
                 }
                 i++;
             } else {
-                pci_config_write32_device(pdev, off, 0xFFFFFFFF);
-                uint32_t mask = pci_config_read32_device(pdev, off);
-                pci_config_write32_device(pdev, off, orig);
+                pci_write_config_dword(pdev, off, 0xFFFFFFFF);
+                uint32_t mask = 0;
+                pci_read_config_dword(pdev, off, &mask);
+                pci_write_config_dword(pdev, off, orig);
                 uint32_t size = ~(mask & ~0xF) + 1;
                 pdev->bar_size[i] = size;
                 if (size) {
                     int ok = 0;
                     uint32_t base = pci_alloc_mem32(bus, size, (orig & 0x8) != 0, &ok);
                     if (ok) {
-                        pci_config_write32_device(pdev, off, base);
+                        pci_write_config_dword(pdev, off, base);
                         pdev->bar[i] = base;
-                        device_uevent_emit("bar", pdev);
+                        device_uevent_emit("bar", &pdev->dev);
                     } else {
-                        device_uevent_emit("barfail", pdev);
+                        device_uevent_emit("barfail", &pdev->dev);
                     }
                 }
             }
@@ -415,6 +474,92 @@ static void pci_scan_bus(uint8_t bus)
         pci_scan_device(bus, dev);
 }
 
+static int pci_match_one(const struct pci_device_id *id, struct pci_dev *pdev)
+{
+    if (!id || !pdev)
+        return 0;
+    if (id->vendor != PCI_ANY_ID && id->vendor != (uint32_t)pdev->vendor)
+        return 0;
+    if (id->device != PCI_ANY_ID && id->device != (uint32_t)pdev->device)
+        return 0;
+    if (id->class_mask) {
+        uint32_t cls = ((uint32_t)pdev->class << 16) | ((uint32_t)pdev->subclass << 8) | (uint32_t)pdev->prog_if;
+        if ((cls & id->class_mask) != (id->class & id->class_mask))
+            return 0;
+    }
+    return 1;
+}
+
+static int pci_bus_match(struct device *dev, struct device_driver *drv)
+{
+    if (!dev || !drv)
+        return 0;
+    struct pci_dev *pdev = pci_get_pci_dev(dev);
+    if (!pdev)
+        return 0;
+    struct pci_driver *pdrv = container_of(drv, struct pci_driver, driver);
+    if (!pdrv || pdrv->magic != LITE_PCI_DRIVER_MAGIC || !pdrv->id_table)
+        return 0;
+    const struct pci_device_id *id = pdrv->id_table;
+    while (id->vendor || id->device || id->class || id->class_mask) {
+        if (pci_match_one(id, pdev))
+            return 1;
+        id++;
+    }
+    return 0;
+}
+
+static int pci_driver_probe(struct device *dev)
+{
+    if (!dev || !dev->driver)
+        return -1;
+    struct pci_dev *pdev = pci_get_pci_dev(dev);
+    if (!pdev)
+        return -1;
+    struct pci_driver *pdrv = container_of(dev->driver, struct pci_driver, driver);
+    if (!pdrv || !pdrv->probe || !pdrv->id_table)
+        return 0;
+
+    const struct pci_device_id *id = pdrv->id_table;
+    while (id->vendor || id->device || id->class || id->class_mask) {
+        if (pci_match_one(id, pdev))
+            return pdrv->probe(pdev, id);
+        id++;
+    }
+    return 0;
+}
+
+static void pci_driver_remove(struct device *dev)
+{
+    if (!dev || !dev->driver)
+        return;
+    struct pci_dev *pdev = pci_get_pci_dev(dev);
+    if (!pdev)
+        return;
+    struct pci_driver *pdrv = container_of(dev->driver, struct pci_driver, driver);
+    if (pdrv && pdrv->remove)
+        pdrv->remove(pdev);
+}
+
+int pci_register_driver(struct pci_driver *drv)
+{
+    if (!drv || !drv->name)
+        return -1;
+    if (!pci_bus)
+        return -1;
+    drv->magic = LITE_PCI_DRIVER_MAGIC;
+    init_driver(&drv->driver, drv->name, pci_bus, pci_driver_probe);
+    drv->driver.remove = pci_driver_remove;
+    return driver_register(&drv->driver);
+}
+
+int pci_unregister_driver(struct pci_driver *drv)
+{
+    if (!drv)
+        return -1;
+    return driver_unregister(&drv->driver);
+}
+
 /* device_model_pci_bus: Implement device model PCI bus. */
 struct bus_type *device_model_pci_bus(void)
 {
@@ -426,7 +571,7 @@ static int pci_init(void)
 {
     if (pci_bus)
         return 0;
-    pci_bus = bus_register("pci", NULL);
+    pci_bus = bus_register("pci", pci_bus_match);
     if (!pci_bus)
         return -1;
     memset(pci_bus_scanned, 0, sizeof(pci_bus_scanned));
@@ -438,7 +583,7 @@ static int pci_init(void)
     memset(pci_bus_pref_base, 0, sizeof(pci_bus_pref_base));
     memset(pci_bus_pref_limit, 0, sizeof(pci_bus_pref_limit));
     pci_next_bus = 1;
-    struct device *root = device_register_simple_full("pci0000:00", "pci-root", pci_bus, NULL, NULL, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    struct device *root = device_register_simple("pci0000:00", "pci-root", pci_bus, NULL);
     if (root)
         pci_bus_parent[0] = root;
     pci_scan_bus(0);

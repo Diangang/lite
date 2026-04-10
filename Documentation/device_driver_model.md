@@ -46,6 +46,13 @@ Lite 的关键动作是“注册（register）”与“绑定（bind/probe）”
 Lite 内核侧会追加文本事件到一个缓冲区，并通过 sysfs 暴露给用户态读取：
 - `/sys/kernel/uevent`（只做可观测，不做 udev/hotplug 自动动作）
 
+当前 uevent 的基本格式已对齐到 Linux 风格 env（多行 `KEY=VALUE`，事件之间用空行分隔），最小包含：
+- `ACTION`
+- `DEVPATH`
+- `SUBSYSTEM`
+- `MODALIAS`
+- `DEVNAME` / `MAJOR` / `MINOR`（若该 device 有 devt）
+
 实现参考：
 - [core.c](file:///data25/lidg/lite/drivers/base/core.c#L338-L386)
 - [sysfs.c](file:///data25/lidg/lite/fs/sysfs/sysfs.c#L89-L94)
@@ -101,6 +108,7 @@ platform bus 的定位：
 所以：
 - `/sys/bus` 不是“设备树”
 - 它是“总线类型索引”
+ - 在 Linux 中 `/sys/bus/<bus>/devices/*` 通常是指向 `/sys/devices` 的 symlink；Lite 目前也采用 symlink 语义把 bus 视图指向真实 device 目录。
 
 ### 5.3 `/sys/class`：面向用户语义的设备分组
 
@@ -111,6 +119,7 @@ platform bus 的定位：
 例如：
 - 一个 NVMe namespace 最终会在 `/sys/class/block` 或 `/sys/block` 里呈现为块设备
 - 但它的控制器来源仍然是 PCI bus
+ - 在 Linux 中 `/sys/class/<class>/*` 通常也是指向 `/sys/devices` 的 symlink；Lite 同样把 class 视图指向真实 device 目录。
 
 ### 5.4 一句话区分三者
 

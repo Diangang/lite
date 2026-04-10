@@ -72,11 +72,11 @@ uint32_t task_dump_fd_pid(uint32_t pid, uint32_t fd, char *buf, uint32_t len)
         return 0;
     if (fd >= TASK_FD_MAX)
         return 0;
-    if (!t->files.fd[fd].used || !t->files.fd[fd].file || !t->files.fd[fd].file->dentry->inode)
+    if (!t->files.fdt.used[fd] || !t->files.fdt.fd[fd] || !t->files.fdt.fd[fd]->dentry->inode)
         return 0;
 
     uint32_t off = 0;
-    proc_buf_append(buf, &off, len, t->files.fd[fd].file->dentry->name);
+    proc_buf_append(buf, &off, len, t->files.fdt.fd[fd]->dentry->name);
     proc_buf_append(buf, &off, len, "\n");
 
     if (off < len)

@@ -1,6 +1,7 @@
 #include "linux/device.h"
 #include "linux/init.h"
 #include "linux/libc.h"
+#include "linux/pci.h"
 #include "linux/vmalloc.h"
 #include "linux/slab.h"
 #include "linux/blkdev.h"
@@ -43,7 +44,7 @@ struct nvme_queue {
 };
 
 struct nvme_controller {
-    struct device *dev;
+    struct pci_dev *pdev;
     void *mmio;
     uint64_t cap;
     uint32_t vs;
@@ -63,13 +64,23 @@ struct nvme_namespace {
     struct gendisk *disk;
 };
 
-static struct device_driver drv_nvme;
 static struct nvme_controller *nvme_ctrl;
 static struct nvme_namespace *nvme_ns;
 
-static const struct device_id nvme_ids[] = {
-    { .type = "pci", .class_id = 0x01, .subclass_id = 0x08 },
+static const struct pci_device_id nvme_pci_ids[] = {
+    /* Match NVMe controller class: base=0x01, sub=0x08, prog_if=any. */
+    { .vendor = PCI_ANY_ID, .device = PCI_ANY_ID, .class = 0x010800, .class_mask = 0xFFFF00 },
     { 0 }
+};
+
+static int nvme_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id);
+static void nvme_pci_remove(struct pci_dev *pdev);
+
+static struct pci_driver nvme_pci_driver = {
+    .name = "nvme",
+    .id_table = nvme_pci_ids,
+    .probe = nvme_pci_probe,
+    .remove = nvme_pci_remove,
 };
 
 
@@ -114,7 +125,7 @@ static int nvme_init_namespace(struct nvme_controller *ctrl)
         return -1;
     }
 
-    if (!block_register_disk(ns->disk, ctrl->dev)) {
+    if (!block_register_disk(ns->disk, &ctrl->pdev->dev)) {
         printf("NVMe init namespace: failed to register device\n");
         kfree(ns->disk);
         kfree(ns->bdev);
@@ -127,14 +138,14 @@ static int nvme_init_namespace(struct nvme_controller *ctrl)
     return 0;
 }
 
-/* nvme_probe: Implement NVMe probe. */
-static int nvme_probe(struct device *dev)
+static int nvme_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
-    if (!dev) {
-        printf("NVMe probe: device is NULL\n");
+    (void)id;
+    if (!pdev) {
+        printf("NVMe probe: pci_dev is NULL\n");
         return -1;
     }
-    device_uevent_emit("nvmebind", dev);
+    device_uevent_emit("nvmebind", &pdev->dev);
 
     // Skip MMIO mapping and controller initialization for testing
     // Just create the block device directly
@@ -147,7 +158,7 @@ static int nvme_probe(struct device *dev)
         return 0;
     }
 
-    ctrl->dev = dev;
+    ctrl->pdev = pdev;
     ctrl->mmio = NULL;
     ctrl->cap = 0;
     ctrl->vs = 0;
@@ -163,26 +174,26 @@ static int nvme_probe(struct device *dev)
     if (ret != 0) {
         printf("NVMe probe: namespace initialization failed with ret=%d\n", ret);
         kfree(ctrl);
-        device_uevent_emit("nvmenamespacefail", dev);
+        device_uevent_emit("nvmenamespacefail", &pdev->dev);
         return 0;
     }
     printf("NVMe probe: namespace initialization success\n");
 
     nvme_ctrl = ctrl;
     printf("NVMe controller initialized successfully (testing mode)\n");
-    device_uevent_emit("nvmeinit", dev);
+    device_uevent_emit("nvmeinit", &pdev->dev);
 
     return 0;
+}
+
+static void nvme_pci_remove(struct pci_dev *pdev)
+{
+    (void)pdev;
 }
 
 /* nvme_driver_init: Initialize NVMe driver. */
 static int nvme_driver_init(void)
 {
-    struct bus_type *pci = device_model_pci_bus();
-    if (!pci)
-        return -1;
-    init_driver_ids(&drv_nvme, "nvme", pci, nvme_ids, nvme_probe);
-    driver_register(&drv_nvme);
-    return 0;
+    return pci_register_driver(&nvme_pci_driver);
 }
 module_init(nvme_driver_init);

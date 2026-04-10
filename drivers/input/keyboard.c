@@ -2,6 +2,7 @@
 #include "linux/tty.h"
 #include "linux/libc.h"
 #include "linux/init.h"
+#include "linux/platform_device.h"
 
 /* US Keyboard Layout Scancode Table (Set 1) */
 unsigned char kbdus[256] =
@@ -56,8 +57,7 @@ struct pt_regs *keyboard_callback(struct pt_regs *regs)
     return regs;
 }
 
-/* keyboard_driver_init: Initialize keyboard driver. */
-static int keyboard_driver_init(void)
+static int keyboard_hw_init(void)
 {
     /* Register IRQ1 (INT 33) handler */
     register_interrupt_handler(IRQ1, keyboard_callback);
@@ -93,5 +93,29 @@ static int keyboard_driver_init(void)
 
     printf("Keyboard driver initialized.\n");
     return 0;
+}
+
+static int i8042_platform_probe(struct platform_device *pdev)
+{
+    (void)pdev;
+    return keyboard_hw_init();
+}
+
+static const struct platform_device_id i8042_platform_ids[] = {
+    { .name = "i8042", .driver_data = 0 },
+    { .name = NULL, .driver_data = 0 }
+};
+
+static struct platform_driver i8042_platform_driver = {
+    .name = "i8042",
+    .id_table = i8042_platform_ids,
+    .probe = i8042_platform_probe,
+    .remove = NULL,
+};
+
+/* keyboard_driver_init: Initialize keyboard driver. */
+static int keyboard_driver_init(void)
+{
+    return platform_driver_register(&i8042_platform_driver);
 }
 module_init(keyboard_driver_init);

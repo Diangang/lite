@@ -1,19 +1,23 @@
 #include "linux/kobject.h"
+#include "linux/kernel.h"
 #include "linux/libc.h"
-
-#define OFFSETOF(type, member) ((uint32_t)(&((type*)0)->member))
-#define CONTAINER_OF(ptr, type, member) ((type*)((uint8_t*)(ptr) - OFFSETOF(type, member)))
 
 /* kobject_release: Implement kobject release. */
 static void kobject_release(struct kref *kref)
 {
-    struct kobject *kobj = CONTAINER_OF(kref, struct kobject, kref);
+    struct kobject *kobj = container_of(kref, struct kobject, kref);
     if (kobj->release)
         kobj->release(kobj);
 }
 
 /* kobject_init: Initialize kobject. */
 void kobject_init(struct kobject *kobj, const char *name, void (*release)(struct kobject *))
+{
+    kobject_init_with_ktype(kobj, name, NULL, release);
+}
+
+void kobject_init_with_ktype(struct kobject *kobj, const char *name, struct kobj_type *ktype,
+                             void (*release)(struct kobject *))
 {
     if (!kobj)
         return;
@@ -26,8 +30,9 @@ void kobject_init(struct kobject *kobj, const char *name, void (*release)(struct
         kobj->name[n] = 0;
     }
     kref_init(&kobj->kref);
-    kobj->ktype = NULL;
-    kobj->release = release;
+    kobj->ktype = ktype;
+    kobj->sd = NULL;
+    kobj->release = release ? release : (ktype ? ktype->release : NULL);
     INIT_LIST_HEAD(&kobj->entry);
 }
 

@@ -7,15 +7,16 @@ struct file;
 struct inode;
 struct task_struct;
 
-struct fd_struct {
-    int used;
-    struct file *file;
-};
-
 enum { TASK_FD_MAX = 32 };
 
+/* Linux-compatible naming: per-task file descriptor table. */
+struct fdtable {
+    int used[TASK_FD_MAX];
+    struct file *fd[TASK_FD_MAX];
+};
+
 struct files_struct {
-    struct fd_struct fd[TASK_FD_MAX];
+    struct fdtable fdt;
 };
 
 void files_init(struct task_struct *task);

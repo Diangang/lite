@@ -2,6 +2,7 @@
 #include "asm/idt.h"
 #include "asm/multiboot.h"
 #include "linux/device.h"
+#include "linux/platform_device.h"
 #include "linux/init.h"
 #include "linux/libc.h"
 
@@ -16,7 +17,9 @@ static int x86_platform_devices_init(void)
     if (!platform)
         return -1;
 
-    device_register_simple("serial0", "serial", platform, NULL);
+    platform_device_register_simple("serial", 0);
+    platform_device_register_simple("i8042", 0);
+    platform_device_register_simple("console", 0);
 
     return 0;
 }

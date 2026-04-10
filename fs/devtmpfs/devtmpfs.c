@@ -183,19 +183,27 @@ static int devtmpfs_remove_node(const char *name)
 /* devtmpfs_add_for_device: Implement devtmpfs add for device. */
 static void devtmpfs_add_for_device(struct device *dev)
 {
-    if (!dev || !dev->kobj.name[0])
+    if (!dev)
         return;
-    if (!strcmp(dev->kobj.name, "console"))
-        devtmpfs_add_node("console", &dev_console);
-    if (!strcmp(dev->kobj.name, "tty"))
-        devtmpfs_add_node("tty", &dev_tty);
-    if (!strcmp(dev->kobj.name, "ttyS0"))
-        devtmpfs_add_node("ttyS0", &dev_tty);
+    if (!dev->devnode_name || !dev->devnode_name[0])
+        return;
+
     if (dev->type && !strcmp(dev->type, "block")) {
         struct gendisk *disk = gendisk_from_dev(dev);
         struct inode *inode = disk ? blockdev_inode_create(disk->bdev) : NULL;
         if (inode)
-            devtmpfs_add_node(dev->kobj.name, inode);
+            devtmpfs_add_node(dev->devnode_name, inode);
+        return;
+    }
+
+    /* Minimal char device dispatch: only tty-like and console are supported. */
+    if (dev->dev_major == 5 && dev->dev_minor == 1) {
+        devtmpfs_add_node(dev->devnode_name, &dev_console);
+        return;
+    }
+    if (dev->dev_major == 4 || (dev->dev_major == 5 && dev->dev_minor == 0)) {
+        devtmpfs_add_node(dev->devnode_name, &dev_tty);
+        return;
     }
 }
 
@@ -212,14 +220,8 @@ void devtmpfs_unregister_device(struct device *dev)
 {
     if (!devtmpfs_ready || !dev)
         return;
-    if (!strcmp(dev->kobj.name, "console"))
-        devtmpfs_remove_node("console");
-    if (!strcmp(dev->kobj.name, "tty"))
-        devtmpfs_remove_node("tty");
-    if (!strcmp(dev->kobj.name, "ttyS0"))
-        devtmpfs_remove_node("ttyS0");
-    if (dev->type && !strcmp(dev->type, "block"))
-        devtmpfs_remove_node(dev->kobj.name);
+    if (dev->devnode_name && dev->devnode_name[0])
+        devtmpfs_remove_node(dev->devnode_name);
 }
 
 /* devtmpfs_fill_super: Implement devtmpfs fill super. */

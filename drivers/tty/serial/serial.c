@@ -1,5 +1,6 @@
 #include "linux/console.h"
 #include "linux/device.h"
+#include "linux/platform_device.h"
 #include "linux/libc.h"
 #include "linux/tty.h"
 #include "linux/init.h"
@@ -22,12 +23,7 @@ static struct console serial_console = {
     .next = (struct console *)0,
 };
 
-static struct device_driver drv_serial;
 static struct tty_driver tty_serial_driver;
-static const struct device_id serial_ids[] = {
-    { .name = "serial0", .type = "serial" },
-    { .name = NULL, .type = NULL }
-};
 
 /* is_transmit_empty: Implement is transmit empty. */
 static int is_transmit_empty() {
@@ -74,15 +70,30 @@ static int serial_probe(struct device *dev)
    return 0;
 }
 
+static int serial_platform_probe(struct platform_device *pdev)
+{
+   if (!pdev)
+      return -1;
+   return serial_probe(&pdev->dev);
+}
+
+static const struct platform_device_id serial_platform_ids[] = {
+   { .name = "serial", .driver_data = 0 },
+   { .name = NULL, .driver_data = 0 }
+};
+
+static struct platform_driver serial_platform_driver = {
+   .name = "serial",
+   .id_table = serial_platform_ids,
+   .probe = serial_platform_probe,
+   .remove = NULL,
+};
+
 /* Full Serial Driver Initialization */
 static int serial_driver_init(void) {
-   struct bus_type *platform = device_model_platform_bus();
-   if (!platform)
-      return -1;
    if (tty_register_driver(&tty_serial_driver, "serial", 1) != 0)
       return -1;
-   init_driver_ids(&drv_serial, "serial", platform, serial_ids, serial_probe);
-   if (driver_register(&drv_serial) != 0)
+   if (platform_driver_register(&serial_platform_driver) != 0)
       return -1;
    struct device *parent = device_model_find_device("serial0");
    if (!parent)

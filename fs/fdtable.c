@@ -8,8 +8,8 @@ void files_init(struct task_struct *task)
     if (!task)
         return;
     for (int i = 0; i < TASK_FD_MAX; i++) {
-        task->files.fd[i].used = 0;
-        task->files.fd[i].file = NULL;
+        task->files.fdt.used[i] = 0;
+        task->files.fdt.fd[i] = NULL;
     }
 }
 
@@ -19,11 +19,11 @@ void files_close_all(struct task_struct *task)
     if (!task)
         return;
     for (int i = 0; i < TASK_FD_MAX; i++) {
-        if (task->files.fd[i].used) {
-            if (task->files.fd[i].file)
-                file_close(task->files.fd[i].file);
-            task->files.fd[i].used = 0;
-            task->files.fd[i].file = NULL;
+        if (task->files.fdt.used[i]) {
+            if (task->files.fdt.fd[i])
+                file_close(task->files.fdt.fd[i]);
+            task->files.fdt.used[i] = 0;
+            task->files.fdt.fd[i] = NULL;
         }
     }
 }
@@ -34,9 +34,9 @@ void files_clone(struct task_struct *dst, struct task_struct *src)
     if (!dst || !src)
         return;
     for (int i = 0; i < TASK_FD_MAX; i++) {
-        if (src->files.fd[i].used && src->files.fd[i].file) {
-            dst->files.fd[i].used = 1;
-            dst->files.fd[i].file = file_dup(src->files.fd[i].file);
+        if (src->files.fdt.used[i] && src->files.fdt.fd[i]) {
+            dst->files.fdt.used[i] = 1;
+            dst->files.fdt.fd[i] = file_dup(src->files.fdt.fd[i]);
         }
     }
 }
@@ -47,9 +47,9 @@ int get_unused_fd(struct file *file)
     if (!current || !file)
         return -1;
     for (int i = 3; i < TASK_FD_MAX; i++) {
-        if (!current->files.fd[i].used) {
-            current->files.fd[i].used = 1;
-            current->files.fd[i].file = file;
+        if (!current->files.fdt.used[i]) {
+            current->files.fdt.used[i] = 1;
+            current->files.fdt.fd[i] = file;
             return i;
         }
     }
@@ -63,11 +63,11 @@ struct file *fget(int fd)
         return NULL;
     if (fd < 0 || fd >= TASK_FD_MAX)
         return NULL;
-    if (!current->files.fd[fd].used)
+    if (!current->files.fdt.used[fd])
         return NULL;
-    if (!current->files.fd[fd].file)
+    if (!current->files.fdt.fd[fd])
         return NULL;
-    return current->files.fd[fd].file;
+    return current->files.fdt.fd[fd];
 }
 
 /* close_fd: Close fd. */
@@ -79,8 +79,8 @@ int close_fd(int fd)
     if (!f)
         return -1;
     file_close(f);
-    current->files.fd[fd].used = 0;
-    current->files.fd[fd].file = NULL;
+    current->files.fdt.used[fd] = 0;
+    current->files.fdt.fd[fd] = NULL;
     return 0;
 }
 
@@ -92,12 +92,12 @@ void install_stdio(struct inode *console)
     if (!console)
         return;
 
-    current->files.fd[0].used = 1;
-    current->files.fd[0].file = file_open_node(console, 0);
+    current->files.fdt.used[0] = 1;
+    current->files.fdt.fd[0] = file_open_node(console, 0);
 
-    current->files.fd[1].used = 1;
-    current->files.fd[1].file = file_open_node(console, 0);
+    current->files.fdt.used[1] = 1;
+    current->files.fdt.fd[1] = file_open_node(console, 0);
 
-    current->files.fd[2].used = 1;
-    current->files.fd[2].file = file_open_node(console, 0);
+    current->files.fdt.used[2] = 1;
+    current->files.fdt.fd[2] = file_open_node(console, 0);
 }

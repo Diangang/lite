@@ -48,13 +48,29 @@ struct device *block_register_disk(struct gendisk *disk, struct device *parent)
 {
     if (!disk || !disk->bdev)
         return NULL;
-    struct bus_type *bus = device_model_platform_bus();
     struct class *cls = device_model_block_class();
-    if (!bus || !cls)
+    if (!cls)
         return NULL;
-    struct device *dev = device_register_simple_class_parent(disk->disk_name, "block", bus, cls, parent, disk);
+
+    /*
+     * Linux-like layout:
+     * - "virtual" block devices (e.g. ram0) live under /sys/devices/virtual/block/
+     * - hardware-backed block devices live under their real parent (PCI/platform device)
+     */
+    struct device *root = device_model_platform_root();
+    if (root && parent == root) {
+        struct device *vblk = device_model_virtual_subsys("block");
+        if (vblk)
+            parent = vblk;
+    }
+
+    /* Class device: no bus. */
+    struct device *dev = device_register_simple_class_parent(disk->disk_name, "block", NULL, cls, parent, disk);
     if (!dev)
         return NULL;
+    dev->dev_major = disk->major;
+    dev->dev_minor = disk->minor;
+    dev->devnode_name = disk->disk_name;
     disk->dev = dev;
     disk->parent = parent;
     return dev;

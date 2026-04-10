@@ -42,13 +42,18 @@ core_initcall(tty_class_init);
 
 static int tty_device_init(void)
 {
-    struct bus_type *platform = device_model_platform_bus();
     struct class *cls = device_model_tty_class();
-    struct device *parent = device_model_platform_root();
-    if (!platform || !cls || !parent)
+    struct device *parent = device_model_virtual_subsys("tty");
+    if (!cls || !parent)
         return -1;
-    if (!device_register_simple_class_parent("tty", "tty", platform, cls, parent, NULL))
+    /* Linux-like: /dev/tty is a class device (no bus). */
+    struct device *dev = device_register_simple_class_parent("tty", "tty", NULL, cls, parent, NULL);
+    if (!dev)
         return -1;
+    /* Provide a stable devtmpfs key: /dev/tty (Linux uses 5:0). */
+    dev->dev_major = 5;
+    dev->dev_minor = 0;
+    dev->devnode_name = dev->kobj.name;
     return 0;
 }
 device_initcall(tty_device_init);
@@ -78,11 +83,10 @@ struct device *tty_register_device(struct tty_driver *drv, uint32_t index, struc
 {
     if (!drv || !name || index >= drv->num)
         return NULL;
-    struct bus_type *platform = device_model_platform_bus();
     struct class *cls = device_model_tty_class();
-    if (!platform || !cls)
+    if (!cls)
         return NULL;
-    struct tty_device *ttydev = (struct tty_device *)kmalloc(sizeof(*ttydev));
+    struct tty_port *ttydev = (struct tty_port *)kmalloc(sizeof(*ttydev));
     if (!ttydev)
         return NULL;
     memset(ttydev, 0, sizeof(*ttydev));
@@ -96,19 +100,26 @@ struct device *tty_register_device(struct tty_driver *drv, uint32_t index, struc
     ttydev->major = 4;
     ttydev->minor = 64 + index;
     ttydev->driver_data = data;
-    struct device *dev = device_register_simple_class_parent(name, "tty", platform, cls, parent, ttydev);
+    /*
+     * Linux-like: tty line devices are class devices. They may sit under a
+     * real parent device in /sys/devices, but do not belong to a bus view.
+     */
+    struct device *dev = device_register_simple_class_parent(name, "tty", NULL, cls, parent, ttydev);
     if (!dev) {
         kfree(ttydev);
         return NULL;
     }
+    dev->dev_major = ttydev->major;
+    dev->dev_minor = ttydev->minor;
+    dev->devnode_name = ttydev->name;
     return dev;
 }
 
-struct tty_device *tty_device_from_dev(struct device *dev)
+struct tty_port *tty_port_from_dev(struct device *dev)
 {
     if (!dev || !dev->type || strcmp(dev->type, "tty"))
         return NULL;
-    return (struct tty_device *)dev->driver_data;
+    return (struct tty_port *)dev->driver_data;
 }
 
 /* tty_init: Initialize TTY. */
