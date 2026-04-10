@@ -171,6 +171,7 @@ static struct file_operations ramfs_dir_ops = {
     .close = NULL,
     .readdir = generic_readdir,
     .finddir = NULL,
+    .create = ramfs_create_child,
     .ioctl = NULL,
     .unlink = ramfs_unlink,
     .rmdir = ramfs_rmdir
@@ -183,6 +184,7 @@ static struct file_operations ramfs_file_ops = {
     .close = NULL,
     .readdir = NULL,
     .finddir = NULL,
+    .create = NULL,
     .ioctl = NULL
 };
 

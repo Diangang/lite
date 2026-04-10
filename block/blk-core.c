@@ -25,6 +25,36 @@ int submit_bio(struct bio *bio)
     return ret;
 }
 
+struct request_queue *blk_init_queue(request_fn_t request_fn, void *queuedata)
+{
+    if (!request_fn)
+        return NULL;
+    struct request_queue *q = (struct request_queue *)kmalloc(sizeof(*q));
+    if (!q)
+        return NULL;
+    q->make_request_fn = NULL;
+    q->request_fn = request_fn;
+    q->head = NULL;
+    q->tail = NULL;
+    q->queuedata = queuedata;
+    q->running = 0;
+    return q;
+}
+
+void blk_cleanup_queue(struct request_queue *q)
+{
+    if (!q)
+        return;
+    /* Drop any pending requests as failed. */
+    while (1) {
+        struct request *rq = blk_fetch_request(q);
+        if (!rq)
+            break;
+        blk_complete_request(q, rq, -1);
+    }
+    kfree(q);
+}
+
 /* generic_make_request: Implement generic make request. */
 int generic_make_request(struct bio *bio)
 {
@@ -52,7 +82,15 @@ int generic_make_request(struct bio *bio)
             q->tail->next = rq;
             q->tail = rq;
         }
-        q->request_fn(q);
+        /*
+         * Run the queue synchronously in the submitter context (simplest single-queue).
+         * Prevent recursive entry if request_fn triggers nested submit_bio().
+         */
+        if (!q->running) {
+            q->running = 1;
+            q->request_fn(q);
+            q->running = 0;
+        }
         return 0;
     }
     if (!q->make_request_fn) {

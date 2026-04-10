@@ -27,6 +27,7 @@ struct file_operations {
     void (*close)(struct inode*);
     struct dirent * (*readdir)(struct file*, uint32_t);
     struct inode * (*finddir)(struct inode*, const char *name);
+    struct inode * (*create)(struct inode*, const char *name, uint32_t type);
     int (*ioctl)(struct inode*, uint32_t, uint32_t);
     int (*unlink)(struct dentry *dir_dentry, const char *name);
     int (*rmdir)(struct dentry *dir_dentry, const char *name);

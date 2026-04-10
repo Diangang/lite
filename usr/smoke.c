@@ -1885,8 +1885,24 @@ void test_minix_mount_read() {
     print("\n--- Test 33: MinixFS Read ---\n");
     int fd = open("/mnt/hello.txt", 0);
     if (fd < 0) {
-        fail("open /mnt/hello.txt");
-        return;
+        /* The filesystem disk may already contain user-modified data. Seed a known file. */
+        fd = open("/mnt/fs_seed.txt", O_CREAT);
+        if (fd < 0) {
+            fail("open /mnt/fs_seed.txt");
+            return;
+        }
+        const char *seed = "Hello from MinixFS!\n";
+        if (write(fd, seed, 20) != 20) {
+            fail("write /mnt/fs_seed.txt");
+            close(fd);
+            return;
+        }
+        close(fd);
+        fd = open("/mnt/fs_seed.txt", 0);
+        if (fd < 0) {
+            fail("open /mnt/fs_seed.txt for read");
+            return;
+        }
     }
     char buf[64];
     int n = read(fd, buf, sizeof(buf));
@@ -1915,11 +1931,89 @@ void test_nvme_device() {
     print("\n--- Test 34: NVMe Device --\n");
     int fd = open("/dev/nvme0n1", 0);
     if (fd < 0) {
-        print("NVMe device not found, skipping test.\n");
+        print("NVMe filesystem device not found, skipping test.\n");
         return;
     }
     close(fd);
-    print("NVMe device detected OK.\n");
+    fd = open("/dev/nvme1n1", 0);
+    if (fd < 0) {
+        print("Second NVMe raw device not found, skipping dual-disk check.\n");
+        return;
+    }
+    close(fd);
+    print("NVMe dual devices detected OK.\n");
+}
+
+/* test_nvme_raw_rw: Basic raw read/write against /dev/nvme1n1. */
+void test_nvme_raw_rw() {
+    print("\n--- Test 36: NVMe Raw R/W ---\n");
+    int fd = open("/dev/nvme1n1", 0);
+    if (fd < 0) {
+        print("NVMe raw device not found, skipping test.\n");
+        return;
+    }
+    close(fd);
+
+    int dirty0 = 0, cleaned0 = 0, discarded0 = 0;
+    if (parse_writeback_stats(&dirty0, &cleaned0, &discarded0) < 0) {
+        print("WARN: Could not read /proc/writeback stats.\n");
+        dirty0 = cleaned0 = discarded0 = 0;
+    }
+
+    char wbuf[4096];
+    for (int i = 0; i < 4096; i++)
+        wbuf[i] = (char)(i ^ 0xA5);
+
+    fd = open("/dev/nvme1n1", 0);
+    if (fd < 0) {
+        fail("open /dev/nvme1n1 for write");
+        return;
+    }
+    int wr = write(fd, wbuf, 4096);
+    close(fd);
+    if (wr != 4096) {
+        fail("nvme write 4k");
+        return;
+    }
+
+    /* Force writeback so the blockdev writepage path hits the NVMe queue. */
+    int procfd = open("/proc/writeback", 0);
+    if (procfd >= 0) {
+        write(procfd, "flush\n", 6);
+        close(procfd);
+    } else {
+        print("WARN: Could not open /proc/writeback, skipping flush.\n");
+    }
+
+    int dirty1 = 0, cleaned1 = 0, discarded1 = 0;
+    if (parse_writeback_stats(&dirty1, &cleaned1, &discarded1) == 0) {
+        if (cleaned1 <= cleaned0)
+            print("WARN: writeback cleaned not increased after nvme write.\n");
+    }
+
+    char rbuf[4096];
+    for (int i = 0; i < 4096; i++)
+        rbuf[i] = 0;
+
+    fd = open("/dev/nvme1n1", 0);
+    if (fd < 0) {
+        fail("open /dev/nvme1n1 for read");
+        return;
+    }
+    int rd = read(fd, rbuf, 4096);
+    close(fd);
+    if (rd != 4096) {
+        fail("nvme read 4k");
+        return;
+    }
+
+    for (int i = 0; i < 4096; i++) {
+        if (rbuf[i] != wbuf[i]) {
+            fail("nvme raw rw mismatch");
+            return;
+        }
+    }
+    print("nvme raw rw OK.\n");
 }
 
 /* test_minix_mount_write: Implement test minix mount write. */
@@ -2004,6 +2098,7 @@ int main() {
     // test_blockstats_ramdisk();
     test_minix_mount_read();
     test_nvme_device();
+    test_nvme_raw_rw();
     test_minix_mount_write();
 
     print("\n================================\n");

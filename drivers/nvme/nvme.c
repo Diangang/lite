@@ -2,70 +2,644 @@
 #include "linux/init.h"
 #include "linux/libc.h"
 #include "linux/pci.h"
+#include "linux/pcie.h"
+#include "linux/nvme.h"
 #include "linux/vmalloc.h"
 #include "linux/slab.h"
 #include "linux/blkdev.h"
-#include "linux/bio.h"
 #include "linux/blk_queue.h"
-#include "linux/fs.h"
-#include "linux/devtmpfs.h"
-#include "linux/mm.h"
+#include "linux/blk_request.h"
+#include "linux/bio.h"
+#include "linux/timer.h"
+#include "linux/time.h"
+#include "linux/page_alloc.h"
+#include "linux/memlayout.h"
+#include "linux/pci_regs.h"
+#include "asm/pgtable.h"
 #include <stdint.h>
 
-#define NVME_REG_CAP      0x00
-#define NVME_REG_VS       0x08
-#define NVME_REG_INTMS     0x0C
-#define NVME_REG_INTMC     0x10
-#define NVME_REG_CC        0x14
-#define NVME_REG_CSTS      0x1C
-#define NVME_REG_NSSR      0x20
-#define NVME_REG_AQA       0x24
-#define NVME_REG_ASQ       0x28
-#define NVME_REG_ACQ       0x30
+/* NVMe controller registers (NVMe spec; offsets from BAR0) */
+#define NVME_REG_CAP   0x00
+#define NVME_REG_VS    0x08
+#define NVME_REG_CC    0x14
+#define NVME_REG_CSTS  0x1C
+#define NVME_REG_AQA   0x24
+#define NVME_REG_ASQ   0x28 /* 64-bit: ASQ low/high */
+#define NVME_REG_ACQ   0x30 /* 64-bit: ACQ low/high */
 
-#define NVME_CC_ENABLE     (1 << 0)
-#define NVME_CC_CSS_NVM    (0 << 4)
-#define NVME_CC_MPS_SHIFT  7
-#define NVME_CC_MPS_4KB    (6 << 7)
-#define NVME_CC_ARB_SHIFT  11
-#define NVME_CC_ARB_RR     (0 << 11)
+#define NVME_CSTS_RDY (1u << 0)
 
-#define NVME_CSTS_RDY      (1 << 0)
-
-#define NVME_CMD_IDENTIFY  0x06
+/* CC fields (NVMe spec) */
+#define NVME_CC_EN          (1u << 0)
+#define NVME_CC_CSS_NVM     (0u << 4)
+#define NVME_CC_MPS(mps)    (((uint32_t)(mps) & 0xF) << 7)     /* MPS = log2(page_size)-12 */
+#define NVME_CC_AMS_RR      (0u << 11)
+#define NVME_CC_SHN_NONE    (0u << 14)
+#define NVME_CC_IOSQES(v)   (((uint32_t)(v) & 0xF) << 16)      /* 6 => 64B */
+#define NVME_CC_IOCQES(v)   (((uint32_t)(v) & 0xF) << 20)      /* 4 => 16B */
 
 struct nvme_queue {
-    uint32_t id;
-    uint32_t size;
-    void *sq_buf;
-    void *cq_buf;
-    uint32_t *sq_doorbell;
-    uint32_t *cq_doorbell;
+    uint16_t qid;
+    uint16_t depth;
+    uint16_t sq_tail;
+    uint16_t cq_head;
+    uint16_t cq_phase;
+    uint16_t next_cid;
+    void *sq;
+    void *cq;
+    uint32_t sq_phys;
+    uint32_t cq_phys;
+    volatile uint32_t *sq_db;
+    volatile uint32_t *cq_db;
 };
 
 struct nvme_controller {
     struct pci_dev *pdev;
+    uint32_t instance;
     void *mmio;
     uint64_t cap;
     uint32_t vs;
-    uint32_t page_size;
-    struct nvme_queue *admin_q;
-    struct nvme_queue *io_q;
-    uint32_t max_q;
-    uint32_t max_q_depth;
+    uint32_t db_stride;
+    uint16_t mqes; /* CAP.MQES (0-based) */
+    uint8_t cqr;   /* CAP.CQR: queues required to be physically contiguous */
+    struct nvme_queue admin_q;
+    struct nvme_queue io_q;
 };
 
 struct nvme_namespace {
     struct nvme_controller *ctrl;
+    uint32_t instance;
     uint32_t nsid;
-    uint64_t size;
-    uint32_t block_size;
-    struct block_device *bdev;
-    struct gendisk *disk;
+    uint64_t size_bytes;
+    uint32_t lba_size;
+    struct block_device bdev;
+    struct gendisk disk;
 };
 
-static struct nvme_controller *nvme_ctrl;
-static struct nvme_namespace *nvme_ns;
+#define NVME_MAX_DEVS 4
+static struct nvme_controller *nvme_ctrls[NVME_MAX_DEVS];
+static struct nvme_namespace *nvme_namespaces[NVME_MAX_DEVS];
+
+static int nvme_alloc_instance(void)
+{
+    for (int i = 0; i < NVME_MAX_DEVS; i++) {
+        if (!nvme_ctrls[i] && !nvme_namespaces[i])
+            return i;
+    }
+    return -1;
+}
+
+static int nvme_find_instance_by_pdev(struct pci_dev *pdev)
+{
+    if (!pdev)
+        return -1;
+    for (int i = 0; i < NVME_MAX_DEVS; i++) {
+        if (nvme_ctrls[i] && nvme_ctrls[i]->pdev == pdev)
+            return i;
+    }
+    return -1;
+}
+
+static void nvme_make_disk_name(char *name, uint32_t instance)
+{
+    if (!name)
+        return;
+    /* Support up to nvme9n1 in this minimal implementation. */
+    name[0] = 'n';
+    name[1] = 'v';
+    name[2] = 'm';
+    name[3] = 'e';
+    name[4] = (char)('0' + (instance % 10));
+    name[5] = 'n';
+    name[6] = '1';
+    name[7] = 0;
+}
+
+static inline uint32_t mmio_read32(void *base, uint32_t off)
+{
+    return *(volatile uint32_t *)((uint32_t)base + off);
+}
+
+static inline void mmio_write32(void *base, uint32_t off, uint32_t v)
+{
+    *(volatile uint32_t *)((uint32_t)base + off) = v;
+}
+
+static inline uint64_t mmio_read64(void *base, uint32_t off)
+{
+    uint64_t lo = mmio_read32(base, off);
+    uint64_t hi = mmio_read32(base, off + 4);
+    return lo | (hi << 32);
+}
+
+static inline void mmio_write64(void *base, uint32_t off, uint64_t v)
+{
+    mmio_write32(base, off, (uint32_t)(v & 0xFFFFFFFFu));
+    mmio_write32(base, off + 4, (uint32_t)(v >> 32));
+}
+
+static void *nvme_alloc_page(uint32_t *phys_out)
+{
+    void *phys = alloc_page(GFP_KERNEL);
+    if (!phys)
+        return NULL;
+    uint32_t p = (uint32_t)phys;
+    if (phys_out)
+        *phys_out = p;
+    void *v = memlayout_directmap_phys_to_virt(p);
+    memset(v, 0, 4096);
+    return v;
+}
+
+static int nvme_wait_csts_rdy(struct nvme_controller *ctrl, int want_rdy, uint32_t timeout_ticks)
+{
+    uint32_t start = timer_get_ticks();
+    while (1) {
+        uint32_t csts = mmio_read32(ctrl->mmio, NVME_REG_CSTS);
+        int rdy = (csts & NVME_CSTS_RDY) != 0;
+        if (rdy == want_rdy)
+            return 0;
+        if ((timer_get_ticks() - start) > timeout_ticks)
+            return -1;
+    }
+}
+
+static void nvme_pci_enable_msix(struct pci_dev *pdev)
+{
+    int off = pci_find_capability(pdev, PCI_CAP_ID_MSIX);
+    if (!off)
+        return;
+    uint16_t ctrl = 0;
+    if (pci_read_config_word(pdev, (uint8_t)(off + 2), &ctrl) != 0)
+        return;
+    /* MSI-X Message Control: bit15 MSI-X Enable, bit14 Function Mask */
+    ctrl |= 0x8000;
+    ctrl &= (uint16_t)~0x4000;
+    if (pci_write_config_word(pdev, (uint8_t)(off + 2), ctrl) != 0)
+        return;
+    device_uevent_emit("msixen", &pdev->dev);
+}
+
+static uint32_t nvme_cap_to_ticks(uint64_t cap)
+{
+    /* CAP.TO is in 500ms units (NVMe spec). Map to jiffies (HZ=100). */
+    uint32_t to = (uint32_t)((cap >> 24) & 0xFFu);
+    if (to == 0)
+        to = 1;
+    uint32_t ticks_per_500ms = (HZ / 2);
+    if (ticks_per_500ms == 0)
+        ticks_per_500ms = 1;
+    return to * ticks_per_500ms;
+}
+
+static void nvme_queue_init_doorbells(struct nvme_controller *ctrl, struct nvme_queue *q)
+{
+    uint32_t base = 0x1000;
+    uint32_t stride = ctrl->db_stride;
+    uint32_t sq_off = base + (uint32_t)(2u * q->qid) * stride;
+    uint32_t cq_off = base + (uint32_t)(2u * q->qid + 1u) * stride;
+    q->sq_db = (volatile uint32_t *)((uint32_t)ctrl->mmio + sq_off);
+    q->cq_db = (volatile uint32_t *)((uint32_t)ctrl->mmio + cq_off);
+}
+
+static int nvme_submit_cmd(struct nvme_queue *q, struct nvme_command *cmd, struct nvme_completion *cpl_out)
+{
+    if (!q || !cmd)
+        return -1;
+    /*
+     * SQ/CQ are DMA-visible to the controller. Treat them as volatile and insert a
+     * compiler barrier before ringing doorbells, otherwise -O2 may reorder/cache
+     * loads/stores and we can miss completions or submit half-written commands.
+     */
+    volatile struct nvme_command *sq = (volatile struct nvme_command *)q->sq;
+    volatile struct nvme_completion *cq = (volatile struct nvme_completion *)q->cq;
+
+    cmd->command_id = q->next_cid++;
+    if (q->next_cid == 0)
+        q->next_cid = 1;
+
+    uint16_t tail = q->sq_tail;
+    sq[tail] = *cmd;
+    tail++;
+    if (tail >= q->depth)
+        tail = 0;
+    q->sq_tail = tail;
+    __asm__ volatile ("" : : : "memory");
+    *q->sq_db = tail;
+
+    /* Poll completion queue. */
+    uint32_t start = timer_get_ticks();
+    while (1) {
+        struct nvme_completion cpl = cq[q->cq_head];
+        uint16_t phase = cpl.status & 1u;
+        if (phase == q->cq_phase) {
+            if (cpl.command_id != cmd->command_id || cpl.sq_id != q->qid)
+                return -1;
+            if (cpl_out)
+                *cpl_out = cpl;
+            q->cq_head++;
+            if (q->cq_head >= q->depth) {
+                q->cq_head = 0;
+                q->cq_phase ^= 1u;
+            }
+            *q->cq_db = q->cq_head;
+            /* Status code is bits 15:1 (0 means success). */
+            if ((cpl.status >> 1) != 0)
+                return -1;
+            return 0;
+        }
+        if ((timer_get_ticks() - start) > 500)
+            return -1;
+    }
+}
+
+static int nvme_admin_identify(struct nvme_controller *ctrl, uint32_t nsid, uint32_t cns, void *buf, uint32_t buf_size)
+{
+    if (!ctrl || !buf || buf_size < 4096)
+        return -1;
+    uint32_t phys = virt_to_phys(buf);
+    if (phys == 0xFFFFFFFF)
+        return -1;
+
+    struct nvme_command cmd;
+    memset(&cmd, 0, sizeof(cmd));
+    cmd.opcode = NVME_ADMIN_OPC_IDENTIFY;
+    cmd.nsid = nsid;
+    cmd.prp1 = (uint64_t)phys;
+    cmd.cdw10 = cns & 0xFF;
+    return nvme_submit_cmd(&ctrl->admin_q, &cmd, NULL);
+}
+
+static int nvme_admin_set_features_num_queues(struct nvme_controller *ctrl, uint16_t nsq, uint16_t ncq,
+                                              uint16_t *nsq_alloc, uint16_t *ncq_alloc)
+{
+    if (!ctrl || nsq == 0 || ncq == 0)
+        return -1;
+    struct nvme_command cmd;
+    struct nvme_completion cpl;
+    memset(&cmd, 0, sizeof(cmd));
+    cmd.opcode = NVME_ADMIN_OPC_SET_FEATURES;
+    cmd.cdw10 = NVME_FEAT_NUM_QUEUES;
+    /* CDW11: [31:16] NSQR (0-based), [15:0] NCQR (0-based) */
+    cmd.cdw11 = ((uint32_t)(nsq - 1) << 16) | (uint32_t)(ncq - 1);
+    if (nvme_submit_cmd(&ctrl->admin_q, &cmd, &cpl) != 0)
+        return -1;
+    uint16_t ncqa = (uint16_t)(cpl.result & 0xFFFFu);
+    uint16_t nsqa = (uint16_t)((cpl.result >> 16) & 0xFFFFu);
+    if (nsq_alloc)
+        *nsq_alloc = (uint16_t)(nsqa + 1u);
+    if (ncq_alloc)
+        *ncq_alloc = (uint16_t)(ncqa + 1u);
+    return 0;
+}
+
+static int nvme_create_io_queues(struct nvme_controller *ctrl)
+{
+    if (!ctrl)
+        return -1;
+
+    /* Linux flow: Set Features - Number of Queues, then create I/O CQ/SQ. */
+    uint16_t nsq_alloc = 0, ncq_alloc = 0;
+    if (nvme_admin_set_features_num_queues(ctrl, 1, 1, &nsq_alloc, &ncq_alloc) != 0) {
+        printf("nvme: Set Features (Number of Queues) failed, continuing\n");
+    } else {
+        printf("nvme: num_queues allocated: NSQ=%u NCQ=%u\n", (unsigned)nsq_alloc, (unsigned)ncq_alloc);
+    }
+
+    /* Choose a small, safe depth. Must be <= (CAP.MQES + 1). */
+    uint16_t max_depth = (uint16_t)(ctrl->mqes + 1u);
+    uint16_t depth = 32;
+    if (depth > max_depth)
+        depth = max_depth;
+    if (depth < 2)
+        depth = 2;
+    uint16_t qid = 1;
+
+    memset(&ctrl->io_q, 0, sizeof(ctrl->io_q));
+    ctrl->io_q.qid = qid;
+    ctrl->io_q.depth = depth;
+    ctrl->io_q.cq_phase = 1;
+    ctrl->io_q.next_cid = 1;
+
+    /*
+     * NVMe requires ASQ/ACQ and I/O SQ/CQ to be physically contiguous and 4K aligned.
+     * Lite does not have a full DMA mapping layer yet, so allocate one page per queue
+     * (sufficient for our small depths) and use its physical address directly.
+     */
+    ctrl->io_q.sq = nvme_alloc_page(&ctrl->io_q.sq_phys);
+    ctrl->io_q.cq = nvme_alloc_page(&ctrl->io_q.cq_phys);
+    if (!ctrl->io_q.sq || !ctrl->io_q.cq)
+        return -1;
+    uint32_t cq_phys = ctrl->io_q.cq_phys;
+    uint32_t sq_phys = ctrl->io_q.sq_phys;
+
+    /* Create I/O CQ (admin cmd). */
+    struct nvme_command cmd;
+    struct nvme_completion cpl;
+    memset(&cmd, 0, sizeof(cmd));
+    cmd.opcode = NVME_ADMIN_OPC_CREATE_IO_CQ;
+    cmd.prp1 = (uint64_t)cq_phys;
+    cmd.cdw10 = (uint32_t)qid | ((uint32_t)(depth - 1) << 16);
+    /*
+     * NVMe Create I/O CQ CDW11 (see industry-standard nvme headers, e.g. EDK2 Nvme.h):
+     * - bits 31:16 IV
+     * - bit 1     IEN
+     * - bit 0     PC
+     *
+     * We poll completions, so IEN=0, IV=0.
+     */
+    cmd.cdw11 = (0u << 16) | (0u << 1) | 1u;
+    if (nvme_submit_cmd(&ctrl->admin_q, &cmd, &cpl) != 0) {
+        printf("nvme: CREATE_IO_CQ failed (status=0x%x)\n", cpl.status);
+        device_uevent_emit("nvmefail_cq", &ctrl->pdev->dev);
+        return -1;
+    }
+    /*
+     * Some controllers expect the CQ head doorbell to be initialized after the CQ is
+     * created, before an SQ references it.
+     */
+    struct nvme_queue dbq;
+    memset(&dbq, 0, sizeof(dbq));
+    dbq.qid = qid;
+    nvme_queue_init_doorbells(ctrl, &dbq);
+    *dbq.cq_db = 0;
+
+    /* Create I/O SQ (admin cmd). */
+    memset(&cmd, 0, sizeof(cmd));
+    cmd.opcode = NVME_ADMIN_OPC_CREATE_IO_SQ;
+    cmd.prp1 = (uint64_t)sq_phys;
+    cmd.cdw10 = (uint32_t)qid | ((uint32_t)(depth - 1) << 16);
+    /*
+     * NVMe Create I/O SQ CDW11 (see industry-standard nvme headers, e.g. EDK2 Nvme.h):
+     * - bits 31:16 CQID
+     * - bits 2:1   QPRIO
+     * - bit 0      PC
+     */
+    cmd.cdw11 = ((uint32_t)qid << 16) | (0u << 1) | 1u;
+    if (nvme_submit_cmd(&ctrl->admin_q, &cmd, &cpl) != 0) {
+        printf("nvme: CREATE_IO_SQ failed (status=0x%x)\n", cpl.status);
+        device_uevent_emit("nvmefail_sq", &ctrl->pdev->dev);
+        return -1;
+    }
+
+    nvme_queue_init_doorbells(ctrl, &ctrl->io_q);
+    return 0;
+}
+
+static int nvme_io_rw(struct nvme_namespace *ns, int write, uint64_t lba, uint32_t nlb, void *buf, uint32_t buf_len)
+{
+    if (!ns || !ns->ctrl || !buf || nlb == 0)
+        return -1;
+    struct nvme_controller *ctrl = ns->ctrl;
+    uint32_t phys1 = virt_to_phys(buf);
+    if (phys1 == 0xFFFFFFFF)
+        return -1;
+
+    /* Simplified PRP mapping: support up to 2 pages without PRP list. */
+    uint32_t off_in_page = phys1 & 0xFFF;
+    uint32_t pages = (off_in_page + buf_len + 4095u) / 4096u;
+    uint64_t prp2 = 0;
+    if (pages > 2)
+        return -1;
+    if (pages == 2) {
+        uint32_t next_page_va = ((uint32_t)buf & ~0xFFFu) + 4096u;
+        uint32_t phys2 = virt_to_phys((void *)next_page_va);
+        if (phys2 == 0xFFFFFFFF)
+            return -1;
+        prp2 = (uint64_t)phys2;
+    }
+
+    struct nvme_command cmd;
+    memset(&cmd, 0, sizeof(cmd));
+    cmd.opcode = write ? NVME_CMD_WRITE : NVME_CMD_READ;
+    cmd.nsid = ns->nsid;
+    cmd.prp1 = (uint64_t)phys1;
+    cmd.prp2 = prp2;
+    cmd.cdw10 = (uint32_t)(lba & 0xFFFFFFFFu);
+    cmd.cdw11 = (uint32_t)(lba >> 32);
+    cmd.cdw12 = (nlb - 1) & 0xFFFFu;
+    return nvme_submit_cmd(&ctrl->io_q, &cmd, NULL);
+}
+
+static void nvme_request_fn(struct request_queue *q)
+{
+    if (!q)
+        return;
+    struct nvme_namespace *ns = (struct nvme_namespace *)q->queuedata;
+    while (1) {
+        struct request *rq = blk_fetch_request(q);
+        if (!rq)
+            break;
+        struct bio *bio = rq->bio;
+        if (!bio || !bio->bi_bdev || !bio->bi_buf || bio->bi_size == 0) {
+            blk_complete_request(q, rq, -1);
+            continue;
+        }
+
+        uint32_t offset = (uint32_t)bio->bi_sector * 512u + bio->bi_byte_offset;
+        if (offset + bio->bi_size > ns->bdev.size) {
+            blk_complete_request(q, rq, -1);
+            continue;
+        }
+
+        /* Simplified: require I/O aligned to namespace LBA size. */
+        if ((offset % ns->lba_size) != 0 || (bio->bi_size % ns->lba_size) != 0) {
+            blk_complete_request(q, rq, -1);
+            continue;
+        }
+
+        uint64_t lba = offset / ns->lba_size;
+        uint32_t nlb = bio->bi_size / ns->lba_size;
+        int is_write = (bio->bi_opf == REQ_OP_WRITE);
+        if (nvme_io_rw(ns, is_write, lba, nlb, bio->bi_buf, bio->bi_size) != 0) {
+            blk_complete_request(q, rq, -1);
+            continue;
+        }
+        blk_complete_request(q, rq, 0);
+    }
+}
+
+static int nvme_map_mmio(struct nvme_controller *ctrl)
+{
+    if (!ctrl || !ctrl->pdev)
+        return -1;
+
+    /* BAR0 is expected to be NVMe controller registers. */
+    uint64_t base = 0;
+    uint64_t size = 0;
+    if (ctrl->pdev->bar[0] & 0x1)
+        return -1;
+    if (((ctrl->pdev->bar[0] >> 1) & 0x3) == 2) {
+        base = ((uint64_t)ctrl->pdev->bar[1] << 32) | (ctrl->pdev->bar[0] & ~0xFu);
+        size = ((uint64_t)ctrl->pdev->bar_size[1] << 32) | (uint64_t)ctrl->pdev->bar_size[0];
+    } else {
+        base = (uint64_t)(ctrl->pdev->bar[0] & ~0xFu);
+        size = (uint64_t)ctrl->pdev->bar_size[0];
+    }
+    if (base == 0 || size == 0)
+        return -1;
+
+    /* Lite is 32-bit; require MMIO below 4G. */
+    if (base > 0xFFFFFFFFu)
+        return -1;
+    if (size > 0x100000u)
+        size = 0x100000u; /* map 1MB max for safety */
+
+    ctrl->mmio = ioremap((uint32_t)base, (uint32_t)size);
+    if (ctrl->mmio)
+        printf("nvme: BAR0 mmio base=0x%x size=0x%x\n", (uint32_t)base, (uint32_t)size);
+    return ctrl->mmio ? 0 : -1;
+}
+
+static int nvme_ctrl_init(struct nvme_controller *ctrl)
+{
+    if (!ctrl)
+        return -1;
+
+    ctrl->cap = mmio_read64(ctrl->mmio, NVME_REG_CAP);
+    ctrl->vs = mmio_read32(ctrl->mmio, NVME_REG_VS);
+    ctrl->mqes = (uint16_t)(ctrl->cap & 0xFFFFu);
+    ctrl->cqr = (uint8_t)((ctrl->cap >> 16) & 0x1u);
+    uint32_t dstrd = (uint32_t)((ctrl->cap >> 32) & 0xFu);
+    ctrl->db_stride = 4u << dstrd;
+    uint32_t to_ticks = nvme_cap_to_ticks(ctrl->cap);
+    printf("nvme: CAP=0x%x%08x MQES=%u TO=%u DSTRD=%u\n",
+           (uint32_t)(ctrl->cap >> 32), (uint32_t)ctrl->cap,
+           (unsigned)(ctrl->mqes + 1u), (unsigned)((ctrl->cap >> 24) & 0xFFu), (unsigned)dstrd);
+
+    /* Disable controller, then configure admin queue. */
+    mmio_write32(ctrl->mmio, NVME_REG_CC, 0);
+    if (nvme_wait_csts_rdy(ctrl, 0, to_ticks) != 0)
+        return -1;
+
+    memset(&ctrl->admin_q, 0, sizeof(ctrl->admin_q));
+    ctrl->admin_q.qid = 0;
+    ctrl->admin_q.depth = 16;
+    ctrl->admin_q.cq_phase = 1;
+    ctrl->admin_q.next_cid = 1;
+    ctrl->admin_q.sq = nvme_alloc_page(&ctrl->admin_q.sq_phys);
+    ctrl->admin_q.cq = nvme_alloc_page(&ctrl->admin_q.cq_phys);
+    if (!ctrl->admin_q.sq || !ctrl->admin_q.cq)
+        return -1;
+    uint32_t asq_phys = ctrl->admin_q.sq_phys;
+    uint32_t acq_phys = ctrl->admin_q.cq_phys;
+
+    uint32_t aqa = ((uint32_t)(ctrl->admin_q.depth - 1) << 16) | (uint32_t)(ctrl->admin_q.depth - 1);
+    mmio_write32(ctrl->mmio, NVME_REG_AQA, aqa);
+    mmio_write64(ctrl->mmio, NVME_REG_ASQ, (uint64_t)asq_phys);
+    mmio_write64(ctrl->mmio, NVME_REG_ACQ, (uint64_t)acq_phys);
+
+    nvme_queue_init_doorbells(ctrl, &ctrl->admin_q);
+
+    /* Enable controller with default queue entry sizes. */
+    uint32_t cc = NVME_CC_EN | NVME_CC_CSS_NVM | NVME_CC_MPS(0) | NVME_CC_AMS_RR |
+                  NVME_CC_SHN_NONE | NVME_CC_IOSQES(6) | NVME_CC_IOCQES(4);
+    mmio_write32(ctrl->mmio, NVME_REG_CC, cc);
+    if (nvme_wait_csts_rdy(ctrl, 1, to_ticks) != 0)
+        return -1;
+
+    return 0;
+}
+
+static int nvme_ns_init(struct nvme_controller *ctrl)
+{
+    if (!ctrl)
+        return -1;
+
+    /* Identify active namespace list (CNS=2). */
+    uint32_t nslist_phys = 0;
+    void *nslist = nvme_alloc_page(&nslist_phys);
+    if (!nslist || !nslist_phys)
+        return -1;
+    if (nvme_admin_identify(ctrl, 0, NVME_ID_CNS_ACTIVE_NS_LIST, nslist, 4096) != 0) {
+        free_page((unsigned long)nslist_phys);
+        return -1;
+    }
+    uint32_t nsid = *(uint32_t *)nslist;
+    free_page((unsigned long)nslist_phys);
+    if (nsid == 0) {
+        printf("nvme: no active namespaces\n");
+        return -1;
+    }
+
+    uint32_t id_phys = 0;
+    void *id = nvme_alloc_page(&id_phys);
+    if (!id || !id_phys)
+        return -1;
+    memset(id, 0, 4096);
+
+    if (nvme_admin_identify(ctrl, 0, NVME_ID_CNS_CTRL, id, 4096) != 0) {
+        free_page((unsigned long)id_phys);
+        return -1;
+    }
+    memset(id, 0, 4096);
+    if (nvme_admin_identify(ctrl, nsid, NVME_ID_CNS_NS, id, 4096) != 0) {
+        free_page((unsigned long)id_phys);
+        return -1;
+    }
+
+    uint64_t nsze = *(uint64_t *)((uint8_t *)id + 0x00);
+    uint8_t flbas = *(uint8_t *)((uint8_t *)id + 0x1A);
+    uint8_t fmt = flbas & 0x0Fu;
+    uint8_t lbads = *(uint8_t *)((uint8_t *)id + 0x80 + (uint32_t)fmt * 16u + 2u);
+    uint32_t lba_size = 1u << lbads;
+    uint64_t size_bytes = nsze * (uint64_t)lba_size;
+
+    free_page((unsigned long)id_phys);
+
+    struct nvme_namespace *ns = kmalloc(sizeof(*ns));
+    if (!ns)
+        return -1;
+    memset(ns, 0, sizeof(*ns));
+    ns->ctrl = ctrl;
+    ns->instance = ctrl->instance;
+    ns->nsid = nsid;
+    ns->lba_size = lba_size ? lba_size : 512;
+    ns->size_bytes = size_bytes;
+
+    /* Block device + request queue backed by real NVMe I/O (simplified polling). */
+    memset(&ns->bdev, 0, sizeof(ns->bdev));
+    ns->bdev.size = (uint32_t)(size_bytes > 0xFFFFFFFFu ? 0xFFFFFFFFu : size_bytes);
+    ns->bdev.block_size = ns->lba_size;
+    ns->bdev.data = NULL;
+    ns->bdev.queue = blk_init_queue(nvme_request_fn, ns);
+    if (!ns->bdev.queue) {
+        kfree(ns);
+        return -1;
+    }
+
+    char disk_name[8];
+    nvme_make_disk_name(disk_name, ns->instance);
+    if (gendisk_init(&ns->disk, disk_name, 259, ns->instance, &ns->bdev) != 0) {
+        blk_cleanup_queue(ns->bdev.queue);
+        kfree(ns);
+        return -1;
+    }
+    if (!block_register_disk(&ns->disk, &ctrl->pdev->dev)) {
+        blk_cleanup_queue(ns->bdev.queue);
+        kfree(ns);
+        return -1;
+    }
+
+    nvme_namespaces[ns->instance] = ns;
+    return 0;
+}
+
+static void nvme_free_controller(struct nvme_controller *ctrl)
+{
+    if (!ctrl)
+        return;
+    if (ctrl->admin_q.sq_phys)
+        free_page((unsigned long)ctrl->admin_q.sq_phys);
+    if (ctrl->admin_q.cq_phys)
+        free_page((unsigned long)ctrl->admin_q.cq_phys);
+    if (ctrl->io_q.sq_phys)
+        free_page((unsigned long)ctrl->io_q.sq_phys);
+    if (ctrl->io_q.cq_phys)
+        free_page((unsigned long)ctrl->io_q.cq_phys);
+    /* iounmap is a no-op in Lite. */
+    kfree(ctrl);
+}
 
 static const struct pci_device_id nvme_pci_ids[] = {
     /* Match NVMe controller class: base=0x01, sub=0x08, prog_if=any. */
@@ -73,8 +647,80 @@ static const struct pci_device_id nvme_pci_ids[] = {
     { 0 }
 };
 
-static int nvme_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id);
-static void nvme_pci_remove(struct pci_dev *pdev);
+static int nvme_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
+{
+    (void)id;
+    if (!pdev)
+        return -1;
+
+    device_uevent_emit("nvmeprobe", &pdev->dev);
+
+    /* Ensure PCIe capability exists (Linux: NVMe is PCIe only). */
+    if (!pdev->pcie_cap) {
+        device_uevent_emit("nvmefail_pcie", &pdev->dev);
+        return -1;
+    }
+
+    /* NVMe is MSI-X based on PCIe; enable MSI-X (we still poll for completions). */
+    nvme_pci_enable_msix(pdev);
+
+    struct nvme_controller *ctrl = kmalloc(sizeof(*ctrl));
+    if (!ctrl)
+        return -1;
+    memset(ctrl, 0, sizeof(*ctrl));
+    ctrl->pdev = pdev;
+    int instance = nvme_alloc_instance();
+    if (instance < 0) {
+        device_uevent_emit("nvmefail_slots", &pdev->dev);
+        kfree(ctrl);
+        return -1;
+    }
+    ctrl->instance = (uint32_t)instance;
+
+    if (nvme_map_mmio(ctrl) != 0) {
+        device_uevent_emit("nvmefail_mmio", &pdev->dev);
+        nvme_free_controller(ctrl);
+        return -1;
+    }
+    if (nvme_ctrl_init(ctrl) != 0) {
+        device_uevent_emit("nvmefail_ctrl", &pdev->dev);
+        nvme_free_controller(ctrl);
+        return -1;
+    }
+    if (nvme_create_io_queues(ctrl) != 0) {
+        device_uevent_emit("nvmefail_q", &pdev->dev);
+        nvme_free_controller(ctrl);
+        return -1;
+    }
+    if (nvme_ns_init(ctrl) != 0) {
+        device_uevent_emit("nvmefail_ns", &pdev->dev);
+        nvme_free_controller(ctrl);
+        return -1;
+    }
+
+    nvme_ctrls[instance] = ctrl;
+    device_uevent_emit("nvmeinit", &pdev->dev);
+    return 0;
+}
+
+static void nvme_pci_remove(struct pci_dev *pdev)
+{
+    int instance = nvme_find_instance_by_pdev(pdev);
+    if (instance < 0)
+        return;
+    if (nvme_namespaces[instance]) {
+        if (nvme_namespaces[instance]->disk.dev)
+            device_unregister(nvme_namespaces[instance]->disk.dev);
+        if (nvme_namespaces[instance]->bdev.queue)
+            blk_cleanup_queue(nvme_namespaces[instance]->bdev.queue);
+        kfree(nvme_namespaces[instance]);
+        nvme_namespaces[instance] = NULL;
+    }
+    if (nvme_ctrls[instance]) {
+        nvme_free_controller(nvme_ctrls[instance]);
+        nvme_ctrls[instance] = NULL;
+    }
+}
 
 static struct pci_driver nvme_pci_driver = {
     .name = "nvme",
@@ -83,115 +729,6 @@ static struct pci_driver nvme_pci_driver = {
     .remove = nvme_pci_remove,
 };
 
-
-
-/* nvme_init_namespace: Implement NVMe init namespace. */
-static int nvme_init_namespace(struct nvme_controller *ctrl)
-{
-    struct nvme_namespace *ns = kmalloc(sizeof(*ns));
-    if (!ns)
-        return -1;
-    ns->ctrl = ctrl;
-    ns->nsid = 1;
-    ns->block_size = 512;
-    ns->disk = NULL;
-
-    // TODO: Implement namespace identification
-    ns->size = 16 * 1024 * 1024; // 16MB for testing
-
-    // Create block device
-    ns->bdev = kmalloc(sizeof(*ns->bdev));
-    if (!ns->bdev) {
-        kfree(ns);
-        return -1;
-    }
-    ns->disk = kmalloc(sizeof(*ns->disk));
-    if (!ns->disk) {
-        kfree(ns->bdev);
-        kfree(ns);
-        return -1;
-    }
-
-    if (block_device_init(ns->bdev, ns->size, ns->block_size) != 0) {
-        kfree(ns->disk);
-        kfree(ns->bdev);
-        kfree(ns);
-        return -1;
-    }
-    if (gendisk_init(ns->disk, "nvme0n1", 259, 0, ns->bdev) != 0) {
-        kfree(ns->disk);
-        kfree(ns->bdev);
-        kfree(ns);
-        return -1;
-    }
-
-    if (!block_register_disk(ns->disk, &ctrl->pdev->dev)) {
-        printf("NVMe init namespace: failed to register device\n");
-        kfree(ns->disk);
-        kfree(ns->bdev);
-        kfree(ns);
-        return -1;
-    }
-
-    nvme_ns = ns;
-    printf("NVMe namespace 1 registered as /dev/nvme0n1\n");
-    return 0;
-}
-
-static int nvme_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
-{
-    (void)id;
-    if (!pdev) {
-        printf("NVMe probe: pci_dev is NULL\n");
-        return -1;
-    }
-    device_uevent_emit("nvmebind", &pdev->dev);
-
-    // Skip MMIO mapping and controller initialization for testing
-    // Just create the block device directly
-    printf("NVMe probe: Creating block device for testing\n");
-
-    // Allocate controller structure
-    struct nvme_controller *ctrl = kmalloc(sizeof(*ctrl));
-    if (!ctrl) {
-        printf("NVMe probe: kmalloc controller failed\n");
-        return 0;
-    }
-
-    ctrl->pdev = pdev;
-    ctrl->mmio = NULL;
-    ctrl->cap = 0;
-    ctrl->vs = 0;
-    ctrl->max_q = 1;
-    ctrl->max_q_depth = 32;
-    ctrl->page_size = 4096;
-    ctrl->admin_q = NULL;
-    ctrl->io_q = NULL;
-
-    // Initialize namespace
-    printf("NVMe probe: Calling nvme_init_namespace\n");
-    int ret = nvme_init_namespace(ctrl);
-    if (ret != 0) {
-        printf("NVMe probe: namespace initialization failed with ret=%d\n", ret);
-        kfree(ctrl);
-        device_uevent_emit("nvmenamespacefail", &pdev->dev);
-        return 0;
-    }
-    printf("NVMe probe: namespace initialization success\n");
-
-    nvme_ctrl = ctrl;
-    printf("NVMe controller initialized successfully (testing mode)\n");
-    device_uevent_emit("nvmeinit", &pdev->dev);
-
-    return 0;
-}
-
-static void nvme_pci_remove(struct pci_dev *pdev)
-{
-    (void)pdev;
-}
-
-/* nvme_driver_init: Initialize NVMe driver. */
 static int nvme_driver_init(void)
 {
     return pci_register_driver(&nvme_pci_driver);

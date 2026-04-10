@@ -36,7 +36,9 @@ struct file *vfs_open(const char *path, uint32_t flags)
         if (!pdentry || !pdentry->inode || (pdentry->inode->flags & 0x7) != FS_DIRECTORY)
             return NULL;
 
-        struct inode *created = ramfs_create_child(pdentry->inode, name, FS_FILE);
+        if (!pdentry->inode || !pdentry->inode->f_ops || !pdentry->inode->f_ops->create)
+            return NULL;
+        struct inode *created = pdentry->inode->f_ops->create(pdentry->inode, name, FS_FILE);
         if (!created)
             return NULL;
 

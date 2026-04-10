@@ -22,6 +22,7 @@ struct pci_dev {
     uint8_t revision;
     uint8_t bus;
     uint8_t devfn; /* (dev<<3)|func */
+    uint16_t pcie_cap; /* PCIe Capability offset (Linux: pci_dev->pcie_cap) */
     uint32_t bar[6];
     uint32_t bar_size[6];
     uint32_t io_base;
@@ -71,5 +72,8 @@ int pci_read_config_word(struct pci_dev *pdev, uint8_t offset, uint16_t *value);
 int pci_read_config_dword(struct pci_dev *pdev, uint8_t offset, uint32_t *value);
 int pci_write_config_word(struct pci_dev *pdev, uint8_t offset, uint16_t value);
 int pci_write_config_dword(struct pci_dev *pdev, uint8_t offset, uint32_t value);
+
+/* Linux: pci_find_capability() */
+int pci_find_capability(struct pci_dev *pdev, uint8_t cap_id);
 
 #endif

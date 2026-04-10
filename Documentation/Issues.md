@@ -198,6 +198,35 @@
 - **现象**：`kernel_init` 启动后执行 `init: fork+exec /sbin/sh`，紧接着打印 `User Page Fault: out of range`，shell 无法进入或异常退出。
 - **定位**：
   1. **页表物理地址被当作虚拟地址使用**：在释放用户页的路径里，直接把 PDE 指向的物理地址当作虚拟地址访问页表，导致内核在低地址读写并触发越界缺页。
+
+---
+
+## 8. PCIe / NVMe 枚举与驱动问题
+
+### 8.1 QEMU `-device nvme` 已挂盘但系统无 `/dev/nvme0n1`（Create IO CQ/SQ CDW11 位域编码错误）
+- **现象**：
+  - QEMU 命令行指定了 NVMe 盘，但系统启动后 `/dev` 里没有 `nvme0n1`。
+  - `/sys/kernel/uevent` 可见 PCI 枚举到 NVMe 控制器（class `0x01/0x08`），但没有 `ACTION=nvmeinit`。
+  - 串口日志可见 `CREATE_IO_*` 相关失败（例如 `status=0x8005` / `0x8201`）。
+- **复现命令**（建议加 timeout 防止卡死在 QEMU 中）：
+  - `timeout 30s qemu-system-i386 -machine q35 -kernel out/myos.bin -initrd out/initramfs.cpio -m 3072M -serial stdio -display none -drive file=nvme.img,format=raw,if=none,id=nvme0 -device nvme,drive=nvme0,serial=NVME0001`
+- **定位思路**：
+  - 首先确认 PCI 枚举已发现 NVMe 设备（`/sys/kernel/uevent` 中存在 `ACTION=add DEVPATH=/devices/pci00:03.0 ... sc08` 等）。
+  - 通过在 NVMe probe 路径添加 uevent 标记（`nvmeprobe/nvmefail_*`）与最小 printk（BAR0、CAP、CSTS、Create Queue completion status）把失败点收敛到 “Create I/O CQ/SQ 参数不被控制器接受”。
+- **根因**：
+  - NVMe Admin 命令 `Create I/O Completion Queue` / `Create I/O Submission Queue` 的 `CDW11` 位域编码使用了错误的 bit 位置（把 `PC/IEN/IV`、`CQID/QPRIO/PC` 填到了错误的字段上），导致 QEMU NVMe 严格校验后直接返回错误状态，probe 失败，因此不会注册 block disk。
+- **解决**：
+  - 按 NVMe 规范/行业标准头文件（例如 EDK2 `Nvme.h` 的结构体位域定义）修正编码：
+    - `Create IO CQ CDW11`：`(IV << 16) | (IEN << 1) | PC`
+    - `Create IO SQ CDW11`：`(CQID << 16) | (QPRIO << 1) | PC`
+  - 同时做了 NVMe 初始化流程的可观测性增强：在 probe/失败路径 emit `nvmeprobe/nvmefail_{pcie,mmio,ctrl,cq,sq,ns}/nvmeinit`，便于用户态 `cat /sys/kernel/uevent` 直接定位失败阶段。
+- **结果**：
+  - QEMU q35 + NVMe 盘场景下，启动后出现：
+    - `/dev/nvme0n1`
+    - `/sys/kernel/uevent` 中 `ACTION=nvmeinit` 与 `ACTION=add .../nvme0n1`
+- **相关代码**：
+  - `drivers/nvme/nvme.c`（Create Queue、probe uevent、日志）
+  - `include/linux/nvme.h`（最小 NVMe command/completion 定义）
   2. **用户态硬编码 syscall 号漂移**：新增 `SYS_MPROTECT/SYS_MREMAP` 后，`ush` 中硬编码的 `SYS_GETDENTS/SYS_CHDIR/SYS_MKDIR` 编号错位，错误 syscall 调用打乱了执行流并放大异常。
 - **解决**：
   1. 访问页表时统一使用 `phys_to_virt` 转换，保证 PDE 指向的页表物理地址能在内核虚拟地址中正确访问。

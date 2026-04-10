@@ -266,13 +266,13 @@ int vfs_mkdir(const char *path)
     if (pnode->f_ops && pnode->f_ops->finddir && pnode->f_ops->finddir(pnode, name))
         return -1;
 
-    // In new generic VFS, ramfs_create_child just returns an inode.
-    // We need to attach it to a dentry.
     struct dentry *pdentry = path_walk(parent);
     if (!pdentry)
         return -1;
 
-    struct inode *created = ramfs_create_child(pnode, name, FS_DIRECTORY);
+    if (!pnode->f_ops || !pnode->f_ops->create)
+        return -1;
+    struct inode *created = pnode->f_ops->create(pnode, name, FS_DIRECTORY);
     if (!created)
         return -1;
 

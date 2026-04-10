@@ -354,13 +354,14 @@ static uint32_t sys_read_kobj_attr(struct inode *node, uint32_t offset, uint32_t
     if (n > cap)
         n = cap;
     tmp[n] = 0;
-    if (offset >= n)
-        goto out;
-    uint32_t remain = n - offset;
-    if (size > remain)
-        size = remain;
-    memcpy(buffer, tmp + offset, size);
-out:
+    if (offset >= n) {
+        size = 0;
+    } else {
+        uint32_t remain = n - offset;
+        if (size > remain)
+            size = remain;
+        memcpy(buffer, tmp + offset, size);
+    }
     kfree(tmp);
     return size;
 }

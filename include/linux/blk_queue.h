@@ -14,7 +14,12 @@ struct request_queue {
     struct request *head;
     struct request *tail;
     void *queuedata;
+    int running; /* prevent recursive request_fn entry */
 };
+
+/* Linux-aligned helpers (single-queue, non-blk-mq). */
+struct request_queue *blk_init_queue(request_fn_t request_fn, void *queuedata);
+void blk_cleanup_queue(struct request_queue *q);
 
 int generic_make_request(struct bio *bio);
 struct request *blk_fetch_request(struct request_queue *q);

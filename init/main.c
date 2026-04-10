@@ -68,7 +68,14 @@ static void prepare_namespace(void)
     vfs_mount_fs("/proc", "proc");
     vfs_mount_fs("/dev", "devtmpfs");
     init_sysfs();
-    vfs_mount_fs_dev("/mnt", "minix", "/dev/ram1");
+    /*
+     * Linux-style: mount a filesystem on a block device node.
+     * Prefer NVMe when present (QEMU -device nvme), otherwise fall back to ramdisk.
+     */
+    const char *minix_dev = "/dev/ram1";
+    if (vfs_resolve("/dev/nvme0n1"))
+        minix_dev = "/dev/nvme0n1";
+    vfs_mount_fs_dev("/mnt", "minix", minix_dev);
 
     const char *init = get_init_process();
     if (run_init_process(init) != 0) {

@@ -15,8 +15,16 @@ static uint32_t pci_bus_mem_limit[256];
 static uint64_t pci_bus_pref_base[256];
 static uint64_t pci_bus_pref_limit[256];
 static uint32_t pci_io_alloc = 0x1000;
-static uint64_t pci_mem_alloc = 0x80000000;
-static uint64_t pci_pref_alloc = 0x90000000;
+/*
+ * PCI MMIO window allocator base.
+ *
+ * Linux relies on firmware-provided resource windows (PCI host bridge) and does
+ * not "blindly" assign BARs into RAM. Lite has no firmware resource model yet,
+ * so we pick a conservative high MMIO window below 4G to avoid mapping into
+ * RAM when QEMU is configured with large guest memory.
+ */
+static uint64_t pci_mem_alloc = 0xE0000000u;
+static uint64_t pci_pref_alloc = 0xE8000000u;
 static uint8_t pci_next_bus = 1;
 
 static void pci_device_release(struct device *dev)
@@ -226,6 +234,29 @@ int pci_write_config_dword(struct pci_dev *pdev, uint8_t offset, uint32_t value)
     if (!pdev)
         return -1;
     pci_config_write32(pdev->bus, (uint8_t)(pdev->devfn >> 3), (uint8_t)(pdev->devfn & 0x7), offset, value);
+    return 0;
+}
+
+int pci_find_capability(struct pci_dev *pdev, uint8_t cap_id)
+{
+    if (!pdev)
+        return 0;
+    uint8_t cap = 0;
+    if (pci_read_config_byte(pdev, 0x34, &cap) != 0 || !cap)
+        return 0;
+    int limit = 0;
+    while (cap && limit < 48) {
+        uint8_t id = 0;
+        uint8_t next = 0;
+        if (pci_read_config_byte(pdev, cap, &id) != 0)
+            return 0;
+        if (pci_read_config_byte(pdev, cap + 1, &next) != 0)
+            return 0;
+        if (id == cap_id)
+            return cap;
+        cap = next;
+        limit++;
+    }
     return 0;
 }
 
