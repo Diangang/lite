@@ -3,13 +3,11 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "linux/kernel.h"
 #include "linux/device.h"
 
 /* Linux 2.6 compatible PCI core naming (minimal subset). */
 #define PCI_ANY_ID 0xFFFF
-
-/* Lite internal safety guard for container_of(). */
-#define LITE_PCI_DRIVER_MAGIC 0x50434944u /* 'PCID' */
 
 struct pci_dev {
     /* Linux pattern: pci_dev embeds struct device as `dev`. */
@@ -50,10 +48,13 @@ struct pci_driver {
     int (*probe)(struct pci_dev *pdev, const struct pci_device_id *id);
     void (*remove)(struct pci_dev *pdev);
 
-    /* Lite internal: safe identification when container_of() from device_driver. */
-    uint32_t magic;
     struct device_driver driver;
 };
+
+static inline struct pci_driver *to_pci_driver(struct device_driver *drv)
+{
+    return container_of(drv, struct pci_driver, driver);
+}
 
 int pci_register_driver(struct pci_driver *drv);
 int pci_unregister_driver(struct pci_driver *drv);

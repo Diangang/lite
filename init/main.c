@@ -11,7 +11,7 @@
 #include "linux/procfs.h"
 #include "linux/devtmpfs.h"
 #include "linux/sysfs.h"
-#include "linux/ksysfs.h"
+#include "linux/sysfs.h"
 #include "linux/syscall.h"
 #include "linux/timer.h"
 #include "linux/time.h"
@@ -67,7 +67,7 @@ static void prepare_namespace(void)
 
     vfs_mount_fs("/proc", "proc");
     vfs_mount_fs("/dev", "devtmpfs");
-    ksysfs_init();
+    init_sysfs();
     vfs_mount_fs_dev("/mnt", "minix", "/dev/ram1");
 
     const char *init = get_init_process();

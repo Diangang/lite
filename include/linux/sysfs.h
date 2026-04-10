@@ -23,5 +23,6 @@ struct sysfs_ops {
 };
 
 void init_sysfs(void);
+void sysfs_remove_dir(struct kobject *kobj);
 
 #endif

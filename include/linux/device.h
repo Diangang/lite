@@ -90,6 +90,8 @@ struct bus_type *device_model_platform_bus(void);
 struct bus_type *device_model_pci_bus(void);
 struct device *device_model_platform_root(void);
 void device_model_set_platform_root(struct device *dev);
+struct device *device_model_pci_root(void);
+void device_model_set_pci_root(struct device *dev);
 struct device *device_model_virtual_root(void);
 void device_model_set_virtual_root(struct device *dev);
 struct device *device_model_virtual_subsys(const char *name);
@@ -112,8 +114,6 @@ struct kset *device_model_devices_kset(void);
 struct kset *device_model_drivers_kset(void);
 struct kset *device_model_classes_kset(void);
 struct kset *device_model_buses_kset(void);
-int device_model_inited(void);
-void device_model_mark_inited(void);
 void device_model_kset_init(void);
 int bus_default_match(struct device *dev, struct device_driver *drv);
 

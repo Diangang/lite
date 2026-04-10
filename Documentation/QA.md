@@ -361,7 +361,7 @@ TTY 输入逻辑在 [tty.c](file:///data25/lidg/lite/drivers/tty/tty.c#L97-L186)
 - `console_class`
 - `tty_class`
 - `devices/drivers/classes` 三个 kset
-- 平台根设备 `platform-root`
+- 平台根设备 `platform`（内部锚点，用于挂载 platform 设备树）
 
 见 [init.c](file:///data25/lidg/lite/drivers/base/init.c#L1-L55)、[core.c](file:///data25/lidg/lite/drivers/base/core.c#L1-L219)。
 

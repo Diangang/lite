@@ -790,12 +790,12 @@ void test_sysfs_layout() {
     int ok = 1;
     char buf[128];
     int n = read_file("/sys/devices/platform/type", buf, sizeof(buf));
-    if (n <= 0 || !contains(buf, n, "platform-root")) {
+    if (n <= 0 || !contains(buf, n, "platform")) {
         fail("/sys/devices/platform/type");
         ok = 0;
     }
     n = read_file("/sys/devices/pci0000:00/type", buf, sizeof(buf));
-    if (n <= 0 || !contains(buf, n, "pci-root")) {
+    if (n <= 0 || !contains(buf, n, "pci")) {
         fail("/sys/devices/pci0000:00/type");
         ok = 0;
     }

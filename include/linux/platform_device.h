@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "linux/device.h"
+#include "linux/kernel.h"
 
 /* Linux 2.6 compatible naming (minimal subset) for platform devices/drivers. */
 #define PLATFORM_DEVID_NONE (-1)
@@ -24,10 +25,13 @@ struct platform_driver {
     int (*probe)(struct platform_device *pdev);
     void (*remove)(struct platform_device *pdev);
 
-    /* Lite internal: used to identify container_of() safely-ish. */
-    uint32_t magic;
     struct device_driver driver;
 };
+
+static inline struct platform_driver *to_platform_driver(struct device_driver *drv)
+{
+    return container_of(drv, struct platform_driver, driver);
+}
 
 int platform_driver_register(struct platform_driver *drv);
 int platform_driver_unregister(struct platform_driver *drv);

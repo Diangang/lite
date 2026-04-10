@@ -497,8 +497,8 @@ static int pci_bus_match(struct device *dev, struct device_driver *drv)
     struct pci_dev *pdev = pci_get_pci_dev(dev);
     if (!pdev)
         return 0;
-    struct pci_driver *pdrv = container_of(drv, struct pci_driver, driver);
-    if (!pdrv || pdrv->magic != LITE_PCI_DRIVER_MAGIC || !pdrv->id_table)
+    struct pci_driver *pdrv = to_pci_driver(drv);
+    if (!pdrv || !pdrv->id_table)
         return 0;
     const struct pci_device_id *id = pdrv->id_table;
     while (id->vendor || id->device || id->class || id->class_mask) {
@@ -547,7 +547,6 @@ int pci_register_driver(struct pci_driver *drv)
         return -1;
     if (!pci_bus)
         return -1;
-    drv->magic = LITE_PCI_DRIVER_MAGIC;
     init_driver(&drv->driver, drv->name, pci_bus, pci_driver_probe);
     drv->driver.remove = pci_driver_remove;
     return driver_register(&drv->driver);
@@ -583,9 +582,11 @@ static int pci_init(void)
     memset(pci_bus_pref_base, 0, sizeof(pci_bus_pref_base));
     memset(pci_bus_pref_limit, 0, sizeof(pci_bus_pref_limit));
     pci_next_bus = 1;
-    struct device *root = device_register_simple("pci0000:00", "pci-root", pci_bus, NULL);
-    if (root)
+    struct device *root = device_register_simple("pci0000:00", "pci", pci_bus, NULL);
+    if (root) {
+        device_model_set_pci_root(root);
         pci_bus_parent[0] = root;
+    }
     pci_scan_bus(0);
     return 0;
 }

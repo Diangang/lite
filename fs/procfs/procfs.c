@@ -596,7 +596,7 @@ static uint32_t proc_read_pid_stat(struct inode *node, uint32_t offset, uint32_t
     if (!node)
         return 0;
     static char tmp[256];
-    uint32_t pid = node->impl;
+    uint32_t pid = (uint32_t)node->impl;
     if (pid == 0xFFFFFFFF) pid = task_get_current_id();
     uint32_t n = task_dump_stat_pid(pid, tmp, sizeof(tmp));
     if (offset >= n)
@@ -613,7 +613,7 @@ static uint32_t proc_read_pid_cmdline(struct inode *node, uint32_t offset, uint3
     if (!node)
         return 0;
     static char tmp[256];
-    uint32_t pid = node->impl;
+    uint32_t pid = (uint32_t)node->impl;
     uint32_t n = task_dump_cmdline_pid(pid, tmp, sizeof(tmp));
     if (offset >= n)
         return 0;
@@ -629,7 +629,7 @@ static uint32_t proc_read_pid_status(struct inode *node, uint32_t offset, uint32
     if (!node)
         return 0;
     static char tmp[256];
-    uint32_t pid = node->impl;
+    uint32_t pid = (uint32_t)node->impl;
     uint32_t n = task_dump_status_pid(pid, tmp, sizeof(tmp));
     if (offset >= n)
         return 0;
@@ -645,7 +645,7 @@ static uint32_t proc_read_pid_cwd(struct inode *node, uint32_t offset, uint32_t 
     if (!node)
         return 0;
     static char tmp[256];
-    uint32_t pid = node->impl;
+    uint32_t pid = (uint32_t)node->impl;
     uint32_t n = task_dump_cwd_pid(pid, tmp, sizeof(tmp));
     if (offset >= n)
         return 0;
@@ -661,8 +661,9 @@ static uint32_t proc_read_pid_fd(struct inode *node, uint32_t offset, uint32_t s
     if (!node)
         return 0;
     static char tmp[256];
-    uint32_t slot = (node->impl >> 16) & 0xFFFF;
-    uint32_t fd = node->impl & 0xFFFF;
+    uint32_t impl = (uint32_t)node->impl;
+    uint32_t slot = (impl >> 16) & 0xFFFF;
+    uint32_t fd = impl & 0xFFFF;
     if (slot >= PROC_PID_MAX)
         return 0;
     uint32_t pid = proc_pids[slot].pid;
@@ -681,7 +682,7 @@ static uint32_t proc_read_pid_maps(struct inode *node, uint32_t offset, uint32_t
     if (!node)
         return 0;
     static char tmp[2048];
-    uint32_t pid = node->impl;
+    uint32_t pid = (uint32_t)node->impl;
     if (pid == 0xFFFFFFFF) pid = task_get_current_id();
     uint32_t n = task_dump_maps_pid(pid, tmp, sizeof(tmp));
     if (offset >= n)
@@ -698,7 +699,7 @@ static struct dirent *proc_pid_fd_readdir(struct file *file, uint32_t index)
     struct inode *node = file->dentry->inode;
     if (!node)
         return NULL;
-    uint32_t slot = node->impl;
+    uint32_t slot = (uint32_t)node->impl;
     if (slot >= PROC_PID_MAX)
         return NULL;
     proc_pid_entry_t *e = &proc_pids[slot];
@@ -726,7 +727,7 @@ static struct inode *proc_pid_fd_finddir(struct inode *node, const char *name)
 {
     if (!node || !name)
         return NULL;
-    uint32_t slot = node->impl;
+    uint32_t slot = (uint32_t)node->impl;
     if (slot >= PROC_PID_MAX)
         return NULL;
     proc_pid_entry_t *e = &proc_pids[slot];
@@ -750,7 +751,7 @@ static struct dirent *proc_pid_readdir(struct file *file, uint32_t index)
     struct inode *node = file->dentry->inode;
     if (!node)
         return NULL;
-    uint32_t slot = node->impl;
+    uint32_t slot = (uint32_t)node->impl;
     if (slot >= PROC_PID_MAX)
         return NULL;
     proc_pid_entry_t *e = &proc_pids[slot];
@@ -794,7 +795,7 @@ static struct inode *proc_pid_finddir(struct inode *node, const char *name)
 {
     if (!node || !name)
         return NULL;
-    uint32_t slot = node->impl;
+    uint32_t slot = (uint32_t)node->impl;
     if (slot >= PROC_PID_MAX)
         return NULL;
     proc_pid_entry_t *e = &proc_pids[slot];

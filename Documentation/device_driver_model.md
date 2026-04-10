@@ -236,7 +236,7 @@ block 层更接近“用户看到的块设备”：
 在 Lite 当前实现里，已经补上了最小 `block` class：
 - `ram0/ram1`、`nvme0n1` 都会进入 `/sys/class/block`
 - 同时设备目录里提供 `parent`，用于显式追踪上层块设备对应的下层控制器/父设备
-  - 例如 `ram0 -> platform-root`
+  - 例如 `ram0 -> platform`（platform 根设备锚点）
   - `nvme0n1 -> 对应 pci_dev`
 - 并且在 block class 之下增加了最小 `gendisk` 语义：
   - `gendisk` 负责“盘名 + block_device + 对应 device”的统一呈现
@@ -459,7 +459,7 @@ platform device（UFS host controller）
 ### 12.6 Lite 当前的 tty/serial 与 block 细化层次
 
 ```text
-platform-root
+platform
   -> serial0                  (platform device)
     -> console                (console class device)
     -> ttyS0                  (tty class device, 由最小 tty_driver 注册)

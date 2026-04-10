@@ -98,6 +98,9 @@ smoke-512: $(KERNEL) $(INITRAMFS)
 smoke-128: $(KERNEL) $(INITRAMFS)
 	sh -c 'tmp=$$(mktemp); timeout $(SMOKE_TIMEOUT)s sh -c "{ sleep 2; printf \"run /bin/smoke\\nexit\\n\"; } | qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 128M -display none -monitor none -serial stdio" >$$tmp 2>&1; cat $$tmp; grep -q "All tests completed (OK)." $$tmp'
 
+check-vocab:
+	sh scripts/check-vocab.sh
+
 run-nvme: $(KERNEL) $(INITRAMFS)
 	qemu-system-i386 -machine q35 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -serial stdio -drive file=nvme.img,format=raw,if=none,id=nvme0 -device nvme,drive=nvme0,serial=NVME0001
 
@@ -108,4 +111,4 @@ clean:
 	rm -f $(OBJECTS) $(USH_OBJS) $(INIT_OBJS) $(SMOKE_OBJS) $(DEPS)
 	rm -rf $(OUT_DIR) isodir rootfs
 
-.PHONY: all iso run run-iso smoke smoke-512 smoke-128 clean
+.PHONY: all iso run run-iso smoke smoke-512 smoke-128 check-vocab clean

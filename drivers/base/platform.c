@@ -3,8 +3,6 @@
 #include "linux/libc.h"
 #include "linux/slab.h"
 
-#define LITE_PLATFORM_DRIVER_MAGIC 0x504C5444u /* 'PLTD' */
-
 static void platform_device_release(struct device *dev)
 {
     struct platform_device *pdev = container_of(dev, struct platform_device, dev);
@@ -36,8 +34,8 @@ int platform_bus_match(struct device *dev, struct device_driver *drv)
     /* First try platform_driver matching against platform_device_id. */
     struct platform_device *pdev = platform_get_platform_device(dev);
     if (pdev) {
-        struct platform_driver *pdrv = container_of(drv, struct platform_driver, driver);
-        if (pdrv && pdrv->magic == LITE_PLATFORM_DRIVER_MAGIC && pdrv->id_table) {
+        struct platform_driver *pdrv = to_platform_driver(drv);
+        if (pdrv && pdrv->id_table) {
             const struct platform_device_id *id = pdrv->id_table;
             while (id->name) {
                 if (platform_match_one(id, pdev))
@@ -59,8 +57,8 @@ static int platform_driver_probe(struct device *dev)
     struct platform_device *pdev = platform_get_platform_device(dev);
     if (!pdev)
         return -1;
-    struct platform_driver *pdrv = container_of(dev->driver, struct platform_driver, driver);
-    if (!pdrv || pdrv->magic != LITE_PLATFORM_DRIVER_MAGIC || !pdrv->probe)
+    struct platform_driver *pdrv = to_platform_driver(dev->driver);
+    if (!pdrv || !pdrv->probe)
         return 0;
     return pdrv->probe(pdev);
 }
@@ -72,8 +70,8 @@ static void platform_driver_remove(struct device *dev)
     struct platform_device *pdev = platform_get_platform_device(dev);
     if (!pdev)
         return;
-    struct platform_driver *pdrv = container_of(dev->driver, struct platform_driver, driver);
-    if (pdrv && pdrv->magic == LITE_PLATFORM_DRIVER_MAGIC && pdrv->remove)
+    struct platform_driver *pdrv = to_platform_driver(dev->driver);
+    if (pdrv && pdrv->remove)
         pdrv->remove(pdev);
 }
 
@@ -84,7 +82,6 @@ int platform_driver_register(struct platform_driver *drv)
     struct bus_type *platform = device_model_platform_bus();
     if (!platform)
         return -1;
-    drv->magic = LITE_PLATFORM_DRIVER_MAGIC;
     init_driver(&drv->driver, drv->name, platform, platform_driver_probe);
     drv->driver.remove = platform_driver_remove;
     return driver_register(&drv->driver);

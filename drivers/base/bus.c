@@ -2,6 +2,7 @@
 #include "linux/kernel.h"
 #include "linux/slab.h"
 #include "linux/libc.h"
+#include "linux/sysfs.h"
 
 static LIST_HEAD(bus_list_head);
 static struct kobj_type bus_ktype;
@@ -10,6 +11,7 @@ static struct kobj_type bus_ktype;
 static void bus_release_kobj(struct kobject *kobj)
 {
     struct bus_type *bus = container_of(kobj, struct bus_type, kobj);
+    sysfs_remove_dir(&bus->kobj);
     kfree(bus);
 }
 

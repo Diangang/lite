@@ -39,7 +39,7 @@ struct inode {
     uint32_t flags;
     uint32_t i_ino;
     uint32_t i_size;
-    uint32_t impl;
+    uintptr_t impl;
 
     struct address_space *i_mapping;
     struct file_operations *f_ops;

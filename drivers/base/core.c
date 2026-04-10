@@ -2,13 +2,13 @@
 #include "linux/kernel.h"
 #include "linux/slab.h"
 #include "linux/libc.h"
+#include "linux/sysfs.h"
 #include "linux/devtmpfs.h"
 #include "linux/errno.h"
 #include "linux/pci.h"
 #include "linux/tty.h"
 #include "linux/blkdev.h"
 
-static int devmodel_ready = 0;
 static struct kset devices_kset;
 static struct kset drivers_kset;
 static struct kset classes_kset;
@@ -16,6 +16,7 @@ static struct kset buses_kset;
 static char uevent_buf[4096];
 static uint32_t uevent_len = 0;
 static struct device *platform_root_dev = NULL;
+static struct device *pci_root_dev = NULL;
 static struct device *virtual_root_dev = NULL;
 static struct device *virtual_subsys_devs[16];
 static uint32_t virtual_subsys_count = 0;
@@ -232,6 +233,16 @@ void device_model_set_platform_root(struct device *dev)
     platform_root_dev = dev;
 }
 
+struct device *device_model_pci_root(void)
+{
+    return pci_root_dev;
+}
+
+void device_model_set_pci_root(struct device *dev)
+{
+    pci_root_dev = dev;
+}
+
 struct device *device_model_virtual_root(void)
 {
     return virtual_root_dev;
@@ -274,6 +285,7 @@ struct device *device_model_virtual_subsys(const char *name)
 static void device_release_kobj(struct kobject *kobj)
 {
     struct device *dev = container_of(kobj, struct device, kobj);
+    sysfs_remove_dir(&dev->kobj);
     if (dev->release)
         dev->release(dev);
     else
@@ -747,12 +759,8 @@ struct device *device_register_simple_class_parent(const char *name, const char 
 /* device_model_device_count: Implement device model device count. */
 uint32_t device_model_device_count(void)
 {
-    if (!devmodel_ready)
-        return 0;
     uint32_t n = 0;
     struct kset *kset = device_model_devices_kset();
-    if (!kset)
-        return 0;
     struct kobject *kobj;
     list_for_each_entry(kobj, &kset->list, entry)
         n++;
@@ -762,11 +770,7 @@ uint32_t device_model_device_count(void)
 /* device_model_device_at: Implement device model device at. */
 struct device *device_model_device_at(uint32_t index)
 {
-    if (!devmodel_ready)
-        return NULL;
     struct kset *kset = device_model_devices_kset();
-    if (!kset)
-        return NULL;
     uint32_t i = 0;
     struct kobject *kobj;
     list_for_each_entry(kobj, &kset->list, entry) {
@@ -780,11 +784,9 @@ struct device *device_model_device_at(uint32_t index)
 /* device_model_find_device: Implement device model find device. */
 struct device *device_model_find_device(const char *name)
 {
-    if (!devmodel_ready || !name)
+    if (!name)
         return NULL;
     struct kset *kset = device_model_devices_kset();
-    if (!kset)
-        return NULL;
     struct kobject *kobj;
     list_for_each_entry(kobj, &kset->list, entry)
         if (!strcmp(kobj->name, name))
@@ -795,31 +797,23 @@ struct device *device_model_find_device(const char *name)
 /* device_model_devices_kset: Implement device model devices kset. */
 struct kset *device_model_devices_kset(void)
 {
-    if (!devmodel_ready)
-        return NULL;
     return &devices_kset;
 }
 
 /* device_model_drivers_kset: Implement device model drivers kset. */
 struct kset *device_model_drivers_kset(void)
 {
-    if (!devmodel_ready)
-        return NULL;
     return &drivers_kset;
 }
 
 /* device_model_classes_kset: Implement device model classes kset. */
 struct kset *device_model_classes_kset(void)
 {
-    if (!devmodel_ready)
-        return NULL;
     return &classes_kset;
 }
 
 struct kset *device_model_buses_kset(void)
 {
-    if (!devmodel_ready)
-        return NULL;
     return &buses_kset;
 }
 
@@ -845,7 +839,7 @@ int class_unregister(struct class *cls)
 /* class_find: Implement class find. */
 struct class *class_find(const char *name)
 {
-    if (!devmodel_ready || !name)
+    if (!name)
         return NULL;
     struct kobject *cur;
     list_for_each_entry(cur, &classes_kset.list, entry) {
@@ -937,18 +931,6 @@ uint32_t device_uevent_read(uint32_t offset, uint32_t size, uint8_t *buffer)
         size = remain;
     memcpy(buffer, uevent_buf + offset, size);
     return size;
-}
-
-/* device_model_inited: Implement device model inited. */
-int device_model_inited(void)
-{
-    return devmodel_ready;
-}
-
-/* device_model_mark_inited: Implement device model mark inited. */
-void device_model_mark_inited(void)
-{
-    devmodel_ready = 1;
 }
 
 /* device_model_kset_init: Initialize device model kset. */
