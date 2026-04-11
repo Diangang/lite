@@ -5,21 +5,30 @@
 #include "linux/timer.h"
 #include "linux/slab.h"
 #include "linux/device.h"
-#include "linux/tty.h"
-#include "linux/blkdev.h"
 #include "linux/kernel.h"
 #include "linux/kobject.h"
 #include "linux/ksysfs.h"
+#include "base.h"
 
 static struct dirent sys_dirent;
 // Note: sys_root is dynamically allocated in init_sysfs now
 static struct inode sys_devices;
 static struct inode sys_bus;
 static struct inode sys_class;
+static struct inode_operations sys_kobj_dir_iops;
+static struct inode_operations sys_bus_entry_iops;
+static struct inode_operations sys_bus_devices_iops;
+static struct inode_operations sys_bus_drivers_iops;
+static struct inode_operations sys_dir_iops;
+static struct inode_operations sys_devices_dir_iops;
+static struct inode_operations sys_bus_dir_iops;
+static struct inode_operations sys_class_dir_iops;
+static struct inode_operations sys_class_root_iops;
 
 static void sysfs_init_inode(struct inode *inode, uint32_t flags, uint32_t ino,
                              uint32_t size, struct file_operations *f_ops,
                              uintptr_t impl, uint32_t mode);
+static struct inode_operations *sysfs_dir_iops_for_fops(struct file_operations *f_ops);
 
 /* Linux-like internal sysfs node cache. */
 struct sysfs_dirent {
@@ -39,6 +48,22 @@ static uint32_t sysfs_alloc_ino(void)
 
 static struct file_operations sys_kobj_dir_ops;
 static struct file_operations sys_kobj_attr_ops;
+static struct file_operations sys_bus_entry_ops;
+static struct file_operations sys_bus_devices_ops;
+static struct file_operations sys_bus_drivers_ops;
+static struct file_operations sys_dir_ops;
+static struct file_operations sys_devices_dir_ops;
+static struct file_operations sys_bus_dir_ops;
+static struct file_operations sys_class_dir_ops;
+static struct file_operations sys_class_root_ops;
+
+static const struct attribute_group **sysfs_device_groups(struct kobject *kobj)
+{
+    if (!kobj || kobj->ktype != device_model_device_ktype())
+        return NULL;
+    struct device *dev = container_of(kobj, struct device, kobj);
+    return dev ? dev->groups : NULL;
+}
 
 static uint32_t sysfs_kobj_attr_mode(struct kobject *kobj, const struct attribute *attr)
 {
@@ -73,6 +98,23 @@ static uint32_t sysfs_kobj_attr_mode(struct kobject *kobj, const struct attribut
                 return attr->mode;
             a++;
         }
+    }
+
+    const struct attribute_group **dg = sysfs_device_groups(kobj);
+    while (dg && *dg) {
+        const struct attribute_group *grp = *dg;
+        if (grp && grp->attrs) {
+            const struct attribute **a = grp->attrs;
+            while (a && *a) {
+                if (*a == attr) {
+                    if (grp->is_visible)
+                        return grp->is_visible(kobj, attr);
+                    return attr->mode;
+                }
+                a++;
+            }
+        }
+        dg++;
     }
     return attr->mode;
 }
@@ -191,7 +233,6 @@ static struct file_operations sys_symlink_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -220,20 +261,12 @@ static struct dirent *sys_dead_readdir(struct file *file, uint32_t index)
     return NULL;
 }
 
-static struct inode *sys_dead_finddir(struct inode *node, const char *name)
-{
-    (void)node;
-    (void)name;
-    return NULL;
-}
-
 static struct file_operations sys_dead_ops = {
     .read = sys_dead_read,
     .write = sys_dead_write,
     .open = NULL,
     .close = NULL,
     .readdir = sys_dead_readdir,
-    .finddir = sys_dead_finddir,
     .ioctl = NULL
 };
 
@@ -327,11 +360,35 @@ static void sysfs_init_inode(struct inode *inode, uint32_t flags, uint32_t ino,
     inode->flags = flags;
     inode->i_ino = ino;
     inode->i_size = size;
+    inode->i_op = (flags == FS_DIRECTORY) ? sysfs_dir_iops_for_fops(f_ops) : NULL;
     inode->f_ops = f_ops;
     inode->impl = impl;
     inode->uid = 0;
     inode->gid = 0;
     inode->i_mode = mode;
+}
+
+static struct inode_operations *sysfs_dir_iops_for_fops(struct file_operations *f_ops)
+{
+    if (f_ops == &sys_kobj_dir_ops)
+        return &sys_kobj_dir_iops;
+    if (f_ops == &sys_bus_entry_ops)
+        return &sys_bus_entry_iops;
+    if (f_ops == &sys_bus_devices_ops)
+        return &sys_bus_devices_iops;
+    if (f_ops == &sys_bus_drivers_ops)
+        return &sys_bus_drivers_iops;
+    if (f_ops == &sys_dir_ops)
+        return &sys_dir_iops;
+    if (f_ops == &sys_devices_dir_ops)
+        return &sys_devices_dir_iops;
+    if (f_ops == &sys_bus_dir_ops)
+        return &sys_bus_dir_iops;
+    if (f_ops == &sys_class_dir_ops)
+        return &sys_class_dir_iops;
+    if (f_ops == &sys_class_root_ops)
+        return &sys_class_root_iops;
+    return NULL;
 }
 
 static uint32_t sys_read_kobj_attr(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
@@ -383,7 +440,6 @@ static struct file_operations sys_kobj_attr_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -428,6 +484,26 @@ static int sysfs_kobj_attr_at(struct kobject *kobj, uint32_t index, const struct
             }
             a++;
         }
+    }
+
+    const struct attribute_group **dg = sysfs_device_groups(kobj);
+    while (dg && *dg) {
+        const struct attribute_group *grp = *dg;
+        if (grp && grp->attrs) {
+            const struct attribute **a = grp->attrs;
+            while (a && *a) {
+                uint32_t mode = grp->is_visible ? grp->is_visible(kobj, *a) : (*a)->mode;
+                if (mode) {
+                    if (i == index) {
+                        *out_attr = *a;
+                        return 0;
+                    }
+                    i++;
+                }
+                a++;
+            }
+        }
+        dg++;
     }
 
     return -1;
@@ -538,8 +614,15 @@ static struct file_operations sys_kobj_dir_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = sys_kobj_dir_readdir,
-    .finddir = sys_kobj_dir_finddir,
     .ioctl = NULL
+};
+
+static struct inode_operations sys_kobj_dir_iops = {
+    .lookup = sys_kobj_dir_finddir,
+    .create = NULL,
+    .mkdir = NULL,
+    .unlink = NULL,
+    .rmdir = NULL
 };
 
 static struct file_operations sys_bus_entry_ops;
@@ -607,6 +690,7 @@ static struct dirent *sys_bus_readdir(struct file *file, uint32_t index)
             struct inode *ino = sysfs_get_kobj_dir_inode(cur);
             if (!ino)
                 return NULL;
+            ino->i_op = &sys_bus_entry_iops;
             ino->f_ops = &sys_bus_entry_ops;
             strcpy(sys_dirent.name, cur->name);
             sys_dirent.ino = ino->i_ino;
@@ -629,6 +713,7 @@ static struct inode *sys_bus_finddir(struct inode *node, const char *name)
     struct inode *ino = sysfs_get_kobj_dir_inode(&bus->kobj);
     if (!ino)
         return NULL;
+    ino->i_op = &sys_bus_entry_iops;
     ino->f_ops = &sys_bus_entry_ops;
     return ino;
 }
@@ -781,8 +866,15 @@ static struct file_operations sys_bus_entry_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = sys_bus_entry_readdir,
-    .finddir = sys_bus_entry_finddir,
     .ioctl = NULL
+};
+
+static struct inode_operations sys_bus_entry_iops = {
+    .lookup = sys_bus_entry_finddir,
+    .create = NULL,
+    .mkdir = NULL,
+    .unlink = NULL,
+    .rmdir = NULL
 };
 
 static struct file_operations sys_bus_devices_ops = {
@@ -791,8 +883,15 @@ static struct file_operations sys_bus_devices_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = sys_bus_devices_readdir,
-    .finddir = sys_bus_devices_finddir,
     .ioctl = NULL
+};
+
+static struct inode_operations sys_bus_devices_iops = {
+    .lookup = sys_bus_devices_finddir,
+    .create = NULL,
+    .mkdir = NULL,
+    .unlink = NULL,
+    .rmdir = NULL
 };
 
 static struct file_operations sys_bus_drivers_ops = {
@@ -801,8 +900,15 @@ static struct file_operations sys_bus_drivers_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = sys_bus_drivers_readdir,
-    .finddir = sys_bus_drivers_finddir,
     .ioctl = NULL
+};
+
+static struct inode_operations sys_bus_drivers_iops = {
+    .lookup = sys_bus_drivers_finddir,
+    .create = NULL,
+    .mkdir = NULL,
+    .unlink = NULL,
+    .rmdir = NULL
 };
 
 /* sys_class_readdir: Implement sys class readdir. */
@@ -820,6 +926,7 @@ static struct dirent *sys_class_readdir(struct file *file, uint32_t index)
             struct inode *ino = sysfs_get_kobj_dir_inode(cur);
             if (!ino)
                 return NULL;
+            ino->i_op = &sys_class_dir_iops;
             ino->f_ops = &sys_class_dir_ops;
             strcpy(sys_dirent.name, cur->name);
             sys_dirent.ino = ino->i_ino;
@@ -842,6 +949,7 @@ static struct inode *sys_class_finddir(struct inode *node, const char *name)
     struct inode *ino = sysfs_get_kobj_dir_inode(&cls->kobj);
     if (!ino)
         return NULL;
+    ino->i_op = &sys_class_dir_iops;
     ino->f_ops = &sys_class_dir_ops;
     return ino;
 }
@@ -950,8 +1058,15 @@ static struct file_operations sys_dir_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = sys_readdir,
-    .finddir = sys_finddir,
     .ioctl = NULL
+};
+
+static struct inode_operations sys_dir_iops = {
+    .lookup = sys_finddir,
+    .create = NULL,
+    .mkdir = NULL,
+    .unlink = NULL,
+    .rmdir = NULL
 };
 
 static struct file_operations sys_devices_dir_ops = {
@@ -960,8 +1075,15 @@ static struct file_operations sys_devices_dir_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = sys_devices_readdir,
-    .finddir = sys_devices_finddir,
     .ioctl = NULL
+};
+
+static struct inode_operations sys_devices_dir_iops = {
+    .lookup = sys_devices_finddir,
+    .create = NULL,
+    .mkdir = NULL,
+    .unlink = NULL,
+    .rmdir = NULL
 };
 
 static struct file_operations sys_bus_dir_ops = {
@@ -970,8 +1092,15 @@ static struct file_operations sys_bus_dir_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = sys_bus_readdir,
-    .finddir = sys_bus_finddir,
     .ioctl = NULL
+};
+
+static struct inode_operations sys_bus_dir_iops = {
+    .lookup = sys_bus_finddir,
+    .create = NULL,
+    .mkdir = NULL,
+    .unlink = NULL,
+    .rmdir = NULL
 };
 
 static struct file_operations sys_class_dir_ops = {
@@ -980,8 +1109,15 @@ static struct file_operations sys_class_dir_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = sys_class_dir_readdir,
-    .finddir = sys_class_dir_finddir,
     .ioctl = NULL
+};
+
+static struct inode_operations sys_class_dir_iops = {
+    .lookup = sys_class_dir_finddir,
+    .create = NULL,
+    .mkdir = NULL,
+    .unlink = NULL,
+    .rmdir = NULL
 };
 
 static struct file_operations sys_class_root_ops = {
@@ -990,8 +1126,15 @@ static struct file_operations sys_class_root_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = sys_class_readdir,
-    .finddir = sys_class_finddir,
     .ioctl = NULL
+};
+
+static struct inode_operations sys_class_root_iops = {
+    .lookup = sys_class_finddir,
+    .create = NULL,
+    .mkdir = NULL,
+    .unlink = NULL,
+    .rmdir = NULL
 };
 
 /* init_sysfs: Initialize sysfs. */
@@ -1013,6 +1156,7 @@ static int sysfs_fill_super(struct super_block *sb, void *data, int silent)
     memset(sys_root, 0, sizeof(struct inode));
     sys_root->flags = FS_DIRECTORY;
     sys_root->i_ino = 1;
+    sys_root->i_op = &sys_dir_iops;
     sys_root->f_ops = &sys_dir_ops;
     sys_root->uid = 0;
     sys_root->gid = 0;
@@ -1021,6 +1165,7 @@ static int sysfs_fill_super(struct super_block *sb, void *data, int silent)
     memset(&sys_devices, 0, sizeof(sys_devices));
     sys_devices.flags = FS_DIRECTORY;
     sys_devices.i_ino = 3;
+    sys_devices.i_op = &sys_devices_dir_iops;
     sys_devices.f_ops = &sys_devices_dir_ops;
     sys_devices.uid = 0;
     sys_devices.gid = 0;
@@ -1029,6 +1174,7 @@ static int sysfs_fill_super(struct super_block *sb, void *data, int silent)
     memset(&sys_bus, 0, sizeof(sys_bus));
     sys_bus.flags = FS_DIRECTORY;
     sys_bus.i_ino = 4;
+    sys_bus.i_op = &sys_bus_dir_iops;
     sys_bus.f_ops = &sys_bus_dir_ops;
     sys_bus.uid = 0;
     sys_bus.gid = 0;
@@ -1037,6 +1183,7 @@ static int sysfs_fill_super(struct super_block *sb, void *data, int silent)
     memset(&sys_class, 0, sizeof(sys_class));
     sys_class.flags = FS_DIRECTORY;
     sys_class.i_ino = 5;
+    sys_class.i_op = &sys_class_root_iops;
     sys_class.f_ops = &sys_class_root_ops;
     sys_class.uid = 0;
     sys_class.gid = 0;

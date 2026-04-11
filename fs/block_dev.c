@@ -3,6 +3,40 @@
 #include "linux/libc.h"
 #include "linux/pagemap.h"
 #include "linux/slab.h"
+#include "linux/memlayout.h"
+
+static int blockdev_readpage(struct inode *inode, uint32_t index, struct page_cache_entry *page)
+{
+    if (!inode || !page)
+        return -1;
+    if ((inode->flags & 0x7) != FS_BLOCKDEVICE)
+        return -1;
+    struct block_device *bdev = (struct block_device *)inode->private_data;
+    if (!bdev)
+        return -1;
+    block_device_read(bdev, index * 4096, 4096,
+                      (uint8_t *)memlayout_directmap_phys_to_virt(page->phys_addr));
+    return 0;
+}
+
+static int blockdev_writepage(struct inode *inode, struct page_cache_entry *page)
+{
+    if (!inode || !page)
+        return -1;
+    if ((inode->flags & 0x7) != FS_BLOCKDEVICE)
+        return -1;
+    struct block_device *bdev = (struct block_device *)inode->private_data;
+    if (!bdev)
+        return -1;
+    block_device_write(bdev, page->index * 4096, 4096,
+                       (const uint8_t *)memlayout_directmap_phys_to_virt(page->phys_addr));
+    return 0;
+}
+
+static struct address_space_operations blockdev_aops = {
+    .readpage = blockdev_readpage,
+    .writepage = blockdev_writepage
+};
 
 static struct file_operations blockdev_ops = {
     .read = generic_file_read,
@@ -10,7 +44,6 @@ static struct file_operations blockdev_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -37,6 +70,7 @@ struct inode *blockdev_inode_create(struct block_device *bdev)
         return NULL;
     }
     address_space_init(mapping, inode);
+    mapping->a_ops = &blockdev_aops;
     inode->i_mapping = mapping;
     return inode;
 }

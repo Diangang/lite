@@ -96,13 +96,79 @@ struct inode *finddir_fs(struct inode *node, const char *name)
 {
     if (!node || !name)
         return NULL;
-    if ((node->flags & 0x7) != FS_DIRECTORY || !node->f_ops || node->f_ops->finddir == NULL)
+    if ((node->flags & 0x7) != FS_DIRECTORY)
         return NULL;
-    return node->f_ops->finddir(node, name);
+    if (node->i_op && node->i_op->lookup)
+        return node->i_op->lookup(node, name);
+    return NULL;
 }
+
+struct inode *create_fs(struct inode *dir, const char *name)
+{
+    if (!dir || !name)
+        return NULL;
+    if ((dir->flags & 0x7) != FS_DIRECTORY)
+        return NULL;
+    if (dir->i_op && dir->i_op->create)
+        return dir->i_op->create(dir, name);
+    return NULL;
+}
+
+struct inode *mkdir_fs(struct inode *dir, const char *name)
+{
+    if (!dir || !name)
+        return NULL;
+    if ((dir->flags & 0x7) != FS_DIRECTORY)
+        return NULL;
+    if (dir->i_op && dir->i_op->mkdir)
+        return dir->i_op->mkdir(dir, name);
+    return NULL;
+}
+
+int unlink_fs(struct dentry *dir_dentry, const char *name)
+{
+    if (!dir_dentry || !dir_dentry->inode || !name)
+        return -1;
+    struct inode *dir = dir_dentry->inode;
+    if ((dir->flags & 0x7) != FS_DIRECTORY)
+        return -1;
+    if (dir->i_op && dir->i_op->unlink)
+        return dir->i_op->unlink(dir_dentry, name);
+    return -1;
+}
+
+int rmdir_fs(struct dentry *dir_dentry, const char *name)
+{
+    if (!dir_dentry || !dir_dentry->inode || !name)
+        return -1;
+    struct inode *dir = dir_dentry->inode;
+    if ((dir->flags & 0x7) != FS_DIRECTORY)
+        return -1;
+    if (dir->i_op && dir->i_op->rmdir)
+        return dir->i_op->rmdir(dir_dentry, name);
+    return -1;
+}
+
+
 
 /* generic_readdir: Implement generic readdir. */
 static struct dirent generic_dirent;
+
+static struct dentry *find_dentry_by_inode(struct dentry *root, struct inode *node)
+{
+    if (!root || !node)
+        return NULL;
+    if (root->inode == node)
+        return root;
+    struct dentry *child = root->children;
+    while (child) {
+        struct dentry *found = find_dentry_by_inode(child, node);
+        if (found)
+            return found;
+        child = child->sibling;
+    }
+    return NULL;
+}
 
 struct dirent *generic_readdir(struct file *file, uint32_t index)
 {
@@ -136,4 +202,17 @@ struct dirent *generic_readdir(struct file *file, uint32_t index)
     }
 
     return NULL;
+}
+
+struct inode *generic_finddir(struct inode *node, const char *name)
+{
+    if (!node || !name || !*name)
+        return NULL;
+    struct dentry *host = find_dentry_by_inode(vfs_root_dentry, node);
+    if (!host)
+        return NULL;
+    struct dentry *child = d_lookup(host, name);
+    if (!child)
+        return NULL;
+    return child->inode;
 }

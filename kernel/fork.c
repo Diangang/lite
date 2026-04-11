@@ -4,101 +4,9 @@
 #include "linux/pid.h"
 #include "linux/slab.h"
 #include "linux/libc.h"
-#include "asm/pgtable.h"
-#include "linux/page_alloc.h"
-#include "linux/devtmpfs.h"
 #include "linux/fs.h"
 #include "linux/console.h"
 #include "linux/irqflags.h"
-#include "linux/rmap.h"
-
-/* vma_clone_list: Implement VMA clone list. */
-static struct vm_area_struct *vma_clone_list(struct vm_area_struct *src)
-{
-    struct vm_area_struct *head = NULL;
-    struct vm_area_struct **tail = &head;
-    while (src) {
-        struct vm_area_struct *v = (struct vm_area_struct*)kmalloc(sizeof(struct vm_area_struct));
-        if (!v) {
-            struct vm_area_struct *n = head;
-            while (n) {
-                struct vm_area_struct *next = n->vm_next;
-                kfree(n);
-                n = next;
-            }
-            return NULL;
-        }
-        v->vm_start = src->vm_start;
-        v->vm_end = src->vm_end;
-        v->vm_flags = src->vm_flags;
-        v->vm_next = NULL;
-        *tail = v;
-        tail = &v->vm_next;
-        src = src->vm_next;
-    }
-    return head;
-}
-
-/* mm_clone_cow: Implement memory manager clone copy-on-write. */
-static struct mm_struct *mm_clone_cow(struct mm_struct *src)
-{
-    if (!src)
-        return NULL;
-    pgd_t *new_dir = pgd_clone_kernel();
-    if (!new_dir)
-        return NULL;
-    struct mm_struct *mm = (struct mm_struct*)kmalloc(sizeof(struct mm_struct));
-    if (!mm) {
-        uint32_t pgd_vaddr = (uint32_t)new_dir;
-        if (pgd_vaddr >= PAGE_OFFSET)
-            free_page((unsigned long)virt_to_phys_addr(new_dir));
-        else
-            free_page((unsigned long)pgd_vaddr);
-        return NULL;
-    }
-    memset(mm, 0, sizeof(*mm));
-    mm->pgd = new_dir;
-    mm->start_code = src->start_code;
-    mm->end_code = src->end_code;
-    mm->start_stack = src->start_stack;
-    mm->start_brk = src->start_brk;
-    mm->brk = src->brk;
-    mm->mmap = vma_clone_list(src->mmap);
-    if (src->mmap && !mm->mmap) {
-        uint32_t pgd_vaddr = (uint32_t)new_dir;
-        if (pgd_vaddr >= PAGE_OFFSET)
-            free_page((unsigned long)virt_to_phys_addr(new_dir));
-        else
-            free_page((unsigned long)pgd_vaddr);
-        kfree(mm);
-        return NULL;
-    }
-    struct vm_area_struct *v = src->mmap;
-    while (v) {
-        uint32_t start = v->vm_start & ~0xFFF;
-        uint32_t end = (v->vm_end + 0xFFF) & ~0xFFF;
-        for (uint32_t va = start; va < end; va += 4096) {
-            pteval_t pte = get_pte_flags(src->pgd, (void*)va);
-            if (!(pte & PTE_PRESENT))
-                continue;
-            if (!(pte & PTE_USER))
-                continue;
-            uint32_t phys = pte_pfn(pte);
-            pteval_t flags = pte & 0xFFF;
-            int was_write = (flags & PTE_READ_WRITE) != 0;
-            if (was_write) {
-                flags &= ~PTE_READ_WRITE;
-                flags |= PTE_COW;
-                set_pte_flags(src->pgd, (void*)va, flags);
-            }
-            map_page_ex(new_dir, (void*)phys, (void*)va, flags);
-            rmap_dup(src, mm, va, phys);
-            get_page((unsigned long)phys);
-        }
-        v = v->vm_next;
-    }
-    return mm;
-}
 
 /* copy_thread: Copy thread. */
 struct pt_regs *copy_thread(uint32_t *stack, void (*entry)(void), struct pt_regs *parent_regs)
@@ -157,7 +65,7 @@ int sys_fork(struct pt_regs *regs)
         return -1;
     }
 
-    struct mm_struct *child_mm = mm_clone_cow(current->mm);
+    struct mm_struct *child_mm = dup_mm(current->mm);
     if (!child_mm) {
         kfree(stack);
         kfree(task);
@@ -203,7 +111,7 @@ int sys_fork(struct pt_regs *regs)
     task->gid = current->gid;
     task->umask = current->umask;
     task->waitq = NULL;
-    task->wait_next = NULL;
+    init_waitqueue_entry(&task->wait_entry, task);
     INIT_LIST_HEAD(&task->tasks);
 
     uint32_t flags = irq_save();
@@ -262,14 +170,8 @@ static int task_create_internal(void (*entry)(void), const char *program)
             task->fs.root->refcount++;
     }
     files_init(task);
-    if (program) {
-        struct task_struct *prev = current;
-        current = task;
-        install_stdio(devtmpfs_get_tty());
-        current = prev;
-    }
     task->waitq = NULL;
-    task->wait_next = NULL;
+    init_waitqueue_entry(&task->wait_entry, task);
     INIT_LIST_HEAD(&task->tasks);
 
     uint32_t flags = irq_save();

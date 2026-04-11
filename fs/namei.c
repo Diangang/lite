@@ -142,8 +142,8 @@ struct dentry *path_walk(const char *path)
                 struct dentry *next = d_lookup(curr, part);
                 if (!next) {
                     /* Not in cache, try underlying FS. */
-                    if (curr->inode && curr->inode->f_ops && curr->inode->f_ops->finddir) {
-                        struct inode *child_inode = curr->inode->f_ops->finddir(curr->inode, part);
+                    if (curr->inode) {
+                        struct inode *child_inode = finddir_fs(curr->inode, part);
                         if (child_inode) {
                             next = d_alloc(curr, part);
                             next->inode = child_inode;
@@ -263,16 +263,14 @@ int vfs_mkdir(const char *path)
         return -1;
 
     // Check if exists
-    if (pnode->f_ops && pnode->f_ops->finddir && pnode->f_ops->finddir(pnode, name))
+    if (finddir_fs(pnode, name))
         return -1;
 
     struct dentry *pdentry = path_walk(parent);
     if (!pdentry)
         return -1;
 
-    if (!pnode->f_ops || !pnode->f_ops->create)
-        return -1;
-    struct inode *created = pnode->f_ops->create(pnode, name, FS_DIRECTORY);
+    struct inode *created = mkdir_fs(pnode, name);
     if (!created)
         return -1;
 
@@ -337,10 +335,7 @@ int vfs_unlink(const char *path)
     if (!vfs_check_access(pnode, 0, 1, 1))
         return -1;
 
-    if (pnode->f_ops && pnode->f_ops->unlink)
-        return pnode->f_ops->unlink(pdentry, name);
-
-    return -1;
+    return unlink_fs(pdentry, name);
 }
 
 /* vfs_rmdir: Implement vfs rmdir. */
@@ -391,10 +386,7 @@ int vfs_rmdir(const char *path)
     if (!vfs_check_access(pnode, 0, 1, 1))
         return -1;
 
-    if (pnode->f_ops && pnode->f_ops->rmdir)
-        return pnode->f_ops->rmdir(pdentry, name);
-
-    return -1;
+    return rmdir_fs(pdentry, name);
 }
 
 /* sys_mkdir: Implement sys mkdir. */

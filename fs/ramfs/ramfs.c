@@ -9,6 +9,7 @@
 enum { RAMFS_MAGIC = 0x52414D46 };
 
 /* ramfs_apply_umask: Implement ramfs apply umask. */
+static struct inode_operations ramfs_dir_iops;
 static struct file_operations ramfs_dir_ops;
 static struct file_operations ramfs_file_ops;
 
@@ -57,10 +58,12 @@ struct inode *ramfs_create_child(struct inode *dir, const char *name, uint32_t t
 
     if (type == FS_DIRECTORY) {
         inode->flags = FS_DIRECTORY;
+        inode->i_op = &ramfs_dir_iops;
         inode->f_ops = &ramfs_dir_ops;
         inode->i_mode = ramfs_apply_umask(0777);
     } else {
         inode->flags = FS_FILE;
+        inode->i_op = NULL;
         inode->f_ops = &ramfs_file_ops;
         inode->i_size = 0;
         inode->i_mode = ramfs_apply_umask(0666);
@@ -164,17 +167,37 @@ static int ramfs_rmdir(struct dentry *dir_dentry, const char *name)
     return 0;
 }
 
+static struct inode *ramfs_lookup(struct inode *dir, const char *name)
+{
+    (void)dir;
+    return generic_finddir(dir, name);
+}
+
+static struct inode *ramfs_create_file(struct inode *dir, const char *name)
+{
+    return ramfs_create_child(dir, name, FS_FILE);
+}
+
+static struct inode *ramfs_mkdir_inode(struct inode *dir, const char *name)
+{
+    return ramfs_create_child(dir, name, FS_DIRECTORY);
+}
+
+static struct inode_operations ramfs_dir_iops = {
+    .lookup = ramfs_lookup,
+    .create = ramfs_create_file,
+    .mkdir = ramfs_mkdir_inode,
+    .unlink = ramfs_unlink,
+    .rmdir = ramfs_rmdir,
+};
+
 static struct file_operations ramfs_dir_ops = {
     .read = NULL,
     .write = NULL,
     .open = NULL,
     .close = NULL,
     .readdir = generic_readdir,
-    .finddir = NULL,
-    .create = ramfs_create_child,
     .ioctl = NULL,
-    .unlink = ramfs_unlink,
-    .rmdir = ramfs_rmdir
 };
 
 static struct file_operations ramfs_file_ops = {
@@ -183,8 +206,6 @@ static struct file_operations ramfs_file_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
-    .create = NULL,
     .ioctl = NULL
 };
 
@@ -202,6 +223,7 @@ static int ramfs_fill_super(struct super_block *sb, void *data, int silent)
 
     inode->flags = FS_DIRECTORY;
     inode->i_ino = 1;
+    inode->i_op = &ramfs_dir_iops;
     inode->f_ops = &ramfs_dir_ops;
     inode->uid = 0;
     inode->gid = 0;

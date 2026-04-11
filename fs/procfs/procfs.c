@@ -15,6 +15,7 @@
 #include "linux/blkdev.h"
 #include "linux/buffer_head.h"
 #include "linux/device.h"
+#include "base.h"
 #include "linux/bootmem.h"
 #include "linux/memlayout.h"
 #include "asm/pgtable.h"
@@ -54,6 +55,9 @@ enum { PROC_PID_MAX = 16 };
 static proc_pid_entry_t proc_pids[PROC_PID_MAX];
 
 static int parse_u32(const char *s, uint32_t *out);
+static struct inode_operations proc_pid_dir_iops;
+static struct inode_operations proc_pid_fd_dir_iops;
+static struct inode_operations procfs_dir_iops;
 
 /* buf_append: Implement buf append. */
 static void buf_append(char *buf, uint32_t *off, uint32_t cap, const char *s)
@@ -843,8 +847,15 @@ static struct file_operations proc_pid_dir_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = proc_pid_readdir,
-    .finddir = proc_pid_finddir,
     .ioctl = NULL
+};
+
+static struct inode_operations proc_pid_dir_iops = {
+    .lookup = proc_pid_finddir,
+    .create = NULL,
+    .mkdir = NULL,
+    .unlink = NULL,
+    .rmdir = NULL
 };
 
 static struct file_operations proc_pid_maps_ops = {
@@ -853,7 +864,6 @@ static struct file_operations proc_pid_maps_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -863,7 +873,6 @@ static struct file_operations proc_pid_stat_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -873,7 +882,6 @@ static struct file_operations proc_pid_cmdline_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -883,7 +891,6 @@ static struct file_operations proc_pid_status_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -893,7 +900,6 @@ static struct file_operations proc_pid_cwd_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -903,8 +909,15 @@ static struct file_operations proc_pid_fd_dir_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = proc_pid_fd_readdir,
-    .finddir = proc_pid_fd_finddir,
     .ioctl = NULL
+};
+
+static struct inode_operations proc_pid_fd_dir_iops = {
+    .lookup = proc_pid_fd_finddir,
+    .create = NULL,
+    .mkdir = NULL,
+    .unlink = NULL,
+    .rmdir = NULL
 };
 
 static struct file_operations proc_pid_fd_ops = {
@@ -913,7 +926,6 @@ static struct file_operations proc_pid_fd_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -934,6 +946,7 @@ struct inode *proc_get_pid_dir(uint32_t pid)
             memset(&e->dir, 0, sizeof(e->dir));
             e->dir.flags = FS_DIRECTORY;
             e->dir.i_ino = 0x1000 + i;
+            e->dir.i_op = &proc_pid_dir_iops;
             e->dir.f_ops = &proc_pid_dir_ops;
             e->dir.impl = i;
             e->dir.uid = 0;
@@ -993,6 +1006,7 @@ struct inode *proc_get_pid_dir(uint32_t pid)
             memset(&e->fd_dir, 0, sizeof(e->fd_dir));
             e->fd_dir.flags = FS_DIRECTORY;
             e->fd_dir.i_ino = 0x6000 + i;
+            e->fd_dir.i_op = &proc_pid_fd_dir_iops;
             e->fd_dir.f_ops = &proc_pid_fd_dir_ops;
             e->fd_dir.impl = i;
             e->fd_dir.uid = 0;
@@ -1148,8 +1162,15 @@ static struct file_operations procfs_dir_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = proc_readdir,
-    .finddir = proc_finddir,
     .ioctl = NULL
+};
+
+static struct inode_operations procfs_dir_iops = {
+    .lookup = proc_finddir,
+    .create = NULL,
+    .mkdir = NULL,
+    .unlink = NULL,
+    .rmdir = NULL
 };
 
 static struct file_operations proc_tasks_ops = {
@@ -1158,7 +1179,6 @@ static struct file_operations proc_tasks_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -1168,7 +1188,6 @@ static struct file_operations proc_sched_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -1178,7 +1197,6 @@ static struct file_operations proc_irq_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -1188,7 +1206,6 @@ static struct file_operations proc_maps_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -1198,7 +1215,6 @@ static struct file_operations proc_meminfo_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -1208,7 +1224,6 @@ static struct file_operations proc_iomem_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -1218,7 +1233,6 @@ static struct file_operations proc_cow_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -1228,7 +1242,6 @@ static struct file_operations proc_pfault_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -1238,7 +1251,6 @@ static struct file_operations proc_vmscan_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -1248,7 +1260,6 @@ static struct file_operations proc_writeback_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -1258,7 +1269,6 @@ static struct file_operations proc_pagecache_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -1268,7 +1278,6 @@ static struct file_operations proc_blockstats_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -1278,7 +1287,6 @@ static struct file_operations proc_diskstats_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -1288,7 +1296,6 @@ static struct file_operations proc_mounts_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = NULL
 };
 
@@ -1314,6 +1321,7 @@ static int proc_fill_super(struct super_block *sb, void *data, int silent)
     memset(proc_root, 0, sizeof(struct inode));
     proc_root->flags = FS_DIRECTORY;
     proc_root->i_ino = 1;
+    proc_root->i_op = &procfs_dir_iops;
     proc_root->f_ops = &procfs_dir_ops;
     proc_root->uid = 0;
     proc_root->gid = 0;

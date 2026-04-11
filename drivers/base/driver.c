@@ -1,6 +1,7 @@
 #include "linux/device.h"
 #include "linux/libc.h"
 #include "linux/errno.h"
+#include "base.h"
 
 static struct attribute drv_attr_name = { .name = "name", .mode = 0444 };
 static struct attribute drv_attr_bind = { .name = "bind", .mode = 0222 };
@@ -116,6 +117,48 @@ static struct kobj_type driver_ktype = {
     .default_attrs = NULL,
     .default_groups = driver_default_groups,
 };
+
+static struct device *deferred_devs[64];
+static uint32_t deferred_devs_count = 0;
+
+void driver_deferred_probe_add(struct device *dev)
+{
+    if (!dev)
+        return;
+    for (uint32_t i = 0; i < deferred_devs_count; i++) {
+        if (deferred_devs[i] == dev)
+            return;
+    }
+    if (deferred_devs_count < (uint32_t)(sizeof(deferred_devs) / sizeof(deferred_devs[0])))
+        deferred_devs[deferred_devs_count++] = dev;
+}
+
+static void driver_deferred_probe_remove_index(uint32_t idx)
+{
+    if (idx >= deferred_devs_count)
+        return;
+    for (uint32_t j = idx + 1; j < deferred_devs_count; j++)
+        deferred_devs[j - 1] = deferred_devs[j];
+    deferred_devs_count--;
+}
+
+void driver_deferred_probe_trigger(void)
+{
+    uint32_t i = 0;
+    while (i < deferred_devs_count) {
+        struct device *dev = deferred_devs[i];
+        if (!dev || dev->driver) {
+            driver_deferred_probe_remove_index(i);
+            continue;
+        }
+        device_attach(dev);
+        if (dev->driver) {
+            driver_deferred_probe_remove_index(i);
+            continue;
+        }
+        i++;
+    }
+}
 
 int driver_probe_device(struct device_driver *drv, struct device *dev)
 {

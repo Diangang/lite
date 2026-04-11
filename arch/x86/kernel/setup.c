@@ -1,7 +1,6 @@
 #include "asm/gdt.h"
 #include "asm/idt.h"
 #include "asm/multiboot.h"
-#include "linux/device.h"
 #include "linux/platform_device.h"
 #include "linux/init.h"
 #include "linux/libc.h"
@@ -13,10 +12,6 @@
  */
 static int x86_platform_devices_init(void)
 {
-    struct bus_type *platform = device_model_platform_bus();
-    if (!platform)
-        return -1;
-
     platform_device_register_simple("serial", 0);
     platform_device_register_simple("i8042", 0);
     platform_device_register_simple("console", 0);

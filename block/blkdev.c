@@ -14,7 +14,6 @@
 #include "linux/device.h"
 #include "linux/init.h"
 #include "linux/slab.h"
-#include "linux/vmalloc.h"
 #include "linux/libc.h"
 
 static uint32_t blk_reads;
@@ -22,6 +21,50 @@ static uint32_t blk_writes;
 static uint32_t blk_bytes_read;
 static uint32_t blk_bytes_written;
 static struct class block_class;
+
+static uint32_t blk_sysfs_emit_u32_line(char *buffer, uint32_t cap, uint32_t value)
+{
+    if (!buffer || cap < 2)
+        return 0;
+    itoa((int)value, 10, buffer);
+    uint32_t n = (uint32_t)strlen(buffer);
+    if (n + 1 >= cap)
+        return 0;
+    buffer[n++] = '\n';
+    buffer[n] = 0;
+    return n;
+}
+
+static uint32_t block_attr_show_size(struct device *dev, struct device_attribute *attr, char *buffer, uint32_t cap)
+{
+    (void)attr;
+    struct gendisk *disk = gendisk_from_dev(dev);
+    uint32_t value = 0;
+    if (disk && disk->bdev && disk->bdev->block_size)
+        value = disk->bdev->size / disk->bdev->block_size;
+    return blk_sysfs_emit_u32_line(buffer, cap, value);
+}
+
+static struct device_attribute block_attr_size = {
+    .attr = { .name = "size", .mode = 0444 },
+    .show = block_attr_show_size,
+};
+
+static const struct attribute *block_device_attrs[] = {
+    &block_attr_size.attr,
+    NULL,
+};
+
+static const struct attribute_group block_device_group = {
+    .name = NULL,
+    .attrs = block_device_attrs,
+    .is_visible = NULL,
+};
+
+static const struct attribute_group *block_device_groups[] = {
+    &block_device_group,
+    NULL,
+};
 
 static int block_class_init(void)
 {
@@ -56,29 +99,27 @@ struct device *block_register_disk(struct gendisk *disk, struct device *parent)
 {
     if (!disk || !disk->bdev)
         return NULL;
-    struct class *cls = device_model_block_class();
+    struct class *cls = class_find("block");
     if (!cls)
         return NULL;
-
-    /*
-     * Linux-like layout:
-     * - "virtual" block devices (e.g. ram0) live under /sys/devices/virtual/block/
-     * - hardware-backed block devices live under their real parent (PCI/platform device)
-     */
-    struct device *root = device_model_platform_root();
-    if (root && parent == root) {
-        struct device *vblk = device_model_virtual_subsys("block");
-        if (vblk)
-            parent = vblk;
-    }
-
-    /* Class device: no bus. */
-    struct device *dev = device_register_simple_class_parent(disk->disk_name, "block", NULL, cls, parent, disk);
+    struct device *dev = (struct device *)kmalloc(sizeof(*dev));
     if (!dev)
         return NULL;
+    memset(dev, 0, sizeof(*dev));
+    device_initialize(dev, disk->disk_name);
+    dev->type = "block";
+    dev->class = cls;
+    dev->groups = block_device_groups;
+    dev->driver_data = disk;
+    if (parent)
+        device_set_parent(dev, parent);
     dev->dev_major = disk->major;
     dev->dev_minor = disk->minor;
     dev->devnode_name = disk->disk_name;
+    if (device_add(dev) != 0) {
+        kobject_put(&dev->kobj);
+        return NULL;
+    }
     disk->dev = dev;
     disk->parent = parent;
     return dev;
@@ -96,73 +137,6 @@ static void bio_endio_sync(struct bio *bio, int error)
     if (!bio)
         return;
     bio->bi_status = error;
-}
-
-/* mem_bdev_request_fn: Process requests against the in-memory block device backend. */
-static void mem_bdev_request_fn(struct request_queue *q)
-{
-    if (!q)
-        return;
-    while (1) {
-        struct request *rq = blk_fetch_request(q);
-        if (!rq)
-            break;
-        struct bio *bio = rq->bio;
-        if (!bio || !bio->bi_bdev || !bio->bi_buf || bio->bi_size == 0) {
-            blk_complete_request(q, rq, -1);
-            continue;
-        }
-        struct block_device *bdev = bio->bi_bdev;
-        uint32_t offset = (uint32_t)bio->bi_sector * 512 + bio->bi_byte_offset;
-        if (offset >= bdev->size || offset + bio->bi_size > bdev->size) {
-            blk_complete_request(q, rq, -1);
-            continue;
-        }
-        if (bio->bi_opf == REQ_OP_READ) {
-            memcpy(bio->bi_buf, bdev->data + offset, bio->bi_size);
-            bdev->reads++;
-            bdev->bytes_read += bio->bi_size;
-            blk_reads++;
-            blk_bytes_read += bio->bi_size;
-            blk_complete_request(q, rq, 0);
-        } else if (bio->bi_opf == REQ_OP_WRITE) {
-            memcpy(bdev->data + offset, bio->bi_buf, bio->bi_size);
-            bdev->writes++;
-            bdev->bytes_written += bio->bi_size;
-            blk_writes++;
-            blk_bytes_written += bio->bi_size;
-            blk_complete_request(q, rq, 0);
-        } else {
-            blk_complete_request(q, rq, -1);
-        }
-    }
-}
-
-int block_device_init(struct block_device *bdev, uint32_t size, uint32_t block_size)
-{
-    if (!bdev || size == 0)
-        return -1;
-    uint8_t *data = (uint8_t *)vmalloc(size);
-    if (!data)
-        return -1;
-    memset(data, 0, size);
-    bdev->size = size;
-    bdev->block_size = block_size ? block_size : 512;
-    bdev->data = data;
-    bdev->queue = NULL;
-    bdev->reads = 0;
-    bdev->writes = 0;
-    bdev->bytes_read = 0;
-    bdev->bytes_written = 0;
-    bdev->disk = NULL;
-
-    bdev->queue = blk_init_queue(mem_bdev_request_fn, bdev);
-    if (!bdev->queue) {
-        vfree(data);
-        bdev->data = NULL;
-        return -1;
-    }
-    return 0;
 }
 
 uint32_t block_device_read(struct block_device *bdev, uint32_t offset, uint32_t size, uint8_t *buffer)
@@ -211,6 +185,23 @@ uint32_t block_device_write(struct block_device *bdev, uint32_t offset, uint32_t
     return size;
 }
 
+void block_account_io(struct block_device *bdev, int is_write, uint32_t bytes)
+{
+    if (!bdev || bytes == 0)
+        return;
+    if (is_write) {
+        bdev->writes++;
+        bdev->bytes_written += bytes;
+        blk_writes++;
+        blk_bytes_written += bytes;
+    } else {
+        bdev->reads++;
+        bdev->bytes_read += bytes;
+        blk_reads++;
+        blk_bytes_read += bytes;
+    }
+}
+
 void get_block_stats(uint32_t *reads, uint32_t *writes, uint32_t *bytes_read, uint32_t *bytes_written)
 {
     if (reads)
@@ -222,4 +213,3 @@ void get_block_stats(uint32_t *reads, uint32_t *writes, uint32_t *bytes_read, ui
     if (bytes_written)
         *bytes_written = blk_bytes_written;
 }
-

@@ -5,6 +5,105 @@
 #include "linux/uaccess.h"
 #include "linux/wait.h"
 
+wait_queue_t exit_waitq = {0};
+
+void wait_queue_init(wait_queue_t *q)
+{
+    if (!q)
+        return;
+    q->head = NULL;
+}
+
+void init_waitqueue_entry(wait_queue_entry_t *entry, struct task_struct *task)
+{
+    if (!entry)
+        return;
+    entry->task = task;
+    entry->next = NULL;
+}
+
+void wait_queue_block(wait_queue_t *q)
+{
+    if (!q || !current)
+        return;
+    uint32_t flags = irq_save();
+    wait_queue_block_locked(q);
+    irq_restore(flags);
+}
+
+void wait_queue_block_locked(wait_queue_t *q)
+{
+    if (!q || !current)
+        return;
+    if (current->waitq == q)
+        return;
+    if (current->state == TASK_ZOMBIE)
+        return;
+
+    current->waitq = q;
+    current->wait_entry.task = current;
+    current->wait_entry.next = q->head;
+    q->head = &current->wait_entry;
+    current->state = TASK_BLOCKED;
+}
+
+void wait_queue_wake_all(wait_queue_t *q)
+{
+    if (!q)
+        return;
+
+    uint32_t flags = irq_save();
+    wait_queue_entry_t *entry = q->head;
+    q->head = NULL;
+    int woke = 0;
+    while (entry) {
+        wait_queue_entry_t *next = entry->next;
+        struct task_struct *t = entry->task;
+        entry->next = NULL;
+        entry->task = t;
+        if (!t) {
+            entry = next;
+            continue;
+        }
+        t->waitq = NULL;
+        if (t->state == TASK_BLOCKED) {
+            t->state = TASK_RUNNABLE;
+            if (t->time_slice <= 0)
+                t->time_slice = TASK_TIMESLICE_TICKS;
+            woke = 1;
+        }
+        entry = next;
+    }
+    if (woke)
+        need_resched = 1;
+    irq_restore(flags);
+}
+
+void wait_queue_remove(wait_queue_t *q, struct task_struct *task)
+{
+    if (!q || !task)
+        return;
+
+    uint32_t flags = irq_save();
+    wait_queue_entry_t *prev = NULL;
+    wait_queue_entry_t *entry = q->head;
+    while (entry) {
+        if (entry == &task->wait_entry) {
+            if (prev)
+                prev->next = entry->next;
+            else
+                q->head = entry->next;
+            break;
+        }
+        prev = entry;
+        entry = entry->next;
+    }
+    task->wait_entry.next = NULL;
+    task->wait_entry.task = task;
+    task->waitq = NULL;
+    irq_restore(flags);
+}
+
 /* do_waitpid: Perform waitpid. */
 int do_waitpid(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0, uint32_t *out_info1)
 {

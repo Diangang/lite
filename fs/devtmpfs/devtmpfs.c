@@ -7,12 +7,14 @@
 #include "linux/slab.h"
 #include "linux/device.h"
 #include "linux/blkdev.h"
+#include "base.h"
 
 #define MAX_DEVICES 32
 
 static struct dirent dev_dirent;
 static struct inode dev_console;
 static struct inode dev_tty;
+static struct inode_operations devtmpfs_dir_iops;
 struct devtmpfs_node {
     char name[32];
     struct inode *inode;
@@ -107,7 +109,6 @@ static struct file_operations dev_console_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = dev_console_ioctl
 };
 
@@ -117,7 +118,6 @@ static struct file_operations dev_tty_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .finddir = NULL,
     .ioctl = dev_tty_ioctl
 };
 
@@ -127,8 +127,15 @@ static struct file_operations devtmpfs_dir_ops = {
     .open = NULL,
     .close = NULL,
     .readdir = devtmpfs_readdir,
-    .finddir = devtmpfs_finddir,
     .ioctl = NULL
+};
+
+static struct inode_operations devtmpfs_dir_iops = {
+    .lookup = devtmpfs_finddir,
+    .create = NULL,
+    .mkdir = NULL,
+    .unlink = NULL,
+    .rmdir = NULL
 };
 
 /* devtmpfs_get_console: Implement devtmpfs get console. */
@@ -237,6 +244,7 @@ static int devtmpfs_fill_super(struct super_block *sb, void *data, int silent)
     memset(dev_root, 0, sizeof(struct inode));
     dev_root->flags = FS_DIRECTORY;
     dev_root->i_ino = 1;
+    dev_root->i_op = &devtmpfs_dir_iops;
     dev_root->f_ops = &devtmpfs_dir_ops;
     dev_root->uid = 0;
     dev_root->gid = 0;

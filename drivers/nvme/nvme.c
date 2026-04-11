@@ -455,6 +455,7 @@ static void nvme_request_fn(struct request_queue *q)
             blk_complete_request(q, rq, -1);
             continue;
         }
+        block_account_io(&ns->bdev, is_write, bio->bi_size);
         blk_complete_request(q, rq, 0);
     }
 }
@@ -601,7 +602,7 @@ static int nvme_ns_init(struct nvme_controller *ctrl)
     memset(&ns->bdev, 0, sizeof(ns->bdev));
     ns->bdev.size = (uint32_t)(size_bytes > 0xFFFFFFFFu ? 0xFFFFFFFFu : size_bytes);
     ns->bdev.block_size = ns->lba_size;
-    ns->bdev.data = NULL;
+    ns->bdev.private_data = NULL;
     ns->bdev.queue = blk_init_queue(nvme_request_fn, ns);
     if (!ns->bdev.queue) {
         kfree(ns);

@@ -846,15 +846,15 @@ void test_sysfs_layout() {
         ok = 0;
     }
 
-    n = read_file("/sys/class/tty/ttyS0/tty_driver", buf, sizeof(buf));
-    if (n <= 0 || !contains(buf, n, "serial")) {
-        fail("/sys/class/tty/ttyS0/tty_driver");
+    n = read_file("/sys/class/tty/ttyS0/type", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "tty")) {
+        fail("/sys/class/tty/ttyS0/type");
         ok = 0;
     }
 
-    n = read_file("/sys/class/tty/ttyS0/index", buf, sizeof(buf));
-    if (n <= 0 || !contains(buf, n, "0")) {
-        fail("/sys/class/tty/ttyS0/index");
+    n = read_file("/sys/class/tty/ttyS0/parent/driver", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "serial")) {
+        fail("/sys/class/tty/ttyS0/parent/driver");
         ok = 0;
     }
     n = read_file("/sys/class/tty/ttyS0/dev", buf, sizeof(buf));
@@ -882,15 +882,9 @@ void test_sysfs_layout() {
         ok = 0;
     }
 
-    n = read_file("/sys/class/block/ram0/capacity", buf, sizeof(buf));
+    n = read_file("/sys/class/block/ram0/size", buf, sizeof(buf));
     if (n <= 0 || !contains(buf, n, "16384")) {
-        fail("/sys/class/block/ram0/capacity");
-        ok = 0;
-    }
-
-    n = read_file("/sys/class/block/ram0/queue", buf, sizeof(buf));
-    if (n <= 0 || !contains(buf, n, "present")) {
-        fail("/sys/class/block/ram0/queue");
+        fail("/sys/class/block/ram0/size");
         ok = 0;
     }
     n = read_file("/sys/class/block/ram0/dev", buf, sizeof(buf));

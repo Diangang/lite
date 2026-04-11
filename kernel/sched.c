@@ -10,16 +10,55 @@
 struct list_head task_list_head = LIST_HEAD_INIT(task_list_head);
 struct task_struct *current = NULL;
 uint32_t next_task_id = 1;
-wait_queue_t exit_waitq = {0};
 int need_resched = 0;
 uint32_t sched_switch_count = 0;
 
-/* wait_queue_init: Wait for queue init. */
-void wait_queue_init(wait_queue_t *q)
+struct rq {
+    struct list_head *tasks;
+};
+
+static struct rq system_rq = {0};
+
+static void runqueue_init(struct rq *rq, struct list_head *tasks)
 {
-    if (!q)
+    if (!rq)
         return;
-    q->head = NULL;
+    rq->tasks = tasks;
+}
+
+static int runqueue_empty(struct rq *rq)
+{
+    return !rq || !rq->tasks || list_empty(rq->tasks);
+}
+
+static void runqueue_wake_sleepers(struct rq *rq, uint32_t now)
+{
+    if (runqueue_empty(rq))
+        return;
+    struct task_struct *t;
+    list_for_each_entry(t, rq->tasks, tasks) {
+        if (t->state == TASK_SLEEPING && (int32_t)(now - t->wake_jiffies) >= 0)
+            t->state = TASK_RUNNABLE;
+    }
+}
+
+static struct task_struct *runqueue_pick_next(struct rq *rq, struct task_struct *curr)
+{
+    if (runqueue_empty(rq) || !curr)
+        return curr;
+    struct list_head *head = rq->tasks;
+    struct list_head *pos = curr->tasks.next;
+    if (pos == head)
+        pos = pos->next;
+    while (pos != &curr->tasks) {
+        struct task_struct *next = list_entry(pos, struct task_struct, tasks);
+        if (next->state == TASK_RUNNABLE)
+            return next;
+        pos = pos->next;
+        if (pos == head)
+            pos = pos->next;
+    }
+    return curr;
 }
 
 /* task_idle: Implement task idle. */
@@ -29,104 +68,14 @@ static void task_idle(void)
         __asm__ volatile ("hlt");
 }
 
-/* wait_queue_block: Wait for queue block. */
-void wait_queue_block(wait_queue_t *q)
-{
-    if (!q)
-        return;
-    if (!current)
-        return;
-    uint32_t flags = irq_save();
-    wait_queue_block_locked(q);
-    irq_restore(flags);
-}
-
-/* wait_queue_block_locked: Wait for queue block locked. */
-void wait_queue_block_locked(wait_queue_t *q)
-{
-    if (!q)
-        return;
-    if (!current)
-        return;
-    if (current->waitq == q)
-        return;
-    if (current->state == TASK_ZOMBIE)
-        return;
-
-    current->waitq = q;
-    current->wait_next = (struct task_struct*)q->head;
-    q->head = current;
-    current->state = TASK_BLOCKED;
-}
-
-/* wait_queue_wake_all: Wait for queue wake all. */
-void wait_queue_wake_all(wait_queue_t *q)
-{
-    if (!q)
-        return;
-
-    uint32_t flags = irq_save();
-    struct task_struct *t = (struct task_struct*)q->head;
-    q->head = NULL;
-    int woke = 0;
-    while (t) {
-        struct task_struct *next = t->wait_next;
-        t->wait_next = NULL;
-        t->waitq = NULL;
-        if (t->state == TASK_BLOCKED) {
-            t->state = TASK_RUNNABLE;
-            if (t->time_slice <= 0)
-                t->time_slice = TASK_TIMESLICE_TICKS;
-            woke = 1;
-        }
-        t = next;
-    }
-    if (woke)
-        need_resched = 1;
-    irq_restore(flags);
-}
-
-/* wait_queue_remove: Wait for queue remove. */
-void wait_queue_remove(wait_queue_t *q, struct task_struct *task)
-{
-    if (!q)
-        return;
-    if (!task)
-        return;
-
-    uint32_t flags = irq_save();
-    struct task_struct *prev = NULL;
-    struct task_struct *t = (struct task_struct*)q->head;
-    while (t) {
-        if (t == task) {
-            if (prev)
-                prev->wait_next = t->wait_next;
-            else
-                q->head = t->wait_next;
-            break;
-        }
-        prev = t;
-        t = t->wait_next;
-    }
-    task->wait_next = NULL;
-    task->waitq = NULL;
-    irq_restore(flags);
-}
 
 /* task_tick: Implement task tick. */
 void task_tick(void)
 {
     uint32_t now = timer_get_ticks();
-    if (list_empty(&task_list_head))
+    if (runqueue_empty(&system_rq))
         return;
-
-    struct task_struct *t;
-    list_for_each_entry(t, &task_list_head, tasks) {
-        if (t->state == TASK_SLEEPING) {
-            if ((int32_t)(now - t->wake_jiffies) >= 0)
-                t->state = TASK_RUNNABLE;
-        }
-    }
+    runqueue_wake_sleepers(&system_rq, now);
 
     if (!current)
         return;
@@ -153,34 +102,21 @@ struct pt_regs *task_schedule(struct pt_regs *regs)
 
     need_resched = 0;
 
-    struct task_struct *next = current;
-    struct list_head *pos = current->tasks.next;
-    if (pos == &task_list_head)
-        pos = pos->next;
-    while (pos != &current->tasks) {
-        next = list_entry(pos, struct task_struct, tasks);
-        if (next->state == TASK_RUNNABLE) {
-            if (next != current)
-                sched_switch_count++;
-            current = next;
-            if (current->mm && current->mm->pgd) {
-                if (current->mm->pgd != get_pgd_current())
-                    switch_pgd(current->mm->pgd);
-            } else {
-                pgd_t *kdir = get_pgd_kernel();
-                if (kdir && kdir != get_pgd_current())
-                    switch_pgd(kdir);
-            }
-            tss_set_kernel_stack((uint32_t)current->thread.sp0);
-            if (current->time_slice <= 0)
-                current->time_slice = TASK_TIMESLICE_TICKS;
-            return current->thread.regs;
-        }
-
-        pos = pos->next;
-        if (pos == &task_list_head)
-            pos = pos->next;
+    struct task_struct *next = runqueue_pick_next(&system_rq, current);
+    if (next != current)
+        sched_switch_count++;
+    current = next;
+    if (current->mm && current->mm->pgd) {
+        if (current->mm->pgd != get_pgd_current())
+            switch_pgd(current->mm->pgd);
+    } else {
+        pgd_t *kdir = get_pgd_kernel();
+        if (kdir && kdir != get_pgd_current())
+            switch_pgd(kdir);
     }
+    tss_set_kernel_stack((uint32_t)current->thread.sp0);
+    if (current->time_slice <= 0)
+        current->time_slice = TASK_TIMESLICE_TICKS;
 
     return current->thread.regs;
 }
@@ -250,12 +186,12 @@ int task_current_is_user(void)
 /* task_list: Implement task list. */
 void task_list(void)
 {
-    if (list_empty(&task_list_head))
+    if (runqueue_empty(&system_rq))
         return (void)printf("No tasks.\n");
 
     printf("PID   STATE     WAKE    CURRENT\n");
     struct task_struct *task;
-    list_for_each_entry(task, &task_list_head, tasks) {
+    list_for_each_entry(task, system_rq.tasks, tasks) {
         const char *state = "RUNNABLE";
         if (task->state == TASK_SLEEPING)
         state = "SLEEPING"; else if (task->state == TASK_BLOCKED)
@@ -303,8 +239,9 @@ static void init_task(void)
     task->umask = 022;
     files_init(task);
     task->waitq = NULL;
-    task->wait_next = NULL;
+    init_waitqueue_entry(&task->wait_entry, task);
 
+    runqueue_init(&system_rq, &task_list_head);
     list_add(&task->tasks, &task_list_head);
     current = task;
     wait_queue_init(&exit_waitq);

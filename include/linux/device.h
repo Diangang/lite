@@ -28,6 +28,7 @@ struct device {
     struct class *class;
     struct list_head bus_list;
     struct list_head class_list;
+    const struct attribute_group **groups;
     const char *type;
     uint32_t dev_major;
     uint32_t dev_minor;
@@ -86,18 +87,6 @@ struct device *device_register_simple(const char *name, const char *type, struct
 struct device *device_register_simple_parent(const char *name, const char *type, struct bus_type *bus, struct device *parent, void *data);
 struct device *device_register_simple_class(const char *name, const char *type, struct bus_type *bus, struct class *cls, void *data);
 struct device *device_register_simple_class_parent(const char *name, const char *type, struct bus_type *bus, struct class *cls, struct device *parent, void *data);
-struct bus_type *device_model_platform_bus(void);
-struct bus_type *device_model_pci_bus(void);
-struct device *device_model_platform_root(void);
-void device_model_set_platform_root(struct device *dev);
-struct device *device_model_pci_root(void);
-void device_model_set_pci_root(struct device *dev);
-struct device *device_model_virtual_root(void);
-void device_model_set_virtual_root(struct device *dev);
-struct device *device_model_virtual_subsys(const char *name);
-struct class *device_model_console_class(void);
-struct class *device_model_tty_class(void);
-struct class *device_model_block_class(void);
 void init_driver(struct device_driver *drv, const char *name, struct bus_type *bus, int (*probe)(struct device *));
 int class_register(struct class *cls);
 int class_unregister(struct class *cls);
@@ -106,15 +95,6 @@ void device_uevent_emit(const char *action, struct device *dev);
 uint32_t device_uevent_read(uint32_t offset, uint32_t size, uint8_t *buffer);
 void driver_deferred_probe_add(struct device *dev);
 void driver_deferred_probe_trigger(void);
-
-uint32_t device_model_device_count(void);
-struct device *device_model_device_at(uint32_t index);
-struct device *device_model_find_device(const char *name);
-struct kset *device_model_devices_kset(void);
-struct kset *device_model_drivers_kset(void);
-struct kset *device_model_classes_kset(void);
-struct kset *device_model_buses_kset(void);
-void device_model_kset_init(void);
 int bus_default_match(struct device *dev, struct device_driver *drv);
 
 #endif

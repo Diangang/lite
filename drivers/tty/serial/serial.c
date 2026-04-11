@@ -5,6 +5,7 @@
 #include "linux/tty.h"
 #include "linux/init.h"
 #include "linux/interrupt.h"
+#include "base.h"
 
 void serial_put_char(char a);
 

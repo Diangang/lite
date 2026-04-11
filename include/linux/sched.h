@@ -30,8 +30,8 @@ struct task_struct {
     uint32_t uid;
     uint32_t gid;
     uint32_t umask;
-    void *waitq;
-    struct task_struct *wait_next;
+    wait_queue_head_t *waitq;
+    wait_queue_entry_t wait_entry;
 };
 
 enum { TASK_TIMESLICE_TICKS = 3 };

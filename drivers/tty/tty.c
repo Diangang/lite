@@ -9,6 +9,7 @@
 #include "linux/signal.h"
 #include "linux/console.h"
 #include "linux/serial.h"
+#include "base.h"
 
 #define INPUT_BUF_SIZE 256
 
@@ -42,18 +43,27 @@ core_initcall(tty_class_init);
 
 static int tty_device_init(void)
 {
-    struct class *cls = device_model_tty_class();
+    struct class *cls = class_find("tty");
     struct device *parent = device_model_virtual_subsys("tty");
     if (!cls || !parent)
         return -1;
     /* Linux-like: /dev/tty is a class device (no bus). */
-    struct device *dev = device_register_simple_class_parent("tty", "tty", NULL, cls, parent, NULL);
+    struct device *dev = (struct device *)kmalloc(sizeof(*dev));
     if (!dev)
         return -1;
+    memset(dev, 0, sizeof(*dev));
+    device_initialize(dev, "tty");
+    dev->type = "tty";
+    dev->class = cls;
+    device_set_parent(dev, parent);
     /* Provide a stable devtmpfs key: /dev/tty (Linux uses 5:0). */
     dev->dev_major = 5;
     dev->dev_minor = 0;
     dev->devnode_name = dev->kobj.name;
+    if (device_add(dev) != 0) {
+        kobject_put(&dev->kobj);
+        return -1;
+    }
     return 0;
 }
 device_initcall(tty_device_init);
@@ -83,7 +93,7 @@ struct device *tty_register_device(struct tty_driver *drv, uint32_t index, struc
 {
     if (!drv || !name || index >= drv->num)
         return NULL;
-    struct class *cls = device_model_tty_class();
+    struct class *cls = class_find("tty");
     if (!cls)
         return NULL;
     struct tty_port *ttydev = (struct tty_port *)kmalloc(sizeof(*ttydev));
@@ -104,14 +114,26 @@ struct device *tty_register_device(struct tty_driver *drv, uint32_t index, struc
      * Linux-like: tty line devices are class devices. They may sit under a
      * real parent device in /sys/devices, but do not belong to a bus view.
      */
-    struct device *dev = device_register_simple_class_parent(name, "tty", NULL, cls, parent, ttydev);
+    struct device *dev = (struct device *)kmalloc(sizeof(*dev));
     if (!dev) {
         kfree(ttydev);
         return NULL;
     }
+    memset(dev, 0, sizeof(*dev));
+    device_initialize(dev, name);
+    dev->type = "tty";
+    dev->class = cls;
+    dev->driver_data = ttydev;
+    if (parent)
+        device_set_parent(dev, parent);
     dev->dev_major = ttydev->major;
     dev->dev_minor = ttydev->minor;
     dev->devnode_name = ttydev->name;
+    if (device_add(dev) != 0) {
+        kobject_put(&dev->kobj);
+        kfree(ttydev);
+        return NULL;
+    }
     return dev;
 }
 

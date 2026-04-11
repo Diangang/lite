@@ -26,9 +26,13 @@ struct file_operations {
     void (*open)(struct inode*);
     void (*close)(struct inode*);
     struct dirent * (*readdir)(struct file*, uint32_t);
-    struct inode * (*finddir)(struct inode*, const char *name);
-    struct inode * (*create)(struct inode*, const char *name, uint32_t type);
     int (*ioctl)(struct inode*, uint32_t, uint32_t);
+};
+
+struct inode_operations {
+    struct inode *(*lookup)(struct inode *dir, const char *name);
+    struct inode *(*create)(struct inode *dir, const char *name);
+    struct inode *(*mkdir)(struct inode *dir, const char *name);
     int (*unlink)(struct dentry *dir_dentry, const char *name);
     int (*rmdir)(struct dentry *dir_dentry, const char *name);
 };
@@ -43,6 +47,7 @@ struct inode {
     uintptr_t impl;
 
     struct address_space *i_mapping;
+    struct inode_operations *i_op;
     struct file_operations *f_ops;
     void *private_data;
 
@@ -131,6 +136,10 @@ void open_fs(struct inode *node, uint8_t read, uint8_t write);
 void close_fs(struct inode *node);
 struct dirent *readdir_fs(struct file *file, uint32_t index);
 struct inode *finddir_fs(struct inode *node, const char *name);
+struct inode *create_fs(struct inode *dir, const char *name);
+struct inode *mkdir_fs(struct inode *dir, const char *name);
+int unlink_fs(struct dentry *dir_dentry, const char *name);
+int rmdir_fs(struct dentry *dir_dentry, const char *name);
 int ioctl_fs(struct inode *node, uint32_t request, uint32_t arg);
 
 struct dentry *d_alloc(struct dentry *parent, const char *name);

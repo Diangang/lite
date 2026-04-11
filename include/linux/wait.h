@@ -4,14 +4,21 @@
 #include <stdint.h>
 
 struct task_struct;
+struct wait_queue;
+
+typedef struct wait_queue_entry {
+    struct task_struct *task;
+    struct wait_queue_entry *next;
+} wait_queue_entry_t;
 
 typedef struct wait_queue {
-    void *head;
+    wait_queue_entry_t *head;
 } wait_queue_t;
 
 typedef wait_queue_t wait_queue_head_t;
 
 void wait_queue_init(wait_queue_t *q);
+void init_waitqueue_entry(wait_queue_entry_t *entry, struct task_struct *task);
 void wait_queue_block(wait_queue_t *q);
 void wait_queue_block_locked(wait_queue_t *q);
 void wait_queue_wake_all(wait_queue_t *q);

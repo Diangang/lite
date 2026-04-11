@@ -60,6 +60,31 @@ static uint32_t vma_find_gap(struct mm_struct *mm, uint32_t size, uint32_t limit
 static struct vm_area_struct *vma_find_heap(struct mm_struct *mm);
 static struct vm_area_struct *vma_find_covering(struct mm_struct *mm, uint32_t start, uint32_t end);
 
+static struct vm_area_struct *vma_clone_list(struct vm_area_struct *src)
+{
+    struct vm_area_struct *head = NULL;
+    struct vm_area_struct **tail = &head;
+    while (src) {
+        struct vm_area_struct *v = (struct vm_area_struct*)kmalloc(sizeof(struct vm_area_struct));
+        if (!v) {
+            while (head) {
+                struct vm_area_struct *next = head->vm_next;
+                kfree(head);
+                head = next;
+            }
+            return NULL;
+        }
+        v->vm_start = src->vm_start;
+        v->vm_end = src->vm_end;
+        v->vm_flags = src->vm_flags;
+        v->vm_next = NULL;
+        *tail = v;
+        tail = &v->vm_next;
+        src = src->vm_next;
+    }
+    return head;
+}
+
 /* mm_create: Implement memory manager create. */
 struct mm_struct *mm_create(void)
 {
@@ -68,6 +93,63 @@ struct mm_struct *mm_create(void)
         return NULL;
     memset(mm, 0, sizeof(*mm));
     mm->pgd = get_pgd_current();
+    return mm;
+}
+
+struct mm_struct *dup_mm(struct mm_struct *src)
+{
+    if (!src)
+        return NULL;
+    pgd_t *new_dir = pgd_clone_kernel();
+    if (!new_dir)
+        return NULL;
+    struct mm_struct *mm = (struct mm_struct*)kmalloc(sizeof(struct mm_struct));
+    if (!mm) {
+        uint32_t pgd_vaddr = (uint32_t)new_dir;
+        if (pgd_vaddr >= PAGE_OFFSET)
+            free_page((unsigned long)virt_to_phys_addr(new_dir));
+        else
+            free_page((unsigned long)pgd_vaddr);
+        return NULL;
+    }
+    memset(mm, 0, sizeof(*mm));
+    mm->pgd = new_dir;
+    mm->start_code = src->start_code;
+    mm->end_code = src->end_code;
+    mm->start_stack = src->start_stack;
+    mm->start_brk = src->start_brk;
+    mm->brk = src->brk;
+    mm->mmap = vma_clone_list(src->mmap);
+    if (src->mmap && !mm->mmap) {
+        uint32_t pgd_vaddr = (uint32_t)new_dir;
+        if (pgd_vaddr >= PAGE_OFFSET)
+            free_page((unsigned long)virt_to_phys_addr(new_dir));
+        else
+            free_page((unsigned long)pgd_vaddr);
+        kfree(mm);
+        return NULL;
+    }
+    struct vm_area_struct *v = src->mmap;
+    while (v) {
+        uint32_t start = v->vm_start & ~0xFFFu;
+        uint32_t end = (v->vm_end + 0xFFFu) & ~0xFFFu;
+        for (uint32_t va = start; va < end; va += 4096) {
+            pteval_t pte = get_pte_flags(src->pgd, (void*)va);
+            if (!(pte & PTE_PRESENT) || !(pte & PTE_USER))
+                continue;
+            uint32_t phys = pte_pfn(pte);
+            pteval_t flags = pte & 0xFFFu;
+            if (flags & PTE_READ_WRITE) {
+                flags &= ~PTE_READ_WRITE;
+                flags |= PTE_COW;
+                set_pte_flags(src->pgd, (void*)va, flags);
+            }
+            map_page_ex(new_dir, (void*)phys, (void*)va, flags);
+            rmap_dup(src, mm, va, phys);
+            get_page((unsigned long)phys);
+        }
+        v = v->vm_next;
+    }
     return mm;
 }
 

@@ -291,6 +291,7 @@ void user_task(void)
     uint32_t user_stack_base = 0;
     const char *comm = task_get_current_comm();
     if (!comm) comm = "user.elf";
+    install_stdio(devtmpfs_get_tty());
     if (kernel_load_user_program(comm, &entry, &stack, &user_dir,
                           &user_base, &user_pages, &user_stack_base) != 0) {
         sys_exit(1);

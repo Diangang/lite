@@ -29,6 +29,7 @@ enum {
 
 struct mm_struct *mm_create(void);
 void mm_destroy(struct mm_struct *mm);
+struct mm_struct *dup_mm(struct mm_struct *src);
 
 void mm_reset_mmap(struct mm_struct *mm);
 void mm_add_vma(struct mm_struct *mm, uint32_t start, uint32_t end, uint32_t flags);

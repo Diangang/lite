@@ -10,6 +10,7 @@
 #include "linux/ramfs.h"
 #include "linux/procfs.h"
 #include "linux/devtmpfs.h"
+#include "linux/minixfs.h"
 #include "linux/sysfs.h"
 #include "linux/sysfs.h"
 #include "linux/syscall.h"
@@ -75,6 +76,11 @@ static void prepare_namespace(void)
     const char *minix_dev = "/dev/ram1";
     if (vfs_resolve("/dev/nvme0n1"))
         minix_dev = "/dev/nvme0n1";
+    if (!strcmp(minix_dev, "/dev/ram1")) {
+        struct inode *ram1 = vfs_resolve(minix_dev);
+        if (ram1 && (ram1->flags & 0x7) == FS_BLOCKDEVICE)
+            minix_seed_example_image((struct block_device *)ram1->private_data);
+    }
     vfs_mount_fs_dev("/mnt", "minix", minix_dev);
 
     const char *init = get_init_process();

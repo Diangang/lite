@@ -2,6 +2,25 @@
 #include "linux/kernel.h"
 #include "linux/libc.h"
 #include "linux/slab.h"
+#include "base.h"
+
+struct bus_type platform_bus_type;
+
+int platform_bus_init(void)
+{
+    memset(&platform_bus_type, 0, sizeof(platform_bus_type));
+    kobject_init(&platform_bus_type.kobj, "platform", NULL);
+    platform_bus_type.match = platform_bus_match;
+    INIT_LIST_HEAD(&platform_bus_type.list);
+    INIT_LIST_HEAD(&platform_bus_type.devices);
+    INIT_LIST_HEAD(&platform_bus_type.drivers);
+    if (bus_register_static(&platform_bus_type) != 0)
+        return -1;
+    struct device *root = device_register_simple("platform", "platform", &platform_bus_type, NULL);
+    if (root)
+        device_model_set_platform_root(root);
+    return 0;
+}
 
 static void platform_device_release(struct device *dev)
 {
@@ -79,10 +98,7 @@ int platform_driver_register(struct platform_driver *drv)
 {
     if (!drv || !drv->name)
         return -1;
-    struct bus_type *platform = device_model_platform_bus();
-    if (!platform)
-        return -1;
-    init_driver(&drv->driver, drv->name, platform, platform_driver_probe);
+    init_driver(&drv->driver, drv->name, &platform_bus_type, platform_driver_probe);
     drv->driver.remove = platform_driver_remove;
     return driver_register(&drv->driver);
 }
@@ -97,9 +113,6 @@ int platform_driver_unregister(struct platform_driver *drv)
 struct platform_device *platform_device_register_simple(const char *name, int id)
 {
     if (!name || !*name)
-        return NULL;
-    struct bus_type *platform = device_model_platform_bus();
-    if (!platform)
         return NULL;
 
     struct platform_device *pdev = (struct platform_device *)kmalloc(sizeof(*pdev));
@@ -127,7 +140,7 @@ struct platform_device *platform_device_register_simple(const char *name, int id
 
     device_initialize(&pdev->dev, inst);
     pdev->dev.release = platform_device_release;
-    pdev->dev.bus = platform;
+    pdev->dev.bus = &platform_bus_type;
     /* Keep `dev->type` as the functional type (e.g. "serial") for sysfs learning. */
     pdev->dev.type = name;
     /* Identify platform_device reliably without container_of() guesswork. */

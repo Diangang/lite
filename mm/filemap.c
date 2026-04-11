@@ -3,7 +3,6 @@
 #include "linux/slab.h"
 #include "linux/libc.h"
 #include "linux/pagemap.h"
-#include "linux/blkdev.h"
 #include "linux/memlayout.h"
 #include "asm/page.h"
 
@@ -14,46 +13,11 @@ static uint32_t wb_discarded_pages = 0;
 static uint32_t pcache_hits = 0;
 static uint32_t pcache_misses = 0;
 
-/* blockdev_readpage: Implement blockdev readpage. */
-static int blockdev_readpage(struct inode *inode, uint32_t index, struct page_cache_entry *page)
-{
-    if (!inode || !page)
-        return -1;
-    if ((inode->flags & 0x7) != FS_BLOCKDEVICE)
-        return -1;
-    struct block_device *bdev = (struct block_device *)inode->private_data;
-    if (!bdev)
-        return -1;
-    block_device_read(bdev, index * 4096, 4096, (uint8_t *)memlayout_directmap_phys_to_virt(page->phys_addr));
-    return 0;
-}
-
-/* blockdev_writepage: Implement blockdev writepage. */
-static int blockdev_writepage(struct inode *inode, struct page_cache_entry *page)
-{
-    if (!inode || !page)
-        return -1;
-    if ((inode->flags & 0x7) != FS_BLOCKDEVICE)
-        return -1;
-    struct block_device *bdev = (struct block_device *)inode->private_data;
-    if (!bdev)
-        return -1;
-    block_device_write(bdev, page->index * 4096, 4096, (const uint8_t *)memlayout_directmap_phys_to_virt(page->phys_addr));
-    return 0;
-}
-
-static struct address_space_operations blockdev_aops = {
-    .readpage = blockdev_readpage,
-    .writepage = blockdev_writepage
-};
-
 /* address_space_init: Initialize address space. */
 void address_space_init(struct address_space *mapping, struct inode *host)
 {
     mapping->host = host;
     mapping->a_ops = NULL;
-    if (host && (host->flags & 0x7) == FS_BLOCKDEVICE)
-        mapping->a_ops = &blockdev_aops;
     mapping->pages = NULL;
     mapping->nrpages = 0;
     mapping->next = mapping_list;
@@ -119,25 +83,17 @@ uint32_t generic_file_read(struct inode *node, uint32_t offset, uint32_t size, u
 {
     if (!node || !buffer || size == 0)
         return 0;
-    if ((node->flags & 0x7) != FS_FILE && (node->flags & 0x7) != FS_BLOCKDEVICE)
+    uint32_t bytes_read = 0;
+    struct address_space *mapping = node->i_mapping;
+    if (!mapping)
         return 0;
 
     uint32_t isize = node->i_size;
-    if ((node->flags & 0x7) == FS_BLOCKDEVICE) {
-        struct block_device *bdev = (struct block_device *)node->private_data;
-        if (bdev)
-            isize = bdev->size;
-    }
     if (offset >= isize)
         return 0;
 
     uint32_t remain = isize - offset;
     if (size > remain) size = remain;
-
-    uint32_t bytes_read = 0;
-    struct address_space *mapping = node->i_mapping;
-    if (!mapping)
-        return 0;
 
     while (size > 0) {
         uint32_t index = offset / 4096;
@@ -177,21 +133,14 @@ uint32_t generic_file_write(struct inode *node, uint32_t offset, uint32_t size, 
 {
     if (!node || !buffer || size == 0)
         return 0;
-    if ((node->flags & 0x7) != FS_FILE && (node->flags & 0x7) != FS_BLOCKDEVICE)
-        return 0;
-
     struct address_space *mapping = node->i_mapping;
     if (!mapping)
         return 0;
-    struct block_device *bdev = NULL;
-    if ((node->flags & 0x7) == FS_BLOCKDEVICE) {
-        bdev = (struct block_device *)node->private_data;
-        if (!bdev)
+    if (mapping->a_ops && mapping->a_ops->writepage) {
+        if (offset >= node->i_size)
             return 0;
-        if (offset >= bdev->size)
-            return 0;
-        if (offset + size > bdev->size)
-            size = bdev->size - offset;
+        if (offset + size > node->i_size)
+            size = node->i_size - offset;
     }
 
     uint32_t bytes_written = 0;
@@ -227,12 +176,8 @@ uint32_t generic_file_write(struct inode *node, uint32_t offset, uint32_t size, 
         size -= bytes;
     }
 
-    if ((node->flags & 0x7) != FS_BLOCKDEVICE) {
-        if (offset > node->i_size)
-            node->i_size = offset;
-    } else if (bdev) {
-        node->i_size = bdev->size;
-    }
+    if ((!mapping->a_ops || !mapping->a_ops->writepage) && offset > node->i_size)
+        node->i_size = offset;
 
     return bytes_written;
 }

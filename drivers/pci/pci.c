@@ -4,8 +4,10 @@
 #include "linux/libc.h"
 #include "linux/init.h"
 #include "linux/slab.h"
+#include "base.h"
 
-static struct bus_type *pci_bus;
+static struct bus_type *pci_bus_type;
+static struct device *pci_root_dev;
 static uint8_t pci_bus_scanned[256];
 static struct device *pci_bus_parent[256];
 static uint32_t pci_bus_io_base[256];
@@ -38,6 +40,16 @@ struct pci_dev *pci_get_pci_dev(struct device *dev)
     if (!dev || !dev->type || strcmp(dev->type, "pci"))
         return NULL;
     return container_of(dev, struct pci_dev, dev);
+}
+
+struct device *device_model_pci_root(void)
+{
+    return pci_root_dev;
+}
+
+void device_model_set_pci_root(struct device *dev)
+{
+    pci_root_dev = dev;
 }
 
 /* pci_align32: Implement PCI align32. */
@@ -327,7 +339,7 @@ static void pci_register_function(uint8_t bus, uint8_t dev, uint8_t func)
     device_initialize(&pdev->dev, name);
     pdev->dev.release = pci_device_release;
     pdev->dev.type = "pci";
-    pdev->dev.bus = pci_bus;
+    pdev->dev.bus = pci_bus_type;
 
     /* Cached fields (Linux-style naming) for compare/learning. */
     pdev->vendor = vendor;
@@ -576,9 +588,9 @@ int pci_register_driver(struct pci_driver *drv)
 {
     if (!drv || !drv->name)
         return -1;
-    if (!pci_bus)
+    if (!pci_bus_type)
         return -1;
-    init_driver(&drv->driver, drv->name, pci_bus, pci_driver_probe);
+    init_driver(&drv->driver, drv->name, pci_bus_type, pci_driver_probe);
     drv->driver.remove = pci_driver_remove;
     return driver_register(&drv->driver);
 }
@@ -590,19 +602,13 @@ int pci_unregister_driver(struct pci_driver *drv)
     return driver_unregister(&drv->driver);
 }
 
-/* device_model_pci_bus: Implement device model PCI bus. */
-struct bus_type *device_model_pci_bus(void)
-{
-    return pci_bus;
-}
-
 /* pci_init: Initialize PCI. */
 static int pci_init(void)
 {
-    if (pci_bus)
+    if (pci_bus_type)
         return 0;
-    pci_bus = bus_register("pci", pci_bus_match);
-    if (!pci_bus)
+    pci_bus_type = bus_register("pci", pci_bus_match);
+    if (!pci_bus_type)
         return -1;
     memset(pci_bus_scanned, 0, sizeof(pci_bus_scanned));
     memset(pci_bus_parent, 0, sizeof(pci_bus_parent));
@@ -613,7 +619,7 @@ static int pci_init(void)
     memset(pci_bus_pref_base, 0, sizeof(pci_bus_pref_base));
     memset(pci_bus_pref_limit, 0, sizeof(pci_bus_pref_limit));
     pci_next_bus = 1;
-    struct device *root = device_register_simple("pci0000:00", "pci", pci_bus, NULL);
+    struct device *root = device_register_simple("pci0000:00", "pci", pci_bus_type, NULL);
     if (root) {
         device_model_set_pci_root(root);
         pci_bus_parent[0] = root;

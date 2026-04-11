@@ -1,4 +1,5 @@
 #include "linux/device.h"
+#include "base.h"
 #include "linux/kernel.h"
 #include "linux/slab.h"
 #include "linux/libc.h"
