@@ -3,7 +3,7 @@
 
 #include "linux/kobject.h"
 
-/* /sys/kernel anchor object, populated by kernel/ksysfs.c */
-extern struct kobject kernel_kobj;
+/* Linux-like /sys/kernel root subsystem. */
+extern struct subsystem kernel_subsys;
 
 #endif

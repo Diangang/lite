@@ -34,6 +34,7 @@ static inline struct platform_driver *to_platform_driver(struct device_driver *d
 }
 
 extern struct bus_type platform_bus_type;
+extern struct device platform_bus;
 
 int platform_driver_register(struct platform_driver *drv);
 int platform_driver_unregister(struct platform_driver *drv);

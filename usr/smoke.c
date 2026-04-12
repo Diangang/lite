@@ -7,7 +7,6 @@ enum {
 };
 
 static int failures;
-static int read_file(const char *path, char *buf, int cap);
 
 /* fail: Implement fail. */
 static void fail(const char *msg)
@@ -16,6 +15,22 @@ static void fail(const char *msg)
     print("FAIL: ");
     print(msg);
     print("\n");
+}
+
+/* read_file: Read file. */
+static int read_file(const char *path, char *buf, int cap)
+{
+    if (!path || !buf || cap <= 1)
+        return -1;
+    int fd = open(path, 0);
+    if (fd < 0)
+        return -1;
+    int n = read(fd, buf, cap - 1);
+    close(fd);
+    if (n < 0)
+        return -1;
+    buf[n] = 0;
+    return n;
 }
 
 /* parse_memtotal_kb: Parse memtotal kb. */
@@ -511,22 +526,6 @@ static int count_substr(const char *hay, int hay_len, const char *needle)
     return count;
 }
 
-/* read_file: Read file. */
-static int read_file(const char *path, char *buf, int cap)
-{
-    if (!path || !buf || cap <= 1)
-        return -1;
-    int fd = open(path, 0);
-    if (fd < 0)
-        return -1;
-    int n = read(fd, buf, cap - 1);
-    close(fd);
-    if (n < 0)
-        return -1;
-    buf[n] = 0;
-    return n;
-}
-
 /* write_file: Write file. */
 static int write_file(const char *path, const char *data, int len)
 {
@@ -789,18 +788,19 @@ void test_sysfs_layout() {
     print("\n--- Test 13: sysfs layout ---\n");
     int ok = 1;
     char buf[128];
-    int n = read_file("/sys/devices/platform/type", buf, sizeof(buf));
-    if (n <= 0 || !contains(buf, n, "platform")) {
-        fail("/sys/devices/platform/type");
+    int n;
+    int fd = open("/sys/devices/platform", 0);
+    if (fd < 0) {
+        fail("open /sys/devices/platform");
         ok = 0;
-    }
+    } else
+        close(fd);
     n = read_file("/sys/devices/pci0000:00/type", buf, sizeof(buf));
     if (n <= 0 || !contains(buf, n, "pci")) {
         fail("/sys/devices/pci0000:00/type");
         ok = 0;
     }
-
-    int fd = open("/sys/bus/pci", 0);
+    fd = open("/sys/bus/pci", 0);
     if (fd < 0) {
         fail("open /sys/bus/pci");
         ok = 0;
@@ -813,6 +813,16 @@ void test_sysfs_layout() {
         ok = 0;
     } else
         close(fd);
+
+    fd = open("/sys/bus/pci/devices/pci00:04.0", 0);
+    if (fd >= 0) {
+        close(fd);
+        n = read_file("/sys/bus/pci/devices/pci00:04.0/modalias", buf, sizeof(buf));
+        if (n <= 0 || !contains(buf, n, "pci:v")) {
+            fail("/sys/bus/pci/devices/pci00:04.0/modalias");
+            ok = 0;
+        }
+    }
 
     fd = open("/sys/bus/pci/drivers", 0);
     if (fd < 0) {
@@ -840,23 +850,23 @@ void test_sysfs_layout() {
     } else
         close(fd);
 
-    n = read_file("/sys/class/tty/ttyS0/parent/type", buf, sizeof(buf));
-    if (n <= 0 || !contains(buf, n, "serial")) {
-        fail("/sys/class/tty/ttyS0/parent/type");
-        ok = 0;
-    }
-
     n = read_file("/sys/class/tty/ttyS0/type", buf, sizeof(buf));
     if (n <= 0 || !contains(buf, n, "tty")) {
         fail("/sys/class/tty/ttyS0/type");
         ok = 0;
     }
 
-    n = read_file("/sys/class/tty/ttyS0/parent/driver", buf, sizeof(buf));
+    n = read_file("/sys/class/tty/ttyS0/parent/driver/name", buf, sizeof(buf));
     if (n <= 0 || !contains(buf, n, "serial")) {
-        fail("/sys/class/tty/ttyS0/parent/driver");
+        fail("/sys/class/tty/ttyS0/parent/driver/name");
         ok = 0;
     }
+    fd = open("/sys/class/tty/ttyS0/subsystem", 0);
+    if (fd < 0) {
+        fail("open /sys/class/tty/ttyS0/subsystem");
+        ok = 0;
+    } else
+        close(fd);
     n = read_file("/sys/class/tty/ttyS0/dev", buf, sizeof(buf));
     if (n <= 0 || !contains(buf, n, "4:64")) {
         fail("/sys/class/tty/ttyS0/dev");
@@ -871,16 +881,17 @@ void test_sysfs_layout() {
         close(fd);
 
     n = read_file("/sys/class/block/ram0/type", buf, sizeof(buf));
-    if (n <= 0 || !contains(buf, n, "block")) {
+    if (n <= 0 || !contains(buf, n, "disk")) {
         fail("/sys/class/block/ram0/type");
         ok = 0;
     }
 
-    n = read_file("/sys/class/block/ram0/parent/type", buf, sizeof(buf));
-    if (n <= 0 || !contains(buf, n, "virtual")) {
-        fail("/sys/class/block/ram0/parent/type");
+    fd = open("/sys/class/block/ram0/parent", 0);
+    if (fd < 0) {
+        fail("open /sys/class/block/ram0/parent");
         ok = 0;
-    }
+    } else
+        close(fd);
 
     n = read_file("/sys/class/block/ram0/size", buf, sizeof(buf));
     if (n <= 0 || !contains(buf, n, "16384")) {
@@ -901,7 +912,8 @@ void test_sysfs_bind_unbind_console() {
     print("\n--- Test 14: sysfs bind/unbind ---\n");
     int ok = 1;
     char buf[128];
-    int n = read_file("/sys/devices/platform/console0/driver", buf, sizeof(buf));
+    int w;
+    int n = read_file("/sys/devices/platform/console0/driver/name", buf, sizeof(buf));
     if (n <= 0) {
         fail("read console driver");
         return;
@@ -909,25 +921,53 @@ void test_sysfs_bind_unbind_console() {
     if (!contains(buf, n, "console"))
         print("WARN: console not bound initially\n");
 
-    int w = write_file("/sys/bus/platform/drivers/console/unbind", "console0\n", 9);
+    n = read_file("/sys/bus/platform/drivers_autoprobe", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "1")) {
+        fail("read drivers_autoprobe");
+        ok = 0;
+    }
+
+    w = write_file("/sys/bus/platform/drivers_autoprobe", "0\n", 2);
+    if (w <= 0) {
+        fail("disable drivers_autoprobe");
+        return;
+    }
+    n = read_file("/sys/bus/platform/drivers_autoprobe", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "0")) {
+        fail("drivers_autoprobe should be 0");
+        ok = 0;
+    }
+
+    w = write_file("/sys/bus/platform/drivers/console/unbind", "console0\n", 9);
     if (w <= 0) {
         fail("unbind console");
         return;
     }
-    n = read_file("/sys/devices/platform/console0/driver", buf, sizeof(buf));
-    if (n <= 0 || !contains(buf, n, "unbound")) {
+    n = read_file("/sys/devices/platform/console0/driver/name", buf, sizeof(buf));
+    if (n > 0 && contains(buf, n, "console")) {
         fail("console driver should be unbound");
         ok = 0;
     }
 
-    w = write_file("/sys/bus/platform/drivers/console/bind", "console0\n", 9);
+    w = write_file("/sys/bus/platform/drivers_probe", "console0\n", 9);
     if (w <= 0) {
-        fail("bind console");
+        fail("drivers_probe console");
         return;
     }
-    n = read_file("/sys/devices/platform/console0/driver", buf, sizeof(buf));
+    n = read_file("/sys/devices/platform/console0/driver/name", buf, sizeof(buf));
     if (n <= 0 || !contains(buf, n, "console")) {
-        fail("console driver should be bound");
+        fail("console driver should be probed");
+        ok = 0;
+    }
+
+    w = write_file("/sys/bus/platform/drivers_autoprobe", "1\n", 2);
+    if (w <= 0) {
+        fail("enable drivers_autoprobe");
+        return;
+    }
+    n = read_file("/sys/bus/platform/drivers_autoprobe", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "1")) {
+        fail("drivers_autoprobe should be 1");
         ok = 0;
     }
     if (ok)

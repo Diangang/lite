@@ -1,11 +1,7 @@
 #include "../include/linux/parser.h"
 #include "../include/linux/slab.h"
 #include "../include/linux/errno.h"
-
-size_t strlen(const char *s);
-int strcmp(const char *s1, const char *s2);
-int strncmp(const char *s1, const char *s2, size_t n);
-void *memcpy(void *dest, const void *src, size_t n);
+#include "../include/linux/libc.h"
 
 /* is_digit: Implement is digit. */
 static int is_digit(char c)

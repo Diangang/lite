@@ -190,26 +190,29 @@ static int devtmpfs_remove_node(const char *name)
 /* devtmpfs_add_for_device: Implement devtmpfs add for device. */
 static void devtmpfs_add_for_device(struct device *dev)
 {
+    const char *devnode;
+
     if (!dev)
         return;
-    if (!dev->devnode_name || !dev->devnode_name[0])
+    devnode = device_get_devnode(dev);
+    if (!devnode || !devnode[0])
         return;
 
-    if (dev->type && !strcmp(dev->type, "block")) {
+    if (dev->type == &disk_type) {
         struct gendisk *disk = gendisk_from_dev(dev);
         struct inode *inode = disk ? blockdev_inode_create(disk->bdev) : NULL;
         if (inode)
-            devtmpfs_add_node(dev->devnode_name, inode);
+            devtmpfs_add_node(devnode, inode);
         return;
     }
 
     /* Minimal char device dispatch: only tty-like and console are supported. */
-    if (dev->dev_major == 5 && dev->dev_minor == 1) {
-        devtmpfs_add_node(dev->devnode_name, &dev_console);
+    if (dev->devt == MKDEV(5, 1)) {
+        devtmpfs_add_node(devnode, &dev_console);
         return;
     }
-    if (dev->dev_major == 4 || (dev->dev_major == 5 && dev->dev_minor == 0)) {
-        devtmpfs_add_node(dev->devnode_name, &dev_tty);
+    if (MAJOR(dev->devt) == 4 || dev->devt == MKDEV(5, 0)) {
+        devtmpfs_add_node(devnode, &dev_tty);
         return;
     }
 }
@@ -225,10 +228,13 @@ void devtmpfs_register_device(struct device *dev)
 /* devtmpfs_unregister_device: Implement devtmpfs unregister device. */
 void devtmpfs_unregister_device(struct device *dev)
 {
+    const char *devnode;
+
     if (!devtmpfs_ready || !dev)
         return;
-    if (dev->devnode_name && dev->devnode_name[0])
-        devtmpfs_remove_node(dev->devnode_name);
+    devnode = device_get_devnode(dev);
+    if (devnode && devnode[0])
+        devtmpfs_remove_node(devnode);
 }
 
 /* devtmpfs_fill_super: Implement devtmpfs fill super. */
@@ -270,9 +276,9 @@ static int devtmpfs_fill_super(struct super_block *sb, void *data, int silent)
 
     devtmpfs_node_count = 0;
     devtmpfs_ready = 0;
-    uint32_t count = device_model_device_count();
+    uint32_t count = registered_device_count();
     for (uint32_t i = 0; i < count; i++) {
-        struct device *dev = device_model_device_at(i);
+        struct device *dev = registered_device_at(i);
         if (!dev)
             continue;
         devtmpfs_add_for_device(dev);

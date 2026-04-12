@@ -7,13 +7,22 @@
 #include "base.h"
 
 static struct class console_class;
-
 static struct device *console_class_dev;
+
+static const char *console_devnode(struct device *dev)
+{
+    return dev ? dev->kobj.name : NULL;
+}
+
+const struct device_type console_device_type = {
+    .name = "console",
+    .devnode = console_devnode,
+};
 
 static int console_class_init(void)
 {
     memset(&console_class, 0, sizeof(console_class));
-    kobject_init(&console_class.kobj, "console", NULL);
+    console_class.name = "console";
     INIT_LIST_HEAD(&console_class.list);
     INIT_LIST_HEAD(&console_class.devices);
     return class_register(&console_class);
@@ -27,7 +36,7 @@ static int console_platform_probe(struct platform_device *pdev)
     if (!cls)
         return -EPROBE_DEFER;
 
-    struct device *parent = device_model_find_device("serial0");
+    struct device *parent = find_device_by_name("serial0");
     if (!parent)
         return -EPROBE_DEFER;
 
@@ -40,11 +49,9 @@ static int console_platform_probe(struct platform_device *pdev)
         return -1;
     memset(console_class_dev, 0, sizeof(*console_class_dev));
     device_initialize(console_class_dev, "console");
-    console_class_dev->type = "console";
+    console_class_dev->type = &console_device_type;
     console_class_dev->class = cls;
-    console_class_dev->dev_major = 5;
-    console_class_dev->dev_minor = 1;
-    console_class_dev->devnode_name = console_class_dev->kobj.name;
+    console_class_dev->devt = MKDEV(5, 1);
     device_set_parent(console_class_dev, parent);
     if (device_add(console_class_dev) != 0) {
         kobject_put(&console_class_dev->kobj);

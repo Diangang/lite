@@ -66,15 +66,15 @@ static const struct attribute_group *block_device_groups[] = {
     NULL,
 };
 
-static int block_class_init(void)
+static const char *disk_devnode(struct device *dev)
 {
-    memset(&block_class, 0, sizeof(block_class));
-    kobject_init(&block_class.kobj, "block", NULL);
-    INIT_LIST_HEAD(&block_class.list);
-    INIT_LIST_HEAD(&block_class.devices);
-    return class_register(&block_class);
+    return dev ? dev->kobj.name : NULL;
 }
-core_initcall(block_class_init);
+
+const struct device_type disk_type = {
+    .name = "disk",
+    .devnode = disk_devnode,
+};
 
 int gendisk_init(struct gendisk *disk, const char *name, uint32_t major, uint32_t minor, struct block_device *bdev)
 {
@@ -107,15 +107,12 @@ struct device *block_register_disk(struct gendisk *disk, struct device *parent)
         return NULL;
     memset(dev, 0, sizeof(*dev));
     device_initialize(dev, disk->disk_name);
-    dev->type = "block";
+    dev->type = &disk_type;
     dev->class = cls;
-    dev->groups = block_device_groups;
     dev->driver_data = disk;
     if (parent)
         device_set_parent(dev, parent);
-    dev->dev_major = disk->major;
-    dev->dev_minor = disk->minor;
-    dev->devnode_name = disk->disk_name;
+    dev->devt = MKDEV(disk->major, disk->minor);
     if (device_add(dev) != 0) {
         kobject_put(&dev->kobj);
         return NULL;
@@ -127,7 +124,7 @@ struct device *block_register_disk(struct gendisk *disk, struct device *parent)
 
 struct gendisk *gendisk_from_dev(struct device *dev)
 {
-    if (!dev || !dev->type || strcmp(dev->type, "block"))
+    if (!dev || dev->type != &disk_type)
         return NULL;
     return (struct gendisk *)dev->driver_data;
 }
@@ -213,3 +210,14 @@ void get_block_stats(uint32_t *reads, uint32_t *writes, uint32_t *bytes_read, ui
     if (bytes_written)
         *bytes_written = blk_bytes_written;
 }
+
+static int block_class_init(void)
+{
+    memset(&block_class, 0, sizeof(block_class));
+    block_class.name = "block";
+    INIT_LIST_HEAD(&block_class.list);
+    INIT_LIST_HEAD(&block_class.devices);
+    block_class.dev_groups = block_device_groups;
+    return class_register(&block_class);
+}
+core_initcall(block_class_init);

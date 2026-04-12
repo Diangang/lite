@@ -3,8 +3,6 @@
 
 static struct console *console_list;
 
-uint32_t console_write(const uint8_t *buf, uint32_t len);
-
 int register_console(struct console *con)
 {
     if (!con || !con->write)
@@ -27,12 +25,6 @@ void unregister_console(struct console *con)
     }
 }
 
-void console_put_char(char c)
-{
-    unsigned char b = (unsigned char)c;
-    console_write((const uint8_t *)&b, 1);
-}
-
 uint32_t console_write(const uint8_t *buf, uint32_t len)
 {
     if (!buf || len == 0)
@@ -40,4 +32,10 @@ uint32_t console_write(const uint8_t *buf, uint32_t len)
     for (struct console *con = console_list; con; con = con->next)
         con->write(buf, len);
     return len;
+}
+
+void console_put_char(char c)
+{
+    unsigned char b = (unsigned char)c;
+    console_write((const uint8_t *)&b, 1);
 }

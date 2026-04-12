@@ -7,7 +7,16 @@
 #include "linux/interrupt.h"
 #include "base.h"
 
-void serial_put_char(char a);
+/* is_transmit_empty: Implement is transmit empty. */
+static int is_transmit_empty() {
+   return inb(0x3f8 + 5) & 0x20;
+}
+
+/* serial_put_char: Implement serial put char. */
+void serial_put_char(char a) {
+   while (is_transmit_empty() == 0);
+   outb(0x3f8, a);
+}
 
 static void serial_console_write(const uint8_t *buf, uint32_t len)
 {
@@ -25,17 +34,6 @@ static struct console serial_console = {
 };
 
 static struct tty_driver tty_serial_driver;
-
-/* is_transmit_empty: Implement is transmit empty. */
-static int is_transmit_empty() {
-   return inb(0x3f8 + 5) & 0x20;
-}
-
-/* serial_put_char: Implement serial put char. */
-void serial_put_char(char a) {
-   while (is_transmit_empty() == 0);
-   outb(0x3f8, a);
-}
 
 /* serial_callback: Implement serial callback. */
 struct pt_regs *serial_callback(struct pt_regs *regs) {
@@ -96,7 +94,7 @@ static int serial_driver_init(void) {
       return -1;
    if (platform_driver_register(&serial_platform_driver) != 0)
       return -1;
-   struct device *parent = device_model_find_device("serial0");
+   struct device *parent = find_device_by_name("serial0");
    if (!parent)
       return -1;
    if (!tty_register_device(&tty_serial_driver, 0, parent, "ttyS0", NULL))

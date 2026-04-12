@@ -7,7 +7,9 @@
 void driver_init(void)
 {
     /* Linux-like: init.c only orchestrates subsystem init order. */
-    device_model_kset_init();
+    devices_init();
+    buses_init();
+    classes_init();
     platform_bus_init();
     printf("Driver core initialized.\n");
 }

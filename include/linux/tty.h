@@ -5,12 +5,15 @@
 #include "linux/list.h"
 
 struct device;
+struct device_type;
 
 struct tty_driver {
     char name[32];
     uint32_t num;
     struct list_head list;
 };
+
+extern const struct device_type tty_dev_type;
 
 /* Linux-compatible naming: per-line port/device representation. */
 struct tty_port {

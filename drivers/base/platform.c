@@ -5,21 +5,26 @@
 #include "base.h"
 
 struct bus_type platform_bus_type;
+struct device platform_bus;
+
+static void platform_bus_release(struct device *dev)
+{
+    (void)dev;
+}
 
 int platform_bus_init(void)
 {
+    memset(&platform_bus, 0, sizeof(platform_bus));
+    device_initialize(&platform_bus, "platform");
+    platform_bus.release = platform_bus_release;
+    if (device_add(&platform_bus) != 0)
+        return -1;
     memset(&platform_bus_type, 0, sizeof(platform_bus_type));
-    kobject_init(&platform_bus_type.kobj, "platform", NULL);
+    platform_bus_type.name = "platform";
     platform_bus_type.match = platform_bus_match;
     INIT_LIST_HEAD(&platform_bus_type.list);
     INIT_LIST_HEAD(&platform_bus_type.devices);
-    INIT_LIST_HEAD(&platform_bus_type.drivers);
-    if (bus_register_static(&platform_bus_type) != 0)
-        return -1;
-    struct device *root = device_register_simple("platform", "platform", &platform_bus_type, NULL);
-    if (root)
-        device_model_set_platform_root(root);
-    return 0;
+    return bus_register_static(&platform_bus_type);
 }
 
 static void platform_device_release(struct device *dev)
@@ -140,9 +145,8 @@ struct platform_device *platform_device_register_simple(const char *name, int id
 
     device_initialize(&pdev->dev, inst);
     pdev->dev.release = platform_device_release;
+    device_set_parent(&pdev->dev, &platform_bus);
     pdev->dev.bus = &platform_bus_type;
-    /* Keep `dev->type` as the functional type (e.g. "serial") for sysfs learning. */
-    pdev->dev.type = name;
     /* Identify platform_device reliably without container_of() guesswork. */
     pdev->dev.driver_data = pdev;
 

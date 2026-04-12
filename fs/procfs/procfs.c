@@ -54,10 +54,30 @@ typedef struct {
 enum { PROC_PID_MAX = 16 };
 static proc_pid_entry_t proc_pids[PROC_PID_MAX];
 
-static int parse_u32(const char *s, uint32_t *out);
 static struct inode_operations proc_pid_dir_iops;
 static struct inode_operations proc_pid_fd_dir_iops;
 static struct inode_operations procfs_dir_iops;
+
+/* parse_u32: Parse u32. */
+static int parse_u32(const char *s, uint32_t *out)
+{
+    if (!s || !out)
+        return -1;
+    if (*s == 0)
+        return -1;
+    uint32_t v = 0;
+    for (const char *p = s; *p; p++) {
+        if (*p < '0' || *p > '9')
+            return -1;
+        uint32_t d = (uint32_t)(*p - '0');
+        uint32_t nv = v * 10 + d;
+        if (nv < v)
+            return -1;
+        v = nv;
+    }
+    *out = v;
+    return 0;
+}
 
 /* buf_append: Implement buf append. */
 static void buf_append(char *buf, uint32_t *off, uint32_t cap, const char *s)
@@ -512,10 +532,10 @@ static uint32_t proc_read_diskstats(struct inode *node, uint32_t offset, uint32_
     static char tmp[768];
     uint32_t off = 0;
 
-    uint32_t n = device_model_device_count();
+    uint32_t n = registered_device_count();
     for (uint32_t i = 0; i < n; i++) {
-        struct device *dev = device_model_device_at(i);
-        if (!dev || !dev->type || strcmp(dev->type, "block") != 0)
+        struct device *dev = registered_device_at(i);
+        if (!dev || dev->type != &disk_type)
             continue;
         struct gendisk *disk = gendisk_from_dev(dev);
         if (!disk || !disk->bdev)
@@ -818,27 +838,6 @@ static struct inode *proc_pid_finddir(struct inode *node, const char *name)
     if (!strcmp(name, "fd"))
         return &e->fd_dir;
     return NULL;
-}
-
-/* parse_u32: Parse u32. */
-static int parse_u32(const char *s, uint32_t *out)
-{
-    if (!s || !out)
-        return -1;
-    if (*s == 0)
-        return -1;
-    uint32_t v = 0;
-    for (const char *p = s; *p; p++) {
-        if (*p < '0' || *p > '9')
-            return -1;
-        uint32_t d = (uint32_t)(*p - '0');
-        uint32_t nv = v * 10 + d;
-        if (nv < v)
-            return -1;
-        v = nv;
-    }
-    *out = v;
-    return 0;
 }
 
 static struct file_operations proc_pid_dir_ops = {

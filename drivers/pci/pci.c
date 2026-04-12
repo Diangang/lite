@@ -6,8 +6,9 @@
 #include "linux/slab.h"
 #include "base.h"
 
-static struct bus_type *pci_bus_type;
+struct bus_type pci_bus_type;
 static struct device *pci_root_dev;
+const struct device_type pci_dev_type = { .name = "pci" };
 static uint8_t pci_bus_scanned[256];
 static struct device *pci_bus_parent[256];
 static uint32_t pci_bus_io_base[256];
@@ -29,6 +30,108 @@ static uint64_t pci_mem_alloc = 0xE0000000u;
 static uint64_t pci_pref_alloc = 0xE8000000u;
 static uint8_t pci_next_bus = 1;
 
+static uint32_t pci_emit_hex_line(char *buffer, uint32_t cap, uint32_t value, uint32_t digits)
+{
+    static const char hex[] = "0123456789abcdef";
+    if (!buffer || cap < digits + 4)
+        return 0;
+    buffer[0] = '0';
+    buffer[1] = 'x';
+    for (uint32_t i = 0; i < digits; i++) {
+        uint32_t shift = (digits - 1 - i) * 4;
+        buffer[2 + i] = hex[(value >> shift) & 0xF];
+    }
+    buffer[2 + digits] = '\n';
+    buffer[3 + digits] = 0;
+    return 3 + digits;
+}
+
+static uint32_t pci_attr_show_vendor(struct device *dev, struct device_attribute *attr, char *buffer, uint32_t cap)
+{
+    (void)attr;
+    struct pci_dev *pdev = pci_get_pci_dev(dev);
+    return pdev ? pci_emit_hex_line(buffer, cap, (uint32_t)pdev->vendor, 4) : 0;
+}
+
+static uint32_t pci_attr_show_device(struct device *dev, struct device_attribute *attr, char *buffer, uint32_t cap)
+{
+    (void)attr;
+    struct pci_dev *pdev = pci_get_pci_dev(dev);
+    return pdev ? pci_emit_hex_line(buffer, cap, (uint32_t)pdev->device, 4) : 0;
+}
+
+static uint32_t pci_attr_show_class(struct device *dev, struct device_attribute *attr, char *buffer, uint32_t cap)
+{
+    (void)attr;
+    struct pci_dev *pdev = pci_get_pci_dev(dev);
+    uint32_t cls;
+    if (!pdev)
+        return 0;
+    cls = ((uint32_t)pdev->class << 16) | ((uint32_t)pdev->subclass << 8) | (uint32_t)pdev->prog_if;
+    return pci_emit_hex_line(buffer, cap, cls, 6);
+}
+
+static uint32_t pci_attr_show_modalias(struct device *dev, struct device_attribute *attr, char *buffer, uint32_t cap)
+{
+    (void)attr;
+    if (!buffer || cap == 0)
+        return 0;
+    buffer[0] = 0;
+    if (device_get_modalias(dev, buffer, cap) != 0)
+        return 0;
+    uint32_t n = (uint32_t)strlen(buffer);
+    if (n + 1 >= cap)
+        return n;
+    buffer[n++] = '\n';
+    buffer[n] = 0;
+    return n;
+}
+
+static struct device_attribute pci_attr_vendor = {
+    .attr = { .name = "vendor", .mode = 0444 },
+    .show = pci_attr_show_vendor,
+};
+
+static struct device_attribute pci_attr_device = {
+    .attr = { .name = "device", .mode = 0444 },
+    .show = pci_attr_show_device,
+};
+
+static struct device_attribute pci_attr_class = {
+    .attr = { .name = "class", .mode = 0444 },
+    .show = pci_attr_show_class,
+};
+
+static struct device_attribute pci_attr_modalias = {
+    .attr = { .name = "modalias", .mode = 0444 },
+    .show = pci_attr_show_modalias,
+};
+
+static uint32_t pci_dev_attr_visible(struct kobject *kobj, const struct attribute *attr)
+{
+    (void)attr;
+    return (kobj && pci_get_pci_dev(container_of(kobj, struct device, kobj))) ? 0444 : 0;
+}
+
+static const struct attribute *pci_dev_attrs[] = {
+    &pci_attr_vendor.attr,
+    &pci_attr_device.attr,
+    &pci_attr_class.attr,
+    &pci_attr_modalias.attr,
+    NULL,
+};
+
+static const struct attribute_group pci_dev_group = {
+    .name = NULL,
+    .attrs = pci_dev_attrs,
+    .is_visible = pci_dev_attr_visible,
+};
+
+static const struct attribute_group *pci_dev_groups[] = {
+    &pci_dev_group,
+    NULL,
+};
+
 static void pci_device_release(struct device *dev)
 {
     struct pci_dev *pdev = container_of(dev, struct pci_dev, dev);
@@ -37,17 +140,17 @@ static void pci_device_release(struct device *dev)
 
 struct pci_dev *pci_get_pci_dev(struct device *dev)
 {
-    if (!dev || !dev->type || strcmp(dev->type, "pci"))
+    if (!dev || dev->type != &pci_dev_type)
         return NULL;
     return container_of(dev, struct pci_dev, dev);
 }
 
-struct device *device_model_pci_root(void)
+struct device *pci_root_device(void)
 {
     return pci_root_dev;
 }
 
-void device_model_set_pci_root(struct device *dev)
+void set_pci_root_device(struct device *dev)
 {
     pci_root_dev = dev;
 }
@@ -338,8 +441,8 @@ static void pci_register_function(uint8_t bus, uint8_t dev, uint8_t func)
     memset(pdev, 0, sizeof(*pdev));
     device_initialize(&pdev->dev, name);
     pdev->dev.release = pci_device_release;
-    pdev->dev.type = "pci";
-    pdev->dev.bus = pci_bus_type;
+    pdev->dev.type = &pci_dev_type;
+    pdev->dev.bus = &pci_bus_type;
 
     /* Cached fields (Linux-style naming) for compare/learning. */
     pdev->vendor = vendor;
@@ -351,12 +454,13 @@ static void pci_register_function(uint8_t bus, uint8_t dev, uint8_t func)
     pdev->bus = bus;
     pdev->devfn = (uint8_t)((dev << 3) | (func & 0x7));
 
+    if (pci_bus_parent[bus])
+        device_set_parent(&pdev->dev, pci_bus_parent[bus]);
+
     if (device_add(&pdev->dev) != 0) {
         kobject_put(&pdev->dev.kobj);
         return;
     }
-    if (pci_bus_parent[bus])
-        device_set_parent(&pdev->dev, pci_bus_parent[bus]);
     if (class_id == 0x01 && subclass_id == 0x08)
         device_uevent_emit("nvme", &pdev->dev);
     if (header == 0) {
@@ -588,9 +692,9 @@ int pci_register_driver(struct pci_driver *drv)
 {
     if (!drv || !drv->name)
         return -1;
-    if (!pci_bus_type)
+    if (!pci_bus_type.name || !pci_bus_type.name[0])
         return -1;
-    init_driver(&drv->driver, drv->name, pci_bus_type, pci_driver_probe);
+    init_driver(&drv->driver, drv->name, &pci_bus_type, pci_driver_probe);
     drv->driver.remove = pci_driver_remove;
     return driver_register(&drv->driver);
 }
@@ -605,10 +709,15 @@ int pci_unregister_driver(struct pci_driver *drv)
 /* pci_init: Initialize PCI. */
 static int pci_init(void)
 {
-    if (pci_bus_type)
+    if (pci_bus_type.name && pci_bus_type.name[0])
         return 0;
-    pci_bus_type = bus_register("pci", pci_bus_match);
-    if (!pci_bus_type)
+    memset(&pci_bus_type, 0, sizeof(pci_bus_type));
+    pci_bus_type.name = "pci";
+    pci_bus_type.match = pci_bus_match;
+    pci_bus_type.dev_groups = pci_dev_groups;
+    INIT_LIST_HEAD(&pci_bus_type.list);
+    INIT_LIST_HEAD(&pci_bus_type.devices);
+    if (bus_register_static(&pci_bus_type) != 0)
         return -1;
     memset(pci_bus_scanned, 0, sizeof(pci_bus_scanned));
     memset(pci_bus_parent, 0, sizeof(pci_bus_parent));
@@ -619,10 +728,18 @@ static int pci_init(void)
     memset(pci_bus_pref_base, 0, sizeof(pci_bus_pref_base));
     memset(pci_bus_pref_limit, 0, sizeof(pci_bus_pref_limit));
     pci_next_bus = 1;
-    struct device *root = device_register_simple("pci0000:00", "pci", pci_bus_type, NULL);
+    struct device *root = (struct device*)kmalloc(sizeof(struct device));
     if (root) {
-        device_model_set_pci_root(root);
-        pci_bus_parent[0] = root;
+        memset(root, 0, sizeof(*root));
+        device_initialize(root, "pci0000:00");
+        root->type = &pci_dev_type;
+        root->bus = &pci_bus_type;
+        if (device_register(root) == 0) {
+            set_pci_root_device(root);
+            pci_bus_parent[0] = root;
+        } else {
+            kobject_put(&root->kobj);
+        }
     }
     pci_scan_bus(0);
     return 0;

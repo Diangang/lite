@@ -66,9 +66,11 @@ static void prepare_namespace(void)
     vfs_init();
     populate_rootfs();
 
+    if (sysfs_init() != 0)
+        panic("sysfs init failed.");
     vfs_mount_fs("/proc", "proc");
     vfs_mount_fs("/dev", "devtmpfs");
-    init_sysfs();
+    sysfs_mount();
     /*
      * Linux-style: mount a filesystem on a block device node.
      * Prefer NVMe when present (QEMU -device nvme), otherwise fall back to ramdisk.

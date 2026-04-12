@@ -5,6 +5,7 @@
 
 struct inode;
 struct device;
+struct device_type;
 struct request_queue;
 
 struct gendisk {
@@ -32,6 +33,7 @@ uint32_t block_device_read(struct block_device *bdev, uint32_t offset, uint32_t 
 uint32_t block_device_write(struct block_device *bdev, uint32_t offset, uint32_t size, const uint8_t *buffer);
 void block_account_io(struct block_device *bdev, int is_write, uint32_t bytes);
 void get_block_stats(uint32_t *reads, uint32_t *writes, uint32_t *bytes_read, uint32_t *bytes_written);
+extern const struct device_type disk_type;
 int gendisk_init(struct gendisk *disk, const char *name, uint32_t major, uint32_t minor, struct block_device *bdev);
 struct device *block_register_disk(struct gendisk *disk, struct device *parent);
 struct gendisk *gendisk_from_dev(struct device *dev);

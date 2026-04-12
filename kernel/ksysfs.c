@@ -5,8 +5,7 @@
 #include "linux/libc.h"
 #include "linux/device.h"
 
-/* /sys/kernel anchor object (Linux: kernel_subsys/kernfs/sysfs; Lite: plain kobject) */
-struct kobject kernel_kobj;
+struct subsystem kernel_subsys;
 
 static struct attribute kernel_attr_version = { .name = "version", .mode = 0444 };
 static struct attribute kernel_attr_uptime = { .name = "uptime", .mode = 0444 };
@@ -100,8 +99,8 @@ static struct kobj_type kernel_ktype = {
 
 static int ksysfs_init(void)
 {
-    /* Mounting sysfs is not ksysfs's job (Linux: ksysfs populates /sys/kernel). */
-    kobject_init_with_ktype(&kernel_kobj, "kernel", &kernel_ktype, NULL);
-    return 0;
+    kset_init(&kernel_subsys.kset, "kernel");
+    kernel_subsys.kset.kobj.ktype = &kernel_ktype;
+    return subsystem_register(&kernel_subsys);
 }
 core_initcall(ksysfs_init);

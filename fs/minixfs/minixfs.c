@@ -48,8 +48,9 @@ struct minix_mount_data {
     const char *dev_name;
 };
 
-static struct inode *minix_dir_finddir(struct inode *node, const char *name);
-static struct inode *minix_create_child(struct inode *dir, const char *name, uint32_t type);
+static struct inode_operations minix_dir_iops;
+static struct file_operations minix_dir_ops;
+static struct file_operations minix_file_ops;
 
 /* minix_bread: Implement minix bread. */
 static uint32_t minix_bread(struct block_device *bdev, uint32_t block, void *buf)
@@ -400,42 +401,6 @@ static uint32_t minix_file_write(struct inode *node, uint32_t offset, uint32_t s
     return done;
 }
 
-static struct inode *minix_create_file(struct inode *dir, const char *name)
-{
-    return minix_create_child(dir, name, FS_FILE);
-}
-
-static struct inode *minix_mkdir_inode(struct inode *dir, const char *name)
-{
-    return minix_create_child(dir, name, FS_DIRECTORY);
-}
-
-static struct inode_operations minix_dir_iops = {
-    .lookup = minix_dir_finddir,
-    .create = minix_create_file,
-    .mkdir = minix_mkdir_inode,
-    .unlink = NULL,
-    .rmdir = NULL
-};
-
-static struct file_operations minix_dir_ops = {
-    .read = NULL,
-    .write = NULL,
-    .open = NULL,
-    .close = NULL,
-    .readdir = generic_readdir,
-    .ioctl = NULL,
-};
-
-static struct file_operations minix_file_ops = {
-    .read = minix_file_read,
-    .write = minix_file_write,
-    .open = NULL,
-    .close = NULL,
-    .readdir = NULL,
-    .ioctl = NULL
-};
-
 static struct minix_inode_info *minix_inode_info_new(struct block_device *bdev, const struct minix_super_block *sb,
                                                      uint32_t ino, const struct minix_inode_disk *dinode)
 {
@@ -581,6 +546,42 @@ static struct inode *minix_create_child(struct inode *dir, const char *name, uin
     }
     return minix_inode_from_disk(dir_info->bdev, &dir_info->sb, ino, &dinode);
 }
+
+static struct inode *minix_create_file(struct inode *dir, const char *name)
+{
+    return minix_create_child(dir, name, FS_FILE);
+}
+
+static struct inode *minix_mkdir_inode(struct inode *dir, const char *name)
+{
+    return minix_create_child(dir, name, FS_DIRECTORY);
+}
+
+static struct inode_operations minix_dir_iops = {
+    .lookup = minix_dir_finddir,
+    .create = minix_create_file,
+    .mkdir = minix_mkdir_inode,
+    .unlink = NULL,
+    .rmdir = NULL
+};
+
+static struct file_operations minix_dir_ops = {
+    .read = NULL,
+    .write = NULL,
+    .open = NULL,
+    .close = NULL,
+    .readdir = generic_readdir,
+    .ioctl = NULL,
+};
+
+static struct file_operations minix_file_ops = {
+    .read = minix_file_read,
+    .write = minix_file_write,
+    .open = NULL,
+    .close = NULL,
+    .readdir = NULL,
+    .ioctl = NULL
+};
 
 
 
@@ -780,4 +781,4 @@ static int init_minix_fs(void)
     return 0;
 }
 
-module_init(init_minix_fs);
+fs_initcall(init_minix_fs);

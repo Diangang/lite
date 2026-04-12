@@ -54,11 +54,91 @@ static void vma_list_free(struct mm_struct *mm)
     mm->mmap = NULL;
 }
 
-static void vma_add(struct mm_struct *mm, uint32_t start, uint32_t end, uint32_t flags);
-static int vma_range_free(struct mm_struct *mm, uint32_t start, uint32_t end);
-static uint32_t vma_find_gap(struct mm_struct *mm, uint32_t size, uint32_t limit);
-static struct vm_area_struct *vma_find_heap(struct mm_struct *mm);
-static struct vm_area_struct *vma_find_covering(struct mm_struct *mm, uint32_t start, uint32_t end);
+/* vma_add: Implement VMA add. */
+static void vma_add(struct mm_struct *mm, uint32_t start, uint32_t end, uint32_t flags)
+{
+    if (!mm)
+        return;
+    if (start >= end)
+        return;
+    struct vm_area_struct *v = (struct vm_area_struct*)kmalloc(sizeof(struct vm_area_struct));
+    if (!v)
+        return;
+    v->vm_start = start;
+    v->vm_end = end;
+    v->vm_flags = flags;
+    v->vm_next = mm->mmap;
+    mm->mmap = v;
+}
+
+/* vma_range_free: Implement VMA range free. */
+static int vma_range_free(struct mm_struct *mm, uint32_t start, uint32_t end)
+{
+    if (!mm)
+        return 0;
+    struct vm_area_struct *v = mm->mmap;
+    while (v) {
+        if (end <= v->vm_start || start >= v->vm_end) {
+            v = v->vm_next;
+            continue;
+        }
+        return 0;
+    }
+    return 1;
+}
+
+/* vma_find_covering: Implement VMA find covering. */
+static struct vm_area_struct *vma_find_covering(struct mm_struct *mm, uint32_t start, uint32_t end)
+{
+    if (!mm)
+        return NULL;
+    struct vm_area_struct *v = mm->mmap;
+    while (v) {
+        if (start >= v->vm_start && end <= v->vm_end)
+            return v;
+        v = v->vm_next;
+    }
+    return NULL;
+}
+
+/* vma_find_gap: Implement VMA find gap. */
+static uint32_t vma_find_gap(struct mm_struct *mm, uint32_t size, uint32_t limit)
+{
+    if (!mm)
+        return 0;
+    if (size == 0)
+        return 0;
+    uint32_t start = mm->brk ? align_up(mm->brk) : 0x400000;
+    if (mm->start_code && mm->end_code) {
+        uint32_t min = mm->end_code;
+        if (start < min) start = align_up(min);
+    }
+    if (start < 0x1000) start = 0x1000;
+    if (limit <= start)
+        return 0;
+    while (start + size <= limit) {
+        if (vma_range_free(mm, start, start + size))
+            return start;
+        start += 0x1000;
+    }
+    return 0;
+}
+
+/* vma_find_heap: Implement VMA find heap. */
+static struct vm_area_struct *vma_find_heap(struct mm_struct *mm)
+{
+    if (!mm)
+        return NULL;
+    if (!mm->start_brk)
+        return NULL;
+    struct vm_area_struct *v = mm->mmap;
+    while (v) {
+        if (v->vm_start == mm->start_brk && (v->vm_flags & (VMA_READ | VMA_WRITE)) == (VMA_READ | VMA_WRITE))
+            return v;
+        v = v->vm_next;
+    }
+    return NULL;
+}
 
 static struct vm_area_struct *vma_clone_list(struct vm_area_struct *src)
 {
@@ -452,92 +532,6 @@ uint32_t sys_mremap(uint32_t addr, uint32_t old_length, uint32_t new_length)
     if (!current || !current->mm)
         return 0;
     return do_mremap(current->mm, addr, old_length, new_length);
-}
-
-/* vma_add: Implement VMA add. */
-static void vma_add(struct mm_struct *mm, uint32_t start, uint32_t end, uint32_t flags)
-{
-    if (!mm)
-        return;
-    if (start >= end)
-        return;
-    struct vm_area_struct *v = (struct vm_area_struct*)kmalloc(sizeof(struct vm_area_struct));
-    if (!v)
-        return;
-    v->vm_start = start;
-    v->vm_end = end;
-    v->vm_flags = flags;
-    v->vm_next = mm->mmap;
-    mm->mmap = v;
-}
-
-/* vma_range_free: Implement VMA range free. */
-static int vma_range_free(struct mm_struct *mm, uint32_t start, uint32_t end)
-{
-    if (!mm)
-        return 0;
-    struct vm_area_struct *v = mm->mmap;
-    while (v) {
-        if (end <= v->vm_start || start >= v->vm_end) {
-            v = v->vm_next;
-            continue;
-        }
-        return 0;
-    }
-    return 1;
-}
-
-/* vma_find_covering: Implement VMA find covering. */
-static struct vm_area_struct *vma_find_covering(struct mm_struct *mm, uint32_t start, uint32_t end)
-{
-    if (!mm)
-        return NULL;
-    struct vm_area_struct *v = mm->mmap;
-    while (v) {
-        if (start >= v->vm_start && end <= v->vm_end)
-            return v;
-        v = v->vm_next;
-    }
-    return NULL;
-}
-
-/* vma_find_gap: Implement VMA find gap. */
-static uint32_t vma_find_gap(struct mm_struct *mm, uint32_t size, uint32_t limit)
-{
-    if (!mm)
-        return 0;
-    if (size == 0)
-        return 0;
-    uint32_t start = mm->brk ? align_up(mm->brk) : 0x400000;
-    if (mm->start_code && mm->end_code) {
-        uint32_t min = mm->end_code;
-        if (start < min) start = align_up(min);
-    }
-    if (start < 0x1000) start = 0x1000;
-    if (limit <= start)
-        return 0;
-    while (start + size <= limit) {
-        if (vma_range_free(mm, start, start + size))
-            return start;
-        start += 0x1000;
-    }
-    return 0;
-}
-
-/* vma_find_heap: Implement VMA find heap. */
-static struct vm_area_struct *vma_find_heap(struct mm_struct *mm)
-{
-    if (!mm)
-        return NULL;
-    if (!mm->start_brk)
-        return NULL;
-    struct vm_area_struct *v = mm->mmap;
-    while (v) {
-        if (v->vm_start == mm->start_brk && (v->vm_flags & (VMA_READ | VMA_WRITE)) == (VMA_READ | VMA_WRITE))
-            return v;
-        v = v->vm_next;
-    }
-    return NULL;
 }
 
 /* mm_reset_mmap: Implement memory manager reset mmap. */

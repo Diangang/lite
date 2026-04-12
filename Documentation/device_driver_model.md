@@ -127,6 +127,259 @@ platform bus 的定位：
 - `/sys/bus`：总线类型表
 - `/sys/class`：用户语义分组
 
+### 5.5 `device` / `bus` / `class` 如何同时连接到 sysfs 与 devtmpfs
+
+可以把 Lite 当前的最小设备模型理解成“一个 `struct device` 同时投影到四个地方”：
+
+```text
+                         driver_init()
+                              |
+          +-------------------+-------------------+
+          |                   |                   |
+     devices_init()      buses_init()       classes_init()
+          |                   |                   |
+   devices_kset          buses_kset          classes_kset
+          |                   |                   |
+      /sys/devices          /sys/bus           /sys/class
+
+
+                   [某个具体 struct device dev]
+                               |
+               +---------------+---------------+
+               |                               |
+        dev->kobj.parent                    dev->devt /
+               |                           device_type->devnode()
+               |                               |
+      决定它在 /sys/devices                 决定它能否进入 /dev
+        真实树里的父子位置                    (devtmpfs)
+               |
+               |
+      +--------+--------+
+      |                 |
+   dev->bus          dev->class
+      |                 |
+      |                 |
+ 挂入 bus->devices   挂入 class->devices
+      |                 |
+      |                 |
+ /sys/bus/<bus>/devices  /sys/class/<class>/
+   (指向真实 device)       (指向真实 device)
+```
+
+这张图里最重要的一点是：
+
+- `device` 是“实体”。
+- `bus` 和 `class` 主要提供“视图”和“组织域”。
+- `devtmpfs` 不是从 `bus` 或 `class` 创建设备节点，而是直接根据 `device` 的 `devt/devnode` 决定是否生成 `/dev/*`。
+
+换句话说：
+
+- **真实对象中心**：`device`
+- **真实拓扑位置**：`dev->kobj.parent`
+- **bus 视图来源**：`dev->bus`
+- **class 视图来源**：`dev->class`
+- **devtmpfs 节点来源**：`dev->devt` + `device_get_devnode(dev)`
+
+### 5.6 运行时顺序：从 driver core 到 sysfs / devtmpfs
+
+Lite 当前这条链路可以按“初始化顺序”和“单个 device 注册顺序”两层理解。
+
+#### 5.6.1 初始化顺序
+
+`driver_init()` 负责先把 driver core 的三组根组织搭起来，再注册最基础的 `platform` bus：
+
+1. `devices_init()`
+   - 初始化 `devices_kset`
+   - 这是 `/sys/devices` 的后端根集合
+2. `buses_init()`
+   - 初始化 `buses_kset`
+   - 这是 `/sys/bus` 的后端根集合
+3. `classes_init()`
+   - 初始化 `classes_kset`
+   - 这是 `/sys/class` 的后端根集合
+4. `platform_bus_init()`
+   - 先注册 `platform_bus_type`
+   - 再创建真实 `platform` 根设备，使其进入 `/sys/devices/platform`
+
+可参考：
+
+- [init.c](file:///data25/lidg/lite/drivers/base/init.c#L7-L15)
+- [core.c](file:///data25/lidg/lite/drivers/base/core.c#L369-L374)
+- [bus.c](file:///data25/lidg/lite/drivers/base/bus.c#L155-L163)
+- [class.c](file:///data25/lidg/lite/drivers/base/class.c#L42-L50)
+- [platform.c](file:///data25/lidg/lite/drivers/base/platform.c#L15-L29)
+
+`sysfs` 在 Lite 里还需要单独区分“注册”和“挂载”两步：
+
+1. `sysfs_init()`
+   - 注册 `sysfs` 这个 `file_system_type`
+   - 这一步不是设备驱动实例初始化，也不再挂在普通 `fs_initcall` 上
+2. `sysfs_mount()`
+   - 在 `prepare_namespace()` 里把它挂到 `/sys`
+
+这和 Linux 里由 namespace/fs 初始化显式拉起 `sysfs_init()` 的思路更接近，而不是把它完全当成普通文件系统 initcall。
+
+可参考：
+
+- [main.c](file:///data25/lidg/lite/init/main.c#L63-L85)
+- [sysfs.c](file:///data25/lidg/lite/fs/sysfs/sysfs.c#L1406-L1480)
+
+#### 5.6.1.1 Lite 当前 init 顺序表
+
+下面这张表按“谁负责初始化什么”整理当前 Lite 的实际落点，并标出和 Linux 语义的贴合度。
+
+| 组件/函数 | 当前落点 | 当前状态 | 更接近 Linux 的判断 | 说明 |
+| --- | --- | --- | --- | --- |
+| `driver_init()` | `do_basic_setup()` 显式调用 | 合理 | 合理 | 只搭 `device/bus/class/platform` 根骨架，不负责枚举所有驱动 |
+| `sysfs_init()` | `prepare_namespace()` 显式调用 | 已调整 | 更接近 Linux | 显式注册 `sysfs` 文件系统类型，不再混在普通 `fs_initcall` 里 |
+| `sysfs_mount()` | `prepare_namespace()` 显式调用 | 合理 | Lite 简化 | 负责把 `sysfs` 挂到 `/sys`，对应 Linux 里更早的 sysfs 可见化路径 |
+| `ksysfs_init()` | `core_initcall` | 合理 | 合理 | `kernel/ksysfs` 属于核心 sysfs 属性层 |
+| `console_class_init()` | `core_initcall` | 合理 | 合理 | 先建 `console` class，再注册具体 console 设备/驱动 |
+| `block_class_init()` | `core_initcall` | 合理 | 合理 | 先建 `block` class，再注册块设备 |
+| `tty_class_init()` | `core_initcall` | 合理 | 合理 | 先建 `tty` class，再注册 `/dev/tty` 等设备 |
+| `x86_platform_devices_init()` | `subsys_initcall` | 合理 | 合理 | 注册早期平台设备，依赖前面的 driver core 根骨架 |
+| `pcie_init()` | `subsys_initcall` | 合理 | 合理 | PCIe 作为总线子层，早于具体 PCI/NVMe 设备驱动 |
+| `pci_init()` | `subsys_initcall` | 合理 | 合理 | 建立 PCI 总线、扫描设备，供后续设备驱动匹配 |
+| `init_proc_fs()` | `fs_initcall` | 合理 | 合理 | 注册 `proc` 文件系统类型 |
+| `init_devtmpfs_fs()` | `fs_initcall` | 合理 | 基本合理 | Lite 当前仍作为普通 FS 类型注册，后续由 `prepare_namespace()` 挂载 |
+| `init_minix_fs()` | `fs_initcall` | 已修正 | 合理 | 之前误放在 `module_init/device_initcall`，现已按文件系统语义前移 |
+| `tty_device_init()` | `device_initcall` | 合理 | 合理 | 创建 `/dev/tty` 对应 class device，依赖 `tty_class_init()` |
+| `serial_driver_init()` | `module_init`=`device_initcall` | 合理 | 合理 | 具体串口驱动，依赖 tty/class/平台设备已就绪 |
+| `ramdisk_init()` | `module_init`=`device_initcall` | 合理 | 合理 | 具体块设备驱动，依赖 block class 已存在 |
+| `console_driver_init()` | `module_init`=`device_initcall` | 合理 | 合理 | 具体 console 设备/驱动注册，依赖 `console_class_init()` |
+| `keyboard_driver_init()` | `module_init`=`device_initcall` | 合理 | 合理 | 具体输入驱动，依赖平台设备/中断环境已具备 |
+| `nvme_driver_init()` | `module_init`=`device_initcall` | 合理 | 合理 | 具体 PCI 设备驱动，依赖 `pcie/pci` 已初始化并枚举到设备 |
+
+可以把这一顺序压缩成一句话：
+
+1. `driver_init()` 先把 driver core 根骨架搭起来
+2. `core_initcall` 先建核心 class / ksysfs 之类基础对象
+3. `subsys_initcall` 再建 bus / 平台设备这类子系统骨架
+4. `fs_initcall` 注册普通文件系统类型
+5. `device_initcall/module_init` 最后注册具体设备驱动和设备实例
+
+其中 `sysfs` 是一个特例：
+
+- 它既是“文件系统类型”，又承接 driver core 可见化语义
+- 所以 Lite 现在把它改成显式 `sysfs_init()` + `sysfs_mount()`，而不再把它混进普通 `fs_initcall`
+
+#### 5.6.2 单个 `device` 注册顺序
+
+一个设备对象真正对外“变得可见”，核心入口是 `device_add()`：
+
+1. 先把 `dev->kobj` 放进 `devices_kset`
+   - 设备进入 driver core 的“总账本”
+   - 后续可从 `/sys/devices` 真实树访问
+2. 如果 `dev->bus != NULL`
+   - 挂进 `dev->bus->devices`
+   - 后续能从 `/sys/bus/<bus>/devices` 视图看到
+3. 如果 `dev->class != NULL`
+   - 挂进 `dev->class->devices`
+   - 后续能从 `/sys/class/<class>` 视图看到
+4. 调用 `devtmpfs_register_device(dev)`
+   - 如果 `devtmpfs` 已 ready，且设备有有效 `devt/devnode`
+   - 则在 `/dev` 下生成最小节点
+5. 发出 `uevent add`
+   - 对应 `/sys/kernel/uevent` 可观测事件流
+6. 如果设备挂在某条 bus 上且该 bus 开启 `drivers_autoprobe`
+   - 调 `device_attach()`
+   - 在同一 bus 的 driver 列表里做 `match()` / `probe()`
+
+对应实现：
+
+- [device_add](file:///data25/lidg/lite/drivers/base/core.c#L278-L297)
+- [devtmpfs_register_device](file:///data25/lidg/lite/fs/devtmpfs/devtmpfs.c#L221-L226)
+
+设备移除时则是近似反向顺序：
+
+1. `device_unbind()`
+2. 从 `bus->devices` / `class->devices` 脱链
+3. `devtmpfs_unregister_device()`
+4. `uevent remove`
+5. 从 `devices_kset` 移除
+6. `kobject_put()`
+
+对应实现：
+
+- [device_unregister](file:///data25/lidg/lite/drivers/base/core.c#L311-L327)
+
+### 5.7 sysfs 三棵树与 devtmpfs 各自是怎么来的
+
+把它们分别拆开看，会更清楚：
+
+- `/sys/devices`
+  - 直接遍历 `devices_kset`
+  - 顶层只展示 `parent == NULL` 的真实设备
+  - 子设备再通过 `kobj.parent` / children 关系向下展开
+  - 参考：[sysfs.c](file:///data25/lidg/lite/fs/sysfs/sysfs.c#L872-L915)
+
+- `/sys/bus`
+  - 直接遍历 `buses_kset`
+  - 每个 bus 目录下面的 `devices/` 再遍历 `bus->devices`
+  - 这里对每个设备创建的是指向真实 `device` 目录的 link，而不是重新造一份设备
+  - 参考：[sysfs.c](file:///data25/lidg/lite/fs/sysfs/sysfs.c#L918-L953)、[sysfs.c](file:///data25/lidg/lite/fs/sysfs/sysfs.c#L1021-L1069)
+
+- `/sys/class`
+  - 直接遍历 `classes_kset`
+  - 每个 class 目录下面再遍历 `class->devices`
+  - 同样是指向真实 `device` 目录的 link 视图
+  - 参考：[sysfs.c](file:///data25/lidg/lite/fs/sysfs/sysfs.c#L1166-L1199)、[sysfs.c](file:///data25/lidg/lite/fs/sysfs/sysfs.c#L1209-L1265)
+
+- `/dev`
+  - 不看 `buses_kset` 或 `classes_kset`
+  - 只在 `device_add()` 之后，由 `devtmpfs_register_device(dev)` 基于 `device` 本身的信息创建
+  - 参考：[devtmpfs.c](file:///data25/lidg/lite/fs/devtmpfs/devtmpfs.c#L221-L237)
+
+补充一点：
+
+- `/sys` 根层的 `kernel/devices/bus/class` 现在不再由 root `readdir/lookup` 硬编码拼名字
+- Lite 已改成“根项注册表 + 挂载时创建真实 root dentries”的方式
+- 其中：
+  - `kernel` 由 `ksysfs_init()` 注册
+  - `devices/bus/class` 由 `sysfs` 根模型注册
+  - `sysfs_fill_super()` 挂载时为这些根项创建实际 dentry/inode
+
+### 5.8 用两个例子把链路串起来
+
+#### 5.8.1 `platform` 根设备
+
+`platform_bus_init()` 做了两件事：
+
+1. 把 `platform_bus_type` 注册进 bus 模型
+   - 所以出现 `/sys/bus/platform`
+2. 把真实 `platform_bus` 设备加进 devices 模型
+   - 所以出现 `/sys/devices/platform`
+
+也就是说：
+
+- `/sys/bus/platform` 是 **bus 类型视图**
+- `/sys/devices/platform` 是 **真实 device 对象**
+
+参考：[platform.c](file:///data25/lidg/lite/drivers/base/platform.c#L15-L29)
+
+#### 5.8.2 `tty` / `block` 类设备
+
+以 `tty` 和块设备为例，它们更能体现 class 与 devtmpfs 的关系：
+
+- `tty`
+  - 注册时设置 `dev->class = tty class`
+  - 设置 `dev->devt = MKDEV(...)`
+  - 因此同时出现在 `/sys/class/tty/...` 和 `/dev/...`
+  - 参考：[tty.c](file:///data25/lidg/lite/drivers/tty/tty.c#L82-L104)、[tty.c](file:///data25/lidg/lite/drivers/tty/tty.c#L128-L171)
+
+- `block`
+  - `block_register_disk()` 创建 class device
+  - 设置 `dev->class = block class`
+  - 设置 `dev->devt = MKDEV(disk->major, disk->minor)`
+  - 因此同时出现在 `/sys/class/block/...` 和 `/dev/...`
+  - 参考：[blkdev.c](file:///data25/lidg/lite/block/blkdev.c#L110-L133)
+
+可以用一句话记：
+
+- `bus` 更像“它从哪条组织域/发现路径来”
+- `class` 更像“用户把它当成什么设备看”
+- `devtmpfs` 更像“它有没有 `/dev` 节点”
+
 ## 6. Linux 里有没有“一个根节点”
 
 要区分两种“根”：

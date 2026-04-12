@@ -19,6 +19,27 @@ static struct block_device ramdisk1_bdev;
 static struct gendisk ramdisk0_disk;
 static struct gendisk ramdisk1_disk;
 
+static struct device *ramdisk_virtual_root(void)
+{
+    struct device *vroot = virtual_root_device();
+    if (!vroot)
+        return NULL;
+    struct device *child = virtual_child_device(vroot, "block");
+    if (child)
+        return child;
+    struct device *dev = (struct device *)kmalloc(sizeof(*dev));
+    if (!dev)
+        return NULL;
+    memset(dev, 0, sizeof(*dev));
+    device_initialize(dev, "block");
+    device_set_parent(dev, vroot);
+    if (device_register(dev) != 0) {
+        kobject_put(&dev->kobj);
+        return NULL;
+    }
+    return dev;
+}
+
 static void ramdisk_request_fn(struct request_queue *q)
 {
     if (!q)
@@ -84,7 +105,7 @@ static int ramdisk_bdev_init(struct block_device *bdev, uint32_t size, uint32_t 
 
 static int ramdisk_init(void)
 {
-    struct device *parent = device_model_virtual_subsys("block");
+    struct device *parent = ramdisk_virtual_root();
     if (!parent)
         return -1;
     if (ramdisk_bdev_init(&ramdisk0_bdev, 8 * 1024 * 1024, 512) != 0)

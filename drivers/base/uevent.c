@@ -105,7 +105,7 @@ int device_get_modalias(struct device *dev, char *buf, uint32_t cap)
 {
     if (!dev || !buf || cap == 0)
         return -1;
-    if (dev->bus && !strcmp(dev->bus->kobj.name, "pci")) {
+    if (dev->bus && !strcmp(dev->bus->subsys.kset.kobj.name, "pci")) {
         struct pci_dev *pdev = pci_get_pci_dev(dev);
         if (!pdev)
             return -1;
@@ -134,7 +134,7 @@ int device_get_modalias(struct device *dev, char *buf, uint32_t cap)
             return -1;
         return 0;
     }
-    if (dev->bus && !strcmp(dev->bus->kobj.name, "platform")) {
+    if (dev->bus && !strcmp(dev->bus->subsys.kset.kobj.name, "platform")) {
         uint32_t off = 0;
         buf[0] = 0;
         if (!buf_append(buf, &off, cap, "platform:"))
@@ -146,7 +146,7 @@ int device_get_modalias(struct device *dev, char *buf, uint32_t cap)
     if (dev->bus) {
         uint32_t off = 0;
         buf[0] = 0;
-        if (!buf_append(buf, &off, cap, dev->bus->kobj.name))
+        if (!buf_append(buf, &off, cap, dev->bus->subsys.kset.kobj.name))
             return -1;
         if (!buf_append_ch(buf, &off, cap, ':'))
             return -1;
@@ -171,6 +171,7 @@ void device_uevent_emit(const char *action, struct device *dev)
     char tmp[512];
     char devpath[256];
     char modalias[128];
+    const char *devnode;
     uint32_t off = 0;
     tmp[0] = 0;
     devpath[0] = 0;
@@ -190,10 +191,10 @@ void device_uevent_emit(const char *action, struct device *dev)
     if (!buf_append(tmp, &off, sizeof(tmp), "SUBSYSTEM="))
         return;
     if (dev->class) {
-        if (!buf_append(tmp, &off, sizeof(tmp), dev->class->kobj.name))
+        if (!buf_append(tmp, &off, sizeof(tmp), dev->class->subsys.kset.kobj.name))
             return;
     } else if (dev->bus) {
-        if (!buf_append(tmp, &off, sizeof(tmp), dev->bus->kobj.name))
+        if (!buf_append(tmp, &off, sizeof(tmp), dev->bus->subsys.kset.kobj.name))
             return;
     } else {
         if (!buf_append(tmp, &off, sizeof(tmp), "unknown"))
@@ -207,19 +208,20 @@ void device_uevent_emit(const char *action, struct device *dev)
             !buf_append_ch(tmp, &off, sizeof(tmp), '\n'))
             return;
     }
-    if (dev->devnode_name && dev->devnode_name[0]) {
+    devnode = device_get_devnode(dev);
+    if (devnode && devnode[0]) {
         if (!buf_append(tmp, &off, sizeof(tmp), "DEVNAME=") ||
-            !buf_append(tmp, &off, sizeof(tmp), dev->devnode_name) ||
+            !buf_append(tmp, &off, sizeof(tmp), devnode) ||
             !buf_append_ch(tmp, &off, sizeof(tmp), '\n'))
             return;
     }
-    if (dev->dev_major || dev->dev_minor) {
+    if (dev->devt) {
         if (!buf_append(tmp, &off, sizeof(tmp), "MAJOR=") ||
-            !buf_append_u32_dec(tmp, &off, sizeof(tmp), dev->dev_major) ||
+            !buf_append_u32_dec(tmp, &off, sizeof(tmp), MAJOR(dev->devt)) ||
             !buf_append_ch(tmp, &off, sizeof(tmp), '\n'))
             return;
         if (!buf_append(tmp, &off, sizeof(tmp), "MINOR=") ||
-            !buf_append_u32_dec(tmp, &off, sizeof(tmp), dev->dev_minor) ||
+            !buf_append_u32_dec(tmp, &off, sizeof(tmp), MINOR(dev->devt)) ||
             !buf_append_ch(tmp, &off, sizeof(tmp), '\n'))
             return;
     }

@@ -31,6 +31,16 @@ static const struct attribute_group *driver_default_groups[] = {
     NULL,
 };
 
+static struct device_driver *driver_from_bus_entry(struct list_head *entry)
+{
+    struct kobject *kobj;
+
+    if (!entry)
+        return NULL;
+    kobj = container_of(entry, struct kobject, entry);
+    return container_of(kobj, struct device_driver, kobj);
+}
+
 static uint32_t sysfs_emit_text_line(char *buffer, uint32_t cap, const char *text)
 {
     if (!buffer || cap < 2)
@@ -111,7 +121,7 @@ static const struct sysfs_ops driver_sysfs_ops = {
     .store = driver_sysfs_store,
 };
 
-static struct kobj_type driver_ktype = {
+static struct kobj_type ktype_driver = {
     .release = NULL,
     .sysfs_ops = &driver_sysfs_ops,
     .default_attrs = NULL,
@@ -173,11 +183,14 @@ int driver_probe_device(struct device_driver *drv, struct device *dev)
     dev->driver = drv;
     int rc = drv->probe ? drv->probe(dev) : 0;
     if (rc != 0) {
+        sysfs_remove_link(&dev->kobj, "driver");
         dev->driver = NULL;
         if (rc == -EPROBE_DEFER)
             return -EPROBE_DEFER;
         return -1;
     }
+    sysfs_create_link(&drv->kobj, &dev->kobj, dev->kobj.name);
+    sysfs_create_link(&dev->kobj, &drv->kobj, "driver");
     device_uevent_emit("bind", dev);
     return 0;
 }
@@ -206,17 +219,21 @@ int driver_attach(struct device_driver *drv)
 /* driver_register: Implement driver register. */
 int driver_register(struct device_driver *drv)
 {
+    struct list_head *entry;
+
     if (!drv || !drv->bus)
         return -1;
-    struct device_driver *cur;
-    list_for_each_entry(cur, &drv->bus->drivers, bus_list) {
+    list_for_each(entry, &drv->bus->drivers.list) {
+        struct device_driver *cur = driver_from_bus_entry(entry);
+        if (!cur)
+            continue;
         if (!strcmp(cur->kobj.name, drv->kobj.name))
             return -1;
     }
-    kset_add(device_model_drivers_kset(), &drv->kobj);
-    INIT_LIST_HEAD(&drv->bus_list);
-    list_add_tail(&drv->bus_list, &drv->bus->drivers);
-    driver_attach(drv);
+    drv->kobj.kset = &drv->bus->drivers;
+    kset_add(&drv->bus->drivers, &drv->kobj);
+    if (drv->bus->drivers_autoprobe)
+        driver_attach(drv);
     driver_deferred_probe_trigger();
     return 0;
 }
@@ -231,9 +248,9 @@ int driver_unregister(struct device_driver *drv)
         if (dev->driver == drv)
             device_unbind(dev);
     }
-    if (drv->bus_list.next && drv->bus_list.prev)
-        list_del(&drv->bus_list);
-    kset_remove(device_model_drivers_kset(), &drv->kobj);
+    sysfs_remove_dir(&drv->kobj);
+    kset_remove(&drv->bus->drivers, &drv->kobj);
+    drv->kobj.kset = NULL;
     return 0;
 }
 
@@ -243,8 +260,13 @@ void init_driver(struct device_driver *drv, const char *name, struct bus_type *b
     if (!drv)
         return;
     memset(drv, 0, sizeof(*drv));
-    kobject_init_with_ktype(&drv->kobj, name, &driver_ktype, NULL);
-    INIT_LIST_HEAD(&drv->bus_list);
+    kobject_init_with_ktype(&drv->kobj, name, &ktype_driver, NULL);
+    INIT_LIST_HEAD(&drv->devices);
     drv->bus = bus;
     drv->probe = probe;
+}
+
+struct kobj_type *ktype_driver_get(void)
+{
+    return &ktype_driver;
 }

@@ -11,24 +11,16 @@
 #include "base.h"
 
 static struct dirent sys_dirent;
-// Note: sys_root is dynamically allocated in init_sysfs now
-static struct inode sys_devices;
-static struct inode sys_bus;
-static struct inode sys_class;
+/* sys_root is allocated when sysfs builds a superblock. */
+static struct dentry *sysfs_root_dentry;
 static struct inode_operations sys_kobj_dir_iops;
 static struct inode_operations sys_bus_entry_iops;
 static struct inode_operations sys_bus_devices_iops;
-static struct inode_operations sys_bus_drivers_iops;
 static struct inode_operations sys_dir_iops;
 static struct inode_operations sys_devices_dir_iops;
 static struct inode_operations sys_bus_dir_iops;
 static struct inode_operations sys_class_dir_iops;
 static struct inode_operations sys_class_root_iops;
-
-static void sysfs_init_inode(struct inode *inode, uint32_t flags, uint32_t ino,
-                             uint32_t size, struct file_operations *f_ops,
-                             uintptr_t impl, uint32_t mode);
-static struct inode_operations *sysfs_dir_iops_for_fops(struct file_operations *f_ops);
 
 /* Linux-like internal sysfs node cache. */
 struct sysfs_dirent {
@@ -36,6 +28,8 @@ struct sysfs_dirent {
     struct kobject *kobj;                 /* Directory owner */
     const struct attribute *attr;         /* File attribute (NULL for directories) */
     char name[64];                        /* Subdir/symlink name ("" for attribute files) */
+    struct dentry *dentry;                /* Mounted dcache entry, if materialized */
+    int registered;                       /* Dynamic file registered via sysfs_create_file() */
     struct sysfs_dirent *children;        /* Cached attribute files under a kobj dir */
     struct sysfs_dirent *next;
 };
@@ -50,25 +44,100 @@ static struct file_operations sys_kobj_dir_ops;
 static struct file_operations sys_kobj_attr_ops;
 static struct file_operations sys_bus_entry_ops;
 static struct file_operations sys_bus_devices_ops;
-static struct file_operations sys_bus_drivers_ops;
 static struct file_operations sys_dir_ops;
 static struct file_operations sys_devices_dir_ops;
 static struct file_operations sys_bus_dir_ops;
 static struct file_operations sys_class_dir_ops;
 static struct file_operations sys_class_root_ops;
+static struct file_operations sys_dead_ops;
+static struct sysfs_dirent *sysfs_get_kobj_sd(struct kobject *kobj);
+static struct inode *sysfs_get_kobj_dir_inode(struct kobject *kobj);
+static struct sysfs_dirent *sysfs_find_attr_dirent(struct kobject *kobj, const struct attribute *attr);
 
-static const struct attribute_group **sysfs_device_groups(struct kobject *kobj)
+static void sysfs_dirent_append_child(struct sysfs_dirent *parent, struct sysfs_dirent *child)
 {
-    if (!kobj || kobj->ktype != device_model_device_ktype())
+    if (!parent || !child)
+        return;
+    child->next = NULL;
+    if (!parent->children) {
+        parent->children = child;
+        return;
+    }
+    struct sysfs_dirent *cur = parent->children;
+    while (cur->next)
+        cur = cur->next;
+    cur->next = child;
+}
+
+static struct inode_operations *sysfs_dir_iops_for_fops(struct file_operations *f_ops)
+{
+    if (f_ops == &sys_kobj_dir_ops)
+        return &sys_kobj_dir_iops;
+    if (f_ops == &sys_bus_entry_ops)
+        return &sys_bus_entry_iops;
+    if (f_ops == &sys_bus_devices_ops)
+        return &sys_bus_devices_iops;
+    if (f_ops == &sys_dir_ops)
+        return &sys_dir_iops;
+    if (f_ops == &sys_devices_dir_ops)
+        return &sys_devices_dir_iops;
+    if (f_ops == &sys_bus_dir_ops)
+        return &sys_bus_dir_iops;
+    if (f_ops == &sys_class_dir_ops)
+        return &sys_class_dir_iops;
+    if (f_ops == &sys_class_root_ops)
+        return &sys_class_root_iops;
+    return NULL;
+}
+
+static void sysfs_init_inode(struct inode *inode, uint32_t flags, uint32_t ino,
+                             uint32_t size, struct file_operations *f_ops,
+                             uintptr_t impl, uint32_t mode)
+{
+    memset(inode, 0, sizeof(*inode));
+    inode->flags = flags;
+    inode->i_ino = ino;
+    inode->i_size = size;
+    inode->i_op = (flags == FS_DIRECTORY) ? sysfs_dir_iops_for_fops(f_ops) : NULL;
+    inode->f_ops = f_ops;
+    inode->impl = impl;
+    inode->uid = 0;
+    inode->gid = 0;
+    inode->i_mode = mode;
+}
+
+static struct device *sysfs_kobj_device(struct kobject *kobj)
+{
+    if (!kobj || kobj->ktype != ktype_device_get())
         return NULL;
-    struct device *dev = container_of(kobj, struct device, kobj);
-    return dev ? dev->groups : NULL;
+    return container_of(kobj, struct device, kobj);
+}
+
+static const struct attribute_group **sysfs_device_group_set(struct device *dev, uint32_t index)
+{
+    if (!dev)
+        return NULL;
+    switch (index) {
+    case 0:
+        return dev->groups;
+    case 1:
+        return (dev->type) ? dev->type->groups : NULL;
+    case 2:
+        return (dev->class) ? dev->class->dev_groups : NULL;
+    case 3:
+        return (dev->bus) ? dev->bus->dev_groups : NULL;
+    default:
+        return NULL;
+    }
 }
 
 static uint32_t sysfs_kobj_attr_mode(struct kobject *kobj, const struct attribute *attr)
 {
     if (!kobj || !attr)
         return 0;
+    struct sysfs_dirent *registered = sysfs_find_attr_dirent(kobj, attr);
+    if (registered && registered->registered)
+        return attr->mode;
     if (!kobj->ktype)
         return attr->mode;
 
@@ -100,23 +169,37 @@ static uint32_t sysfs_kobj_attr_mode(struct kobject *kobj, const struct attribut
         }
     }
 
-    const struct attribute_group **dg = sysfs_device_groups(kobj);
-    while (dg && *dg) {
-        const struct attribute_group *grp = *dg;
-        if (grp && grp->attrs) {
-            const struct attribute **a = grp->attrs;
-            while (a && *a) {
-                if (*a == attr) {
-                    if (grp->is_visible)
-                        return grp->is_visible(kobj, attr);
-                    return attr->mode;
+    struct device *dev = sysfs_kobj_device(kobj);
+    for (uint32_t set = 0; set < 4; set++) {
+        const struct attribute_group **dg = sysfs_device_group_set(dev, set);
+        while (dg && *dg) {
+            const struct attribute_group *grp = *dg;
+            if (grp && grp->attrs) {
+                const struct attribute **a = grp->attrs;
+                while (a && *a) {
+                    if (*a == attr) {
+                        if (grp->is_visible)
+                            return grp->is_visible(kobj, attr);
+                        return attr->mode;
+                    }
+                    a++;
                 }
-                a++;
             }
+            dg++;
         }
-        dg++;
     }
     return attr->mode;
+}
+
+static struct kobject *sysfs_parent_kobj(struct kobject *kobj)
+{
+    if (!kobj)
+        return NULL;
+    if (kobj->parent)
+        return kobj->parent;
+    if (kobj->kset && &kobj->kset->kobj != kobj)
+        return &kobj->kset->kobj;
+    return NULL;
 }
 
 static struct sysfs_dirent *sysfs_get_kobj_sd(struct kobject *kobj)
@@ -142,18 +225,137 @@ static struct inode *sysfs_get_kobj_dir_inode(struct kobject *kobj)
     return sd ? &sd->inode : NULL;
 }
 
+static int sysfs_materialize_named_dir(struct sysfs_dirent *parent_sd, struct sysfs_dirent *child_sd)
+{
+    struct dentry *child;
+
+    if (!parent_sd || !child_sd || !parent_sd->dentry)
+        return 0;
+    if (child_sd->dentry)
+        return 0;
+    if (child_sd->attr || !child_sd->name[0] || child_sd->inode.flags != FS_DIRECTORY)
+        return 0;
+
+    child = d_lookup(parent_sd->dentry, child_sd->name);
+    if (!child)
+        child = d_alloc(parent_sd->dentry, child_sd->name);
+    if (!child)
+        return -1;
+    child->inode = &child_sd->inode;
+    child_sd->dentry = child;
+    return 0;
+}
+
+static int sysfs_materialize_kobj_subdirs(struct kobject *kobj)
+{
+    struct sysfs_dirent *sd;
+    struct sysfs_dirent *cur;
+
+    if (!kobj)
+        return -1;
+    sd = sysfs_get_kobj_sd(kobj);
+    if (!sd)
+        return -1;
+
+    cur = sd->children;
+    while (cur) {
+        if (sysfs_materialize_named_dir(sd, cur) != 0)
+            return -1;
+        cur = cur->next;
+    }
+    return 0;
+}
+
+static struct sysfs_dirent *sysfs_find_attr_dirent(struct kobject *kobj, const struct attribute *attr)
+{
+    struct sysfs_dirent *sd;
+    struct sysfs_dirent *cur;
+
+    if (!kobj || !attr)
+        return NULL;
+    sd = sysfs_get_kobj_sd(kobj);
+    if (!sd)
+        return NULL;
+    cur = sd->children;
+    while (cur) {
+        if (cur->attr == attr)
+            return cur;
+        cur = cur->next;
+    }
+    return NULL;
+}
+
+static struct sysfs_dirent *sysfs_find_named_dirent(struct kobject *kobj, const char *name)
+{
+    struct sysfs_dirent *sd;
+    struct sysfs_dirent *cur;
+
+    if (!kobj || !name || !name[0])
+        return NULL;
+    sd = sysfs_get_kobj_sd(kobj);
+    if (!sd)
+        return NULL;
+    cur = sd->children;
+    while (cur) {
+        if (!cur->attr && cur->name[0] && !strcmp(cur->name, name))
+            return cur;
+        cur = cur->next;
+    }
+    return NULL;
+}
+
+static struct sysfs_dirent *sysfs_named_subdir_at(struct kobject *kobj, uint32_t index)
+{
+    struct sysfs_dirent *sd;
+    struct sysfs_dirent *cur;
+    uint32_t i = 0;
+
+    if (!kobj)
+        return NULL;
+    sd = sysfs_get_kobj_sd(kobj);
+    if (!sd)
+        return NULL;
+    cur = sd->children;
+    while (cur) {
+        if (!cur->attr && cur->name[0] && cur->inode.flags == FS_DIRECTORY) {
+            if (i == index)
+                return cur;
+            i++;
+        }
+        cur = cur->next;
+    }
+    return NULL;
+}
+
+static uint32_t sysfs_named_subdir_count(struct kobject *kobj)
+{
+    struct sysfs_dirent *sd;
+    struct sysfs_dirent *cur;
+    uint32_t count = 0;
+
+    if (!kobj)
+        return 0;
+    sd = sysfs_get_kobj_sd(kobj);
+    if (!sd)
+        return 0;
+    cur = sd->children;
+    while (cur) {
+        if (!cur->attr && cur->name[0] && cur->inode.flags == FS_DIRECTORY)
+            count++;
+        cur = cur->next;
+    }
+    return count;
+}
+
 static struct inode *sysfs_get_kobj_attr_inode(struct kobject *kobj, const struct attribute *attr)
 {
     struct sysfs_dirent *sd = sysfs_get_kobj_sd(kobj);
     if (!sd || !attr || !attr->name)
         return NULL;
 
-    struct sysfs_dirent *cur = sd->children;
-    while (cur) {
-        if (cur->attr == attr)
-            return &cur->inode;
-        cur = cur->next;
-    }
+    struct sysfs_dirent *cur = sysfs_find_attr_dirent(kobj, attr);
+    if (cur)
+        return &cur->inode;
 
     uint32_t mode = sysfs_kobj_attr_mode(kobj, attr);
     if (!mode)
@@ -174,28 +376,51 @@ static struct inode *sysfs_get_kobj_attr_inode(struct kobject *kobj, const struc
     sysfs_init_inode(&nd->inode, FS_FILE, sysfs_alloc_ino(), size, &sys_kobj_attr_ops,
                      (uintptr_t)kobj, mode);
     nd->inode.private_data = (void *)attr;
-    nd->next = sd->children;
-    sd->children = nd;
+    sysfs_dirent_append_child(sd, nd);
     return &nd->inode;
 }
 
-static struct inode *sysfs_get_kobj_subdir_inode(struct kobject *kobj, const char *name,
-                                                 struct file_operations *f_ops, uint32_t mode)
+static struct file_operations *sysfs_subdir_fops(struct kobject *kobj, const char *name)
 {
+    struct kobject *cur;
+
+    if (kobj && name) {
+        list_for_each_entry(cur, &buses_kset_get()->list, entry) {
+            if (cur != kobj)
+                continue;
+            if (!strcmp(name, "devices"))
+                return &sys_bus_devices_ops;
+            break;
+        }
+    }
+
+    return &sys_kobj_dir_ops;
+}
+
+int sysfs_create_subdir(struct kobject *kobj, const char *name, uint32_t mode)
+{
+    struct file_operations *f_ops = sysfs_subdir_fops(kobj, name);
     struct sysfs_dirent *sd = sysfs_get_kobj_sd(kobj);
     if (!sd || !name || !name[0] || !f_ops)
-        return NULL;
+        return -1;
 
-    struct sysfs_dirent *cur = sd->children;
-    while (cur) {
-        if (!cur->attr && cur->name[0] && !strcmp(cur->name, name))
-            return &cur->inode;
-        cur = cur->next;
+    struct sysfs_dirent *cur = sysfs_find_named_dirent(kobj, name);
+    if (cur) {
+        cur->inode.flags = FS_DIRECTORY;
+        cur->inode.i_size = 0;
+        cur->inode.i_op = sysfs_dir_iops_for_fops(f_ops);
+        cur->inode.f_ops = f_ops;
+        cur->inode.impl = (uintptr_t)kobj;
+        cur->inode.i_mode = mode;
+        cur->inode.private_data = NULL;
+        if (sysfs_materialize_named_dir(sd, cur) != 0)
+            return -1;
+        return 0;
     }
 
     struct sysfs_dirent *nd = (struct sysfs_dirent *)kmalloc(sizeof(*nd));
     if (!nd)
-        return NULL;
+        return -1;
     memset(nd, 0, sizeof(*nd));
     nd->kobj = kobj;
     nd->attr = NULL;
@@ -207,9 +432,31 @@ static struct inode *sysfs_get_kobj_subdir_inode(struct kobject *kobj, const cha
         nd->name[n] = 0;
     }
     sysfs_init_inode(&nd->inode, FS_DIRECTORY, sysfs_alloc_ino(), 0, f_ops, (uintptr_t)kobj, mode);
-    nd->next = sd->children;
-    sd->children = nd;
-    return &nd->inode;
+    sysfs_dirent_append_child(sd, nd);
+    if (sysfs_materialize_named_dir(sd, nd) != 0)
+        return -1;
+    return 0;
+}
+
+void sysfs_remove_subdir(struct kobject *kobj, const char *name)
+{
+    struct sysfs_dirent *cur;
+
+    if (!kobj || !name || !name[0])
+        return;
+    cur = sysfs_find_named_dirent(kobj, name);
+    if (!cur)
+        return;
+    if (cur->dentry) {
+        vfs_dentry_detach(cur->dentry);
+        cur->dentry = NULL;
+    }
+    cur->inode.flags = 0;
+    cur->inode.i_size = 0;
+    cur->inode.impl = (uintptr_t)0;
+    cur->inode.private_data = NULL;
+    cur->inode.f_ops = &sys_dead_ops;
+    cur->inode.i_op = NULL;
 }
 
 static uint32_t sys_read_symlink(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
@@ -292,6 +539,231 @@ static void sysfs_invalidate_dirent(struct sysfs_dirent *sd)
     }
 }
 
+static int sysfs_kobject_path(struct kobject *target, char *buf, uint32_t cap)
+{
+    if (!target || !buf || cap == 0)
+        return -1;
+
+    if (target->ktype == ktype_device_get()) {
+        struct device *dev = container_of(target, struct device, kobj);
+        return device_get_sysfs_path(dev, buf, cap);
+    }
+
+    struct kobject *cur;
+    list_for_each_entry(cur, &classes_kset_get()->list, entry) {
+        if (cur == target) {
+            const char *prefix = "/sys/class/";
+            uint32_t off = (uint32_t)strlen(prefix);
+            uint32_t name_len = (uint32_t)strlen(target->name);
+            if (off + name_len + 1 > cap)
+                return -1;
+            memcpy(buf, prefix, off);
+            memcpy(buf + off, target->name, name_len);
+            buf[off + name_len] = 0;
+            return 0;
+        }
+    }
+    list_for_each_entry(cur, &buses_kset_get()->list, entry) {
+        if (cur == target) {
+            const char *prefix = "/sys/bus/";
+            uint32_t off = (uint32_t)strlen(prefix);
+            uint32_t name_len = (uint32_t)strlen(target->name);
+            if (off + name_len + 1 > cap)
+                return -1;
+            memcpy(buf, prefix, off);
+            memcpy(buf + off, target->name, name_len);
+            buf[off + name_len] = 0;
+            return 0;
+        }
+    }
+    if (target->ktype == ktype_driver_get()) {
+        struct device_driver *drv = container_of(target, struct device_driver, kobj);
+        const char *prefix = "/sys/bus/";
+        const char *mid = "/drivers/";
+        uint32_t off = (uint32_t)strlen(prefix);
+        uint32_t bus_len;
+        uint32_t mid_len;
+        uint32_t drv_len;
+        if (!drv->bus)
+            return -1;
+        bus_len = (uint32_t)strlen(drv->bus->subsys.kset.kobj.name);
+        mid_len = (uint32_t)strlen(mid);
+        drv_len = (uint32_t)strlen(drv->kobj.name);
+        if (off + bus_len + mid_len + drv_len + 1 > cap)
+            return -1;
+        memcpy(buf, prefix, off);
+        memcpy(buf + off, drv->bus->subsys.kset.kobj.name, bus_len);
+        off += bus_len;
+        memcpy(buf + off, mid, mid_len);
+        off += mid_len;
+        memcpy(buf + off, drv->kobj.name, drv_len);
+        off += drv_len;
+        buf[off] = 0;
+        return 0;
+    }
+    return -1;
+}
+
+static struct inode *sysfs_set_kobj_link_inode(struct kobject *kobj, const char *name, const char *target)
+{
+    struct sysfs_dirent *sd = sysfs_get_kobj_sd(kobj);
+    if (!sd || !name || !name[0])
+        return NULL;
+
+    struct sysfs_dirent *cur = sd->children;
+    while (cur) {
+        if (!cur->attr && cur->name[0] && !strcmp(cur->name, name)) {
+            if (cur->inode.flags == FS_SYMLINK && cur->inode.private_data) {
+                kfree(cur->inode.private_data);
+                cur->inode.private_data = NULL;
+            }
+            if (!target || !target[0]) {
+                cur->inode.flags = 0;
+                cur->inode.i_size = 0;
+                cur->inode.f_ops = &sys_dead_ops;
+                cur->inode.private_data = NULL;
+                return &cur->inode;
+            }
+            uint32_t n = (uint32_t)strlen(target);
+            char *copy = (char *)kmalloc(n + 1);
+            if (!copy)
+                return NULL;
+            memcpy(copy, target, n + 1);
+            cur->inode.flags = FS_SYMLINK;
+            cur->inode.i_size = n;
+            cur->inode.f_ops = &sys_symlink_ops;
+            cur->inode.private_data = copy;
+            return &cur->inode;
+        }
+        cur = cur->next;
+    }
+
+    if (!target || !target[0])
+        return NULL;
+
+    uint32_t n = (uint32_t)strlen(target);
+    char *copy = (char *)kmalloc(n + 1);
+    if (!copy)
+        return NULL;
+    memcpy(copy, target, n + 1);
+
+    struct sysfs_dirent *nd = (struct sysfs_dirent *)kmalloc(sizeof(*nd));
+    if (!nd) {
+        kfree(copy);
+        return NULL;
+    }
+    memset(nd, 0, sizeof(*nd));
+    nd->kobj = kobj;
+    {
+        uint32_t len = (uint32_t)strlen(name);
+        if (len >= sizeof(nd->name))
+            len = sizeof(nd->name) - 1;
+        memcpy(nd->name, name, len);
+        nd->name[len] = 0;
+    }
+    sysfs_init_inode(&nd->inode, FS_SYMLINK, sysfs_alloc_ino(), n, &sys_symlink_ops,
+                     (uintptr_t)kobj, 0777);
+    nd->inode.private_data = copy;
+    sysfs_dirent_append_child(sd, nd);
+    return &nd->inode;
+}
+
+static struct inode *sysfs_find_kobj_link_inode(struct kobject *kobj, const char *name)
+{
+    struct sysfs_dirent *cur = sysfs_find_named_dirent(kobj, name);
+    if (!cur || cur->inode.f_ops == &sys_dead_ops || cur->inode.flags == 0)
+        return NULL;
+    return &cur->inode;
+}
+
+int sysfs_create_link(struct kobject *kobj, struct kobject *target, const char *name)
+{
+    char path[256];
+    if (!kobj || !target || !name || !name[0])
+        return -1;
+    if (sysfs_kobject_path(target, path, sizeof(path)) != 0)
+        return -1;
+    return sysfs_set_kobj_link_inode(kobj, name, path) ? 0 : -1;
+}
+
+int sysfs_create_file(struct kobject *kobj, const struct attribute *attr)
+{
+    struct sysfs_dirent *ad;
+    struct inode *inode;
+
+    if (!kobj || !attr || !attr->name)
+        return -1;
+    inode = sysfs_get_kobj_attr_inode(kobj, attr);
+    if (!inode)
+        return -1;
+    ad = sysfs_find_attr_dirent(kobj, attr);
+    if (!ad)
+        return -1;
+    ad->registered = 1;
+    inode->impl = (uintptr_t)kobj;
+    inode->private_data = (void *)attr;
+    inode->f_ops = &sys_kobj_attr_ops;
+    inode->i_mode = attr->mode;
+    return 0;
+}
+
+void sysfs_remove_file(struct kobject *kobj, const struct attribute *attr)
+{
+    struct sysfs_dirent *ad;
+
+    if (!kobj || !attr)
+        return;
+    ad = sysfs_find_attr_dirent(kobj, attr);
+    if (!ad)
+        return;
+    ad->registered = 0;
+    if (ad->dentry) {
+        vfs_dentry_detach(ad->dentry);
+        ad->dentry = NULL;
+    }
+    ad->inode.impl = (uintptr_t)0;
+    ad->inode.private_data = NULL;
+    ad->inode.f_ops = &sys_dead_ops;
+}
+
+void sysfs_remove_link(struct kobject *kobj, const char *name)
+{
+    (void)sysfs_set_kobj_link_inode(kobj, name, NULL);
+}
+
+int sysfs_create_dir(struct kobject *kobj)
+{
+    struct sysfs_dirent *sd = sysfs_get_kobj_sd(kobj);
+    if (!sd)
+        return -1;
+    if (sd->dentry)
+        return sysfs_materialize_kobj_subdirs(kobj);
+
+    struct dentry *parent_dentry = NULL;
+    struct kobject *parent = sysfs_parent_kobj(kobj);
+    if (parent) {
+        struct sysfs_dirent *parent_sd = sysfs_get_kobj_sd(parent);
+        if (!parent_sd)
+            return -1;
+        parent_dentry = parent_sd->dentry;
+    }
+
+    if (!parent_dentry) {
+        if (!sysfs_root_dentry || !kobj->name[0])
+            return 0;
+        parent_dentry = sysfs_root_dentry;
+    }
+
+    struct dentry *child = d_lookup(parent_dentry, kobj->name);
+    if (!child)
+        child = d_alloc(parent_dentry, kobj->name);
+    if (!child)
+        return -1;
+    child->inode = &sd->inode;
+    sd->dentry = child;
+    return sysfs_materialize_kobj_subdirs(kobj);
+}
+
 /*
  * Linux alignment note:
  * Linux sysfs/kernfs removes nodes when the backing kobject goes away, so it is
@@ -304,92 +776,18 @@ void sysfs_remove_dir(struct kobject *kobj)
         return;
     struct sysfs_dirent *sd = (struct sysfs_dirent *)kobj->sd;
     kobj->sd = NULL;
+    if (sd->dentry) {
+        vfs_dentry_detach(sd->dentry);
+        sd->dentry = NULL;
+    }
     sysfs_invalidate_dirent(sd);
 }
 
-static struct inode *sysfs_get_kobj_link_inode(struct kobject *kobj, const char *name, const char *target)
-{
-    struct sysfs_dirent *sd = sysfs_get_kobj_sd(kobj);
-    if (!sd || !name || !name[0] || !target || !target[0])
-        return NULL;
-
-    struct sysfs_dirent *cur = sd->children;
-    while (cur) {
-        if (!cur->attr && cur->name[0] && cur->inode.flags == FS_SYMLINK && !strcmp(cur->name, name))
-            return &cur->inode;
-        cur = cur->next;
-    }
-
-    uint32_t n = (uint32_t)strlen(target);
-    char *copy = (char *)kmalloc(n + 1);
-    if (!copy)
-        return NULL;
-    memcpy(copy, target, n + 1);
-
-    struct sysfs_dirent *nd = (struct sysfs_dirent *)kmalloc(sizeof(*nd));
-    if (!nd)
-        return NULL;
-    memset(nd, 0, sizeof(*nd));
-    nd->kobj = kobj;
-    nd->attr = NULL;
-    {
-        uint32_t n = (uint32_t)strlen(name);
-        if (n >= sizeof(nd->name))
-            n = sizeof(nd->name) - 1;
-        memcpy(nd->name, name, n);
-        nd->name[n] = 0;
-    }
-    sysfs_init_inode(&nd->inode, FS_SYMLINK, sysfs_alloc_ino(), n, &sys_symlink_ops,
-                     (uintptr_t)kobj, 0777);
-    nd->inode.private_data = copy;
-    nd->next = sd->children;
-    sd->children = nd;
-    return &nd->inode;
-}
 static struct file_operations sys_class_dir_ops;
 struct sysfs_named_inode {
     const char *name;
     struct inode *inode;
 };
-
-static void sysfs_init_inode(struct inode *inode, uint32_t flags, uint32_t ino,
-                             uint32_t size, struct file_operations *f_ops,
-                             uintptr_t impl, uint32_t mode)
-{
-    memset(inode, 0, sizeof(*inode));
-    inode->flags = flags;
-    inode->i_ino = ino;
-    inode->i_size = size;
-    inode->i_op = (flags == FS_DIRECTORY) ? sysfs_dir_iops_for_fops(f_ops) : NULL;
-    inode->f_ops = f_ops;
-    inode->impl = impl;
-    inode->uid = 0;
-    inode->gid = 0;
-    inode->i_mode = mode;
-}
-
-static struct inode_operations *sysfs_dir_iops_for_fops(struct file_operations *f_ops)
-{
-    if (f_ops == &sys_kobj_dir_ops)
-        return &sys_kobj_dir_iops;
-    if (f_ops == &sys_bus_entry_ops)
-        return &sys_bus_entry_iops;
-    if (f_ops == &sys_bus_devices_ops)
-        return &sys_bus_devices_iops;
-    if (f_ops == &sys_bus_drivers_ops)
-        return &sys_bus_drivers_iops;
-    if (f_ops == &sys_dir_ops)
-        return &sys_dir_iops;
-    if (f_ops == &sys_devices_dir_ops)
-        return &sys_devices_dir_iops;
-    if (f_ops == &sys_bus_dir_ops)
-        return &sys_bus_dir_iops;
-    if (f_ops == &sys_class_dir_ops)
-        return &sys_class_dir_iops;
-    if (f_ops == &sys_class_root_ops)
-        return &sys_class_root_iops;
-    return NULL;
-}
 
 static uint32_t sys_read_kobj_attr(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
@@ -486,24 +884,43 @@ static int sysfs_kobj_attr_at(struct kobject *kobj, uint32_t index, const struct
         }
     }
 
-    const struct attribute_group **dg = sysfs_device_groups(kobj);
-    while (dg && *dg) {
-        const struct attribute_group *grp = *dg;
-        if (grp && grp->attrs) {
-            const struct attribute **a = grp->attrs;
-            while (a && *a) {
-                uint32_t mode = grp->is_visible ? grp->is_visible(kobj, *a) : (*a)->mode;
-                if (mode) {
-                    if (i == index) {
-                        *out_attr = *a;
-                        return 0;
-                    }
-                    i++;
+    struct sysfs_dirent *sd = sysfs_get_kobj_sd(kobj);
+    struct sysfs_dirent *cur = sd ? sd->children : NULL;
+    while (cur) {
+        if (cur->attr && cur->registered) {
+            uint32_t mode = cur->attr->mode;
+            if (mode) {
+                if (i == index) {
+                    *out_attr = cur->attr;
+                    return 0;
                 }
-                a++;
+                i++;
             }
         }
-        dg++;
+        cur = cur->next;
+    }
+
+    struct device *dev = sysfs_kobj_device(kobj);
+    for (uint32_t set = 0; set < 4; set++) {
+        const struct attribute_group **dg = sysfs_device_group_set(dev, set);
+        while (dg && *dg) {
+            const struct attribute_group *grp = *dg;
+            if (grp && grp->attrs) {
+                const struct attribute **a = grp->attrs;
+                while (a && *a) {
+                    uint32_t mode = grp->is_visible ? grp->is_visible(kobj, *a) : (*a)->mode;
+                    if (mode) {
+                        if (i == index) {
+                            *out_attr = *a;
+                            return 0;
+                        }
+                        i++;
+                    }
+                    a++;
+                }
+            }
+            dg++;
+        }
     }
 
     return -1;
@@ -555,17 +972,45 @@ static struct dirent *sys_kobj_dir_readdir(struct file *file, uint32_t index)
     }
 
     uint32_t next = attr_count;
-    if (kobj->parent) {
+    struct inode *pino = sysfs_find_kobj_link_inode(kobj, "parent");
+    if (pino) {
         if (index == next) {
-            struct inode *pino = sysfs_get_kobj_dir_inode(kobj->parent);
-            if (!pino)
-                return NULL;
             strcpy(sys_dirent.name, "parent");
             sys_dirent.ino = pino->i_ino;
             return &sys_dirent;
         }
         next++;
     }
+
+    struct inode *sino = sysfs_find_kobj_link_inode(kobj, "subsystem");
+    if (sino) {
+        if (index == next) {
+            strcpy(sys_dirent.name, "subsystem");
+            sys_dirent.ino = sino->i_ino;
+            return &sys_dirent;
+        }
+        next++;
+    }
+
+    struct inode *dino = sysfs_find_kobj_link_inode(kobj, "driver");
+    if (dino) {
+        if (index == next) {
+            strcpy(sys_dirent.name, "driver");
+            sys_dirent.ino = dino->i_ino;
+            return &sys_dirent;
+        }
+        next++;
+    }
+
+    {
+        struct sysfs_dirent *named = sysfs_named_subdir_at(kobj, index - next);
+        if (named) {
+            strcpy(sys_dirent.name, named->name);
+            sys_dirent.ino = named->inode.i_ino;
+            return &sys_dirent;
+        }
+    }
+    next += sysfs_named_subdir_count(kobj);
 
     struct kobject *child = kobj->children;
     uint32_t i = 0;
@@ -596,8 +1041,18 @@ static struct inode *sys_kobj_dir_finddir(struct inode *node, const char *name)
     if (attr)
         return sysfs_get_kobj_attr_inode(kobj, attr);
 
-    if (!strcmp(name, "parent") && kobj->parent)
-        return sysfs_get_kobj_dir_inode(kobj->parent);
+    if (!strcmp(name, "parent"))
+        return sysfs_find_kobj_link_inode(kobj, "parent");
+    if (!strcmp(name, "subsystem"))
+        return sysfs_find_kobj_link_inode(kobj, "subsystem");
+    if (!strcmp(name, "driver"))
+        return sysfs_find_kobj_link_inode(kobj, "driver");
+
+    {
+        struct sysfs_dirent *named = sysfs_find_named_dirent(kobj, name);
+        if (named && named->inode.flags == FS_DIRECTORY)
+            return &named->inode;
+    }
 
     struct kobject *child = kobj->children;
     while (child) {
@@ -627,21 +1082,16 @@ static struct inode_operations sys_kobj_dir_iops = {
 
 static struct file_operations sys_bus_entry_ops;
 static struct file_operations sys_bus_devices_ops;
-static struct file_operations sys_bus_drivers_ops;
 
-/* sys_devices_readdir: Implement sys devices readdir. */
 static struct dirent *sys_devices_readdir(struct file *file, uint32_t index)
 {
     struct inode *node = file->dentry->inode;
-    (void)node;
-    struct kset *kset = device_model_devices_kset();
-    if (!kset)
+    struct kobject *root = node ? (struct kobject *)(uintptr_t)node->impl : NULL;
+    if (!root)
         return NULL;
     uint32_t i = 0;
-    struct kobject *cur;
-    list_for_each_entry(cur, &kset->list, entry) {
-        if (cur->parent)
-            continue;
+    struct kobject *cur = root->children;
+    while (cur) {
         if (i == index) {
             struct inode *ino = sysfs_get_kobj_dir_inode(cur);
             if (!ino)
@@ -651,6 +1101,7 @@ static struct dirent *sys_devices_readdir(struct file *file, uint32_t index)
             return &sys_dirent;
         }
         i++;
+        cur = cur->next;
     }
     return NULL;
 }
@@ -658,19 +1109,16 @@ static struct dirent *sys_devices_readdir(struct file *file, uint32_t index)
 /* sys_devices_finddir: Implement sys devices finddir. */
 static struct inode *sys_devices_finddir(struct inode *node, const char *name)
 {
-    (void)node;
     if (!name)
         return NULL;
-    struct kset *kset = device_model_devices_kset();
-    if (!kset)
+    struct kobject *root = node ? (struct kobject *)(uintptr_t)node->impl : NULL;
+    if (!root)
         return NULL;
-    struct kobject *cur;
-    list_for_each_entry(cur, &kset->list, entry) {
-        if (cur->parent)
-            continue;
-        if (!strcmp(cur->name, name)) {
-            return sysfs_get_kobj_dir_inode(cur);
-        }
+    struct kobject *child = root->children;
+    while (child) {
+        if (!strcmp(child->name, name))
+            return sysfs_get_kobj_dir_inode(child);
+        child = child->next;
     }
     return NULL;
 }
@@ -680,7 +1128,7 @@ static struct dirent *sys_bus_readdir(struct file *file, uint32_t index)
 {
     struct inode *node = file->dentry->inode;
     (void)node;
-    struct kset *kset = device_model_buses_kset();
+    struct kset *kset = buses_kset_get();
     if (!kset)
         return NULL;
     uint32_t i = 0;
@@ -710,7 +1158,7 @@ static struct inode *sys_bus_finddir(struct inode *node, const char *name)
     struct bus_type *bus = bus_find(name);
     if (!bus)
         return NULL;
-    struct inode *ino = sysfs_get_kobj_dir_inode(&bus->kobj);
+    struct inode *ino = sysfs_get_kobj_dir_inode(&bus->subsys.kset.kobj);
     if (!ino)
         return NULL;
     ino->i_op = &sys_bus_entry_iops;
@@ -721,17 +1169,29 @@ static struct inode *sys_bus_finddir(struct inode *node, const char *name)
 static struct dirent *sys_bus_entry_readdir(struct file *file, uint32_t index)
 {
     struct inode *node = file->dentry->inode;
+    struct bus_type *bus;
     if (!node)
         return NULL;
     struct kobject *kobj = (struct kobject *)(uintptr_t)node->impl;
     if (!kobj)
         return NULL;
-    if (index == 0) {
-        strcpy(sys_dirent.name, "devices");
-        struct inode *ino = sysfs_get_kobj_dir_inode(kobj);
+    bus = container_of(kobj, struct bus_type, subsys.kset.kobj);
+    uint32_t attr_count = sysfs_kobj_attr_count(kobj);
+    if (index < attr_count) {
+        const struct attribute *attr = NULL;
+        if (sysfs_kobj_attr_at(kobj, index, &attr) != 0 || !attr || !attr->name)
+            return NULL;
+        struct inode *ino = sysfs_get_kobj_attr_inode(kobj, attr);
         if (!ino)
             return NULL;
-        struct inode *dino = sysfs_get_kobj_subdir_inode(kobj, "devices", &sys_bus_devices_ops, 0555);
+        strcpy(sys_dirent.name, attr->name);
+        sys_dirent.ino = ino->i_ino;
+        return &sys_dirent;
+    }
+    index -= attr_count;
+    if (index == 0) {
+        strcpy(sys_dirent.name, "devices");
+        struct inode *dino = sysfs_find_kobj_link_inode(kobj, "devices");
         if (!dino)
             return NULL;
         sys_dirent.ino = dino->i_ino;
@@ -739,7 +1199,7 @@ static struct dirent *sys_bus_entry_readdir(struct file *file, uint32_t index)
     }
     if (index == 1) {
         strcpy(sys_dirent.name, "drivers");
-        struct inode *dino = sysfs_get_kobj_subdir_inode(kobj, "drivers", &sys_bus_drivers_ops, 0555);
+        struct inode *dino = sysfs_get_kobj_dir_inode(&bus->drivers.kobj);
         if (!dino)
             return NULL;
         sys_dirent.ino = dino->i_ino;
@@ -750,15 +1210,20 @@ static struct dirent *sys_bus_entry_readdir(struct file *file, uint32_t index)
 
 static struct inode *sys_bus_entry_finddir(struct inode *node, const char *name)
 {
+    struct bus_type *bus;
     if (!node || !name)
         return NULL;
     struct kobject *kobj = (struct kobject *)(uintptr_t)node->impl;
     if (!kobj)
         return NULL;
+    bus = container_of(kobj, struct bus_type, subsys.kset.kobj);
+    const struct attribute *attr = sysfs_kobj_find_attr(kobj, name);
+    if (attr)
+        return sysfs_get_kobj_attr_inode(kobj, attr);
     if (!strcmp(name, "devices"))
-        return sysfs_get_kobj_subdir_inode(kobj, "devices", &sys_bus_devices_ops, 0555);
+        return sysfs_find_kobj_link_inode(kobj, "devices");
     if (!strcmp(name, "drivers"))
-        return sysfs_get_kobj_subdir_inode(kobj, "drivers", &sys_bus_drivers_ops, 0555);
+        return sysfs_get_kobj_dir_inode(&bus->drivers.kobj);
     return NULL;
 }
 
@@ -770,20 +1235,16 @@ static struct dirent *sys_bus_devices_readdir(struct file *file, uint32_t index)
     struct kobject *kobj = (struct kobject *)(uintptr_t)node->impl;
     if (!kobj)
         return NULL;
-    struct bus_type *bus = container_of(kobj, struct bus_type, kobj);
+    struct bus_type *bus = container_of(kobj, struct bus_type, subsys.kset.kobj);
     uint32_t i = 0;
     struct device *dev;
-    struct device *platform_root = device_model_platform_root();
-    struct device *pci_root = device_model_pci_root();
+    struct device *pci_root = pci_root_device();
     list_for_each_entry(dev, &bus->devices, bus_list) {
-        if (dev == platform_root || dev == pci_root)
+        if (dev == pci_root)
             continue;
         if (i == index) {
             strcpy(sys_dirent.name, dev->kobj.name);
-            char target[256];
-            if (device_get_sysfs_path(dev, target, sizeof(target)) != 0)
-                return NULL;
-            struct inode *ino = sysfs_get_kobj_link_inode(kobj, dev->kobj.name, target);
+            struct inode *ino = sysfs_find_kobj_link_inode(kobj, dev->kobj.name);
             if (!ino)
                 return NULL;
             sys_dirent.ino = ino->i_ino;
@@ -801,61 +1262,14 @@ static struct inode *sys_bus_devices_finddir(struct inode *node, const char *nam
     struct kobject *kobj = (struct kobject *)(uintptr_t)node->impl;
     if (!kobj)
         return NULL;
-    struct bus_type *bus = container_of(kobj, struct bus_type, kobj);
+    struct bus_type *bus = container_of(kobj, struct bus_type, subsys.kset.kobj);
     struct device *dev;
-    struct device *platform_root = device_model_platform_root();
-    struct device *pci_root = device_model_pci_root();
+    struct device *pci_root = pci_root_device();
     list_for_each_entry(dev, &bus->devices, bus_list) {
-        if (dev == platform_root || dev == pci_root)
+        if (dev == pci_root)
             continue;
-        if (!strcmp(dev->kobj.name, name)) {
-            char target[256];
-            if (device_get_sysfs_path(dev, target, sizeof(target)) != 0)
-                return NULL;
-            return sysfs_get_kobj_link_inode(kobj, dev->kobj.name, target);
-        }
-    }
-    return NULL;
-}
-
-static struct dirent *sys_bus_drivers_readdir(struct file *file, uint32_t index)
-{
-    struct inode *node = file->dentry->inode;
-    if (!node)
-        return NULL;
-    struct kobject *kobj = (struct kobject *)(uintptr_t)node->impl;
-    if (!kobj)
-        return NULL;
-    struct bus_type *bus = container_of(kobj, struct bus_type, kobj);
-    uint32_t i = 0;
-    struct device_driver *drv;
-    list_for_each_entry(drv, &bus->drivers, bus_list) {
-        if (i == index) {
-            struct inode *ino = sysfs_get_kobj_dir_inode(&drv->kobj);
-            if (!ino)
-                return NULL;
-            strcpy(sys_dirent.name, drv->kobj.name);
-            sys_dirent.ino = ino->i_ino;
-            return &sys_dirent;
-        }
-        i++;
-    }
-    return NULL;
-}
-
-static struct inode *sys_bus_drivers_finddir(struct inode *node, const char *name)
-{
-    if (!node || !name)
-        return NULL;
-    struct kobject *kobj = (struct kobject *)(uintptr_t)node->impl;
-    if (!kobj)
-        return NULL;
-    struct bus_type *bus = container_of(kobj, struct bus_type, kobj);
-    struct device_driver *drv;
-    list_for_each_entry(drv, &bus->drivers, bus_list) {
-        if (!strcmp(drv->kobj.name, name)) {
-            return sysfs_get_kobj_dir_inode(&drv->kobj);
-        }
+        if (!strcmp(dev->kobj.name, name))
+            return sysfs_find_kobj_link_inode(kobj, dev->kobj.name);
     }
     return NULL;
 }
@@ -894,29 +1308,12 @@ static struct inode_operations sys_bus_devices_iops = {
     .rmdir = NULL
 };
 
-static struct file_operations sys_bus_drivers_ops = {
-    .read = NULL,
-    .write = NULL,
-    .open = NULL,
-    .close = NULL,
-    .readdir = sys_bus_drivers_readdir,
-    .ioctl = NULL
-};
-
-static struct inode_operations sys_bus_drivers_iops = {
-    .lookup = sys_bus_drivers_finddir,
-    .create = NULL,
-    .mkdir = NULL,
-    .unlink = NULL,
-    .rmdir = NULL
-};
-
 /* sys_class_readdir: Implement sys class readdir. */
 static struct dirent *sys_class_readdir(struct file *file, uint32_t index)
 {
     struct inode *node = file->dentry->inode;
     (void)node;
-    struct kset *kset = device_model_classes_kset();
+    struct kset *kset = classes_kset_get();
     if (!kset)
         return NULL;
     uint32_t i = 0;
@@ -946,7 +1343,7 @@ static struct inode *sys_class_finddir(struct inode *node, const char *name)
     struct class *cls = class_find(name);
     if (!cls)
         return NULL;
-    struct inode *ino = sysfs_get_kobj_dir_inode(&cls->kobj);
+    struct inode *ino = sysfs_get_kobj_dir_inode(&cls->subsys.kset.kobj);
     if (!ino)
         return NULL;
     ino->i_op = &sys_class_dir_iops;
@@ -963,16 +1360,26 @@ static struct dirent *sys_class_dir_readdir(struct file *file, uint32_t index)
     struct kobject *kobj = (struct kobject *)(uintptr_t)node->impl;
     if (!kobj)
         return NULL;
-    struct class *cls = container_of(kobj, struct class, kobj);
+    uint32_t attr_count = sysfs_kobj_attr_count(kobj);
+    if (index < attr_count) {
+        const struct attribute *attr = NULL;
+        if (sysfs_kobj_attr_at(kobj, index, &attr) != 0 || !attr || !attr->name)
+            return NULL;
+        struct inode *ino = sysfs_get_kobj_attr_inode(kobj, attr);
+        if (!ino)
+            return NULL;
+        strcpy(sys_dirent.name, attr->name);
+        sys_dirent.ino = ino->i_ino;
+        return &sys_dirent;
+    }
+    index -= attr_count;
+    struct class *cls = container_of(kobj, struct class, subsys.kset.kobj);
     uint32_t i = 0;
     struct device *cur;
     list_for_each_entry(cur, &cls->devices, class_list) {
         if (i == index) {
             strcpy(sys_dirent.name, cur->kobj.name);
-            char target[256];
-            if (device_get_sysfs_path(cur, target, sizeof(target)) != 0)
-                return NULL;
-            struct inode *ino = sysfs_get_kobj_link_inode(kobj, cur->kobj.name, target);
+            struct inode *ino = sysfs_find_kobj_link_inode(kobj, cur->kobj.name);
             if (!ino)
                 return NULL;
             sys_dirent.ino = ino->i_ino;
@@ -991,64 +1398,15 @@ static struct inode *sys_class_dir_finddir(struct inode *node, const char *name)
     struct kobject *kobj = (struct kobject *)(uintptr_t)node->impl;
     if (!kobj)
         return NULL;
-    struct class *cls = container_of(kobj, struct class, kobj);
+    const struct attribute *attr = sysfs_kobj_find_attr(kobj, name);
+    if (attr)
+        return sysfs_get_kobj_attr_inode(kobj, attr);
+    struct class *cls = container_of(kobj, struct class, subsys.kset.kobj);
     struct device *cur;
     list_for_each_entry(cur, &cls->devices, class_list) {
-        if (!strcmp(cur->kobj.name, name)) {
-            char target[256];
-            if (device_get_sysfs_path(cur, target, sizeof(target)) != 0)
-                return NULL;
-            return sysfs_get_kobj_link_inode(kobj, cur->kobj.name, target);
-        }
+        if (!strcmp(cur->kobj.name, name))
+            return sysfs_find_kobj_link_inode(kobj, cur->kobj.name);
     }
-    return NULL;
-}
-
-/* sys_readdir: Implement sys readdir. */
-static struct dirent *sys_readdir(struct file *file, uint32_t index)
-{
-    struct inode *node = file->dentry->inode;
-    (void)node;
-    if (index == 0) {
-        strcpy(sys_dirent.name, "kernel");
-        struct inode *ino = sysfs_get_kobj_dir_inode(&kernel_kobj);
-        if (!ino)
-            return NULL;
-        sys_dirent.ino = ino->i_ino;
-        return &sys_dirent;
-    }
-    if (index == 1) {
-        strcpy(sys_dirent.name, "devices");
-        sys_dirent.ino = sys_devices.i_ino;
-        return &sys_dirent;
-    }
-    if (index == 2) {
-        strcpy(sys_dirent.name, "bus");
-        sys_dirent.ino = sys_bus.i_ino;
-        return &sys_dirent;
-    }
-    if (index == 3) {
-        strcpy(sys_dirent.name, "class");
-        sys_dirent.ino = sys_class.i_ino;
-        return &sys_dirent;
-    }
-    return NULL;
-}
-
-/* sys_finddir: Implement sys finddir. */
-static struct inode *sys_finddir(struct inode *node, const char *name)
-{
-    (void)node;
-    if (!name)
-        return NULL;
-    if (!strcmp(name, "kernel"))
-        return sysfs_get_kobj_dir_inode(&kernel_kobj);
-    if (!strcmp(name, "devices"))
-        return &sys_devices;
-    if (!strcmp(name, "bus"))
-        return &sys_bus;
-    if (!strcmp(name, "class"))
-        return &sys_class;
     return NULL;
 }
 
@@ -1057,12 +1415,12 @@ static struct file_operations sys_dir_ops = {
     .write = NULL,
     .open = NULL,
     .close = NULL,
-    .readdir = sys_readdir,
+    .readdir = generic_readdir,
     .ioctl = NULL
 };
 
 static struct inode_operations sys_dir_iops = {
-    .lookup = sys_finddir,
+    .lookup = generic_finddir,
     .create = NULL,
     .mkdir = NULL,
     .unlink = NULL,
@@ -1137,8 +1495,8 @@ static struct inode_operations sys_class_root_iops = {
     .rmdir = NULL
 };
 
-/* init_sysfs: Initialize sysfs. */
-void init_sysfs(void)
+/* sysfs_mount: Mount sysfs into the initial namespace. */
+void sysfs_mount(void)
 {
     vfs_mount_fs("/sys", "sysfs");
 }
@@ -1162,37 +1520,39 @@ static int sysfs_fill_super(struct super_block *sb, void *data, int silent)
     sys_root->gid = 0;
     sys_root->i_mode = 0555;
 
-    memset(&sys_devices, 0, sizeof(sys_devices));
-    sys_devices.flags = FS_DIRECTORY;
-    sys_devices.i_ino = 3;
-    sys_devices.i_op = &sys_devices_dir_iops;
-    sys_devices.f_ops = &sys_devices_dir_ops;
-    sys_devices.uid = 0;
-    sys_devices.gid = 0;
-    sys_devices.i_mode = 0555;
-
-    memset(&sys_bus, 0, sizeof(sys_bus));
-    sys_bus.flags = FS_DIRECTORY;
-    sys_bus.i_ino = 4;
-    sys_bus.i_op = &sys_bus_dir_iops;
-    sys_bus.f_ops = &sys_bus_dir_ops;
-    sys_bus.uid = 0;
-    sys_bus.gid = 0;
-    sys_bus.i_mode = 0555;
-
-    memset(&sys_class, 0, sizeof(sys_class));
-    sys_class.flags = FS_DIRECTORY;
-    sys_class.i_ino = 5;
-    sys_class.i_op = &sys_class_root_iops;
-    sys_class.f_ops = &sys_class_root_ops;
-    sys_class.uid = 0;
-    sys_class.gid = 0;
-    sys_class.i_mode = 0555;
-
     sb->s_root = d_alloc(NULL, "/");
     if (!sb->s_root)
         return -1;
     sb->s_root->inode = sys_root;
+
+    sysfs_root_dentry = sb->s_root;
+
+    struct inode *devices_ino = sysfs_get_kobj_dir_inode(&devices_kset_get()->kobj);
+    if (!devices_ino)
+        return -1;
+    devices_ino->i_op = &sys_devices_dir_iops;
+    devices_ino->f_ops = &sys_devices_dir_ops;
+    if (sysfs_create_dir(&devices_kset_get()->kobj) != 0)
+        return -1;
+
+    struct inode *bus_ino = sysfs_get_kobj_dir_inode(&buses_kset_get()->kobj);
+    if (!bus_ino)
+        return -1;
+    bus_ino->i_op = &sys_bus_dir_iops;
+    bus_ino->f_ops = &sys_bus_dir_ops;
+    if (sysfs_create_dir(&buses_kset_get()->kobj) != 0)
+        return -1;
+
+    struct inode *class_ino = sysfs_get_kobj_dir_inode(&classes_kset_get()->kobj);
+    if (!class_ino)
+        return -1;
+    class_ino->i_op = &sys_class_root_iops;
+    class_ino->f_ops = &sys_class_root_ops;
+    if (sysfs_create_dir(&classes_kset_get()->kobj) != 0)
+        return -1;
+
+    if (sysfs_create_dir(&kernel_subsys.kset.kobj) != 0)
+        return -1;
 
     return 0;
 }
@@ -1205,11 +1565,10 @@ static struct file_system_type sysfs_fs_type = {
     .next = NULL,
 };
 
-/* init_sysfs_fs: Initialize sysfs fs. */
-static int init_sysfs_fs(void)
+/* sysfs_init: Register sysfs as a filesystem type. */
+int sysfs_init(void)
 {
     register_filesystem(&sysfs_fs_type);
     printf("sysfs filesystem registered.\n");
     return 0;
 }
-fs_initcall(init_sysfs_fs);
