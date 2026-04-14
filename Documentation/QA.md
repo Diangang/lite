@@ -382,14 +382,10 @@ TTY 输入逻辑在 [tty.c](file:///data25/lidg/lite/drivers/tty/tty.c#L97-L186)
 
 ### Q7.3: PCI 和 NVMe 在当前系统里走的是什么路径？
 **回答**：
-1.  PCI 总线通过 initcall 初始化并扫描 bus 0，枚举设备（见 [pci.c](file:///data25/lidg/lite/drivers/pci/pci.c#L387-L424)）。
-2.  NVMe 驱动注册到 PCI bus，按 class code 匹配 `0x01/0x08`（见 [nvme.c](file:///data25/lidg/lite/drivers/nvme/nvme.c#L48-L56)、[nvme.c](file:///data25/lidg/lite/drivers/nvme/nvme.c#L175-L184)）。
-3.  当前 NVMe 仍是 testing mode：
-   - 不做完整控制器命令通路
-   - 直接创建一个 16MB block device namespace
-   - 通过设备模型注册出来
-
-因此现在的 NVMe 更接近“把 PCI 枚举与块设备注册链路打通”，还不是完整 NVMe 协议实现。
+1.  PCI 总线通过 initcall 初始化并扫描 bus 0，枚举 `pci_dev` 并注册进 device model（见 [pci.c](file:///data25/lidg/lite/drivers/pci/pci.c#L709-L747)、[pci_register_function](file:///data25/lidg/lite/drivers/pci/pci.c#L423-L597)）。
+2.  PCI driver core 通过 `id_table` + `pci_bus_match()` 完成匹配，然后进入“桥接 probe”（`device_driver.probe` -> `pci_driver.probe`）（见 [pci_bus_match](file:///data25/lidg/lite/drivers/pci/pci.c#L640-L657)、[pci_driver_probe](file:///data25/lidg/lite/drivers/pci/pci.c#L659-L676)）。
+3.  NVMe 驱动注册到 PCI bus，按 class code `0x01/0x08` 匹配（见 [nvme_pci_ids](file:///data25/lidg/lite/drivers/nvme/nvme.c#L645-L649)、[nvme_pci_probe](file:///data25/lidg/lite/drivers/nvme/nvme.c#L651-L705)）。
+4.  当前 NVMe 仍是“打通链路”的简化实现：重点在把 PCI 枚举、MMIO、队列、gendisk 注册、devtmpfs/sysfs 暴露串成闭环，还不是完整 NVMe 协议栈。
 
 ### Q7.4: devtmpfs 在当前系统里起什么作用？
 **回答**：
@@ -399,6 +395,74 @@ devtmpfs 负责把抽象设备节点暴露到 `/dev`，当前至少包含：
 - 动态注册的块设备节点
 
 这样用户态不需要自己手动创建设备节点，就能访问 tty/console/ramdisk/NVMe 等设备。可参考 [devtmpfs.c](file:///data25/lidg/lite/fs/devtmpfs/devtmpfs.c)。
+
+### Q7.5: 为什么会有 “driver core 的 probe” 和 “PCI/NVMe 自己的 probe” 两层？
+**回答**：
+Linux 也是两层分工，Lite 当前做法与其一致。
+1.  driver core 的 `device_driver.probe(struct device *)` 是通用入口：负责绑定关系（`dev->driver`）、sysfs link、uevent（bind/unbind）等共性动作（见 [driver_probe_device](file:///data25/lidg/lite/drivers/base/driver.c#L173-L196)）。
+2.  PCI 子系统的 `pci_driver.probe(struct pci_dev *, const struct pci_device_id *)` 是总线专用入口：负责把抽象 `device` 转成 `pci_dev`，并把命中的 `id_table` 条目传给具体驱动（见 [pci_driver_probe](file:///data25/lidg/lite/drivers/pci/pci.c#L659-L676)）。
+3.  具体驱动（例如 NVMe）只实现它关心的硬件语义（队列、MMIO、命令等），不需要重复实现通用绑定流程（见 [nvme_pci_probe](file:///data25/lidg/lite/drivers/nvme/nvme.c#L651-L705)）。
+
+### Q7.6: “设备注册后自动匹配驱动、驱动注册后自动匹配设备”，Linux 也是这样吗？
+**回答**：
+是的。这是 Linux driver core 的基本语义，顺序不重要，最终都会收敛到同样的绑定结果。
+1.  device 侧：`device_add()` 后，如果该 bus 开启 `drivers_autoprobe`，会触发 `device_attach()` 遍历 bus 的 driver 集合尝试 probe（见 [device_add](file:///data25/lidg/lite/drivers/base/core.c#L345-L366)、[device_attach](file:///data25/lidg/lite/drivers/base/core.c#L307-L329)）。
+2.  driver 侧：`driver_register()` 后，如果该 bus 开启 `drivers_autoprobe`，会触发 `driver_attach()` 遍历该 bus 已有设备尝试 probe（见 [driver_register](file:///data25/lidg/lite/drivers/base/driver.c#L219-L239)、[driver_attach](file:///data25/lidg/lite/drivers/base/driver.c#L204-L217)）。
+
+### Q7.7: uevent 机制是什么？Linux 必须要它吗？Lite 当前怎么做的？
+**回答**：
+1.  Linux uevent：设备 `add/remove/bind/unbind/change` 等事件发生时，内核会把一组 `KEY=VALUE` 环境变量通过 netlink（`NETLINK_KOBJECT_UEVENT`）广播给用户态（典型消费者是 udev/systemd-udevd），用于创建设备节点、自动加载模块、执行规则等。
+2.  “必须吗”：对内核能运行不是硬必须；但对热插拔、自动创 `/dev`、自动加载驱动等“像 Linux 一样可用”的用户态体系来说基本是必须。
+3.  Lite 当前实现：以简化版方式把事件写入内核缓冲区，并通过 `/sys/kernel/uevent` 以文本形式导出给用户态读取（见 [uevent.c](file:///data25/lidg/lite/drivers/base/uevent.c#L166-L257)、[ksysfs.c](file:///data25/lidg/lite/kernel/ksysfs.c#L65-L106)）。
+
+### Q7.8: “监听 netlink uevent” 最底层是什么意思？会有“内核中断用户态”吗？
+**回答**：
+1.  监听的本质是用户态在 socket 上阻塞等待：`recvmsg()` 或 `poll/epoll_wait()` 把线程挂到等待队列里睡眠。
+2.  内核产生 uevent 时，把消息投递到 netlink socket 的接收队列，并 `wake_up()` 等待队列，使阻塞系统调用返回“可读”。
+3.  没有“内核直接中断用户态并执行回调函数”这种机制。硬件中断只会进入内核态处理；用户态被唤醒依赖调度器把该线程变为 runnable。
+
+### Q7.9: attribute / attribute_group 有什么用？
+**回答**：
+1.  `attribute` 表示一个 sysfs 文件节点（名字/权限），具体读写由 `sysfs_ops->show/store` 分发。
+2.  `attribute_group` 用于成组管理一批 attribute，并可通过 `is_visible()` 动态控制某些属性是否对某个对象实例可见。
+3.  例子：`/sys/kernel/version/uptime/uevent` 是一组 kernel 属性，靠 `kobj_type.default_groups` 注册（见 [ksysfs.c](file:///data25/lidg/lite/kernel/ksysfs.c#L10-L98)）。
+
+### Q7.10: PCI 的 `id_table` 是什么？`pci_bus_match()` 在做什么？
+**回答**：
+1.  `id_table` 是 PCI 驱动声明“支持哪些设备/哪些 class”的匹配表（以 `{0}` 结尾），每一项是 `struct pci_device_id`（vendor/device/subvendor/subdevice/class/class_mask/driver_data）（见 [pci.h](file:///data25/lidg/lite/include/linux/pci.h#L36-L53)）。
+2.  `pci_bus_match()` 遍历 `id_table`，对每条规则调用 `pci_match_one()`，命中就认为该驱动可以绑定该设备（见 [pci_bus_match](file:///data25/lidg/lite/drivers/pci/pci.c#L640-L657)、[pci_match_one](file:///data25/lidg/lite/drivers/pci/pci.c#L624-L638)）。
+
+### Q7.11: PCI 和 PCIe 的关系（代码逻辑上）是什么？
+**回答**：
+1.  PCIe 不是独立的“另一套设备模型”，而是 PCI 的链路/能力扩展：枚举、BDF、配置空间等软件模型仍然走 PCI 这套。
+2.  Lite 里 PCIe 当前做的是 capability 识别：在 capability list 里找 `PCI_CAP_ID_EXP`，找到就记录 `pdev->pcie_cap`，供上层驱动（如 NVMe）判断（见 [pcie_scan_device](file:///data25/lidg/lite/drivers/pci/pcie/pcie.c#L11-L23)）。
+3.  PCI 枚举流程在创建 `pci_dev` 后调用 `pcie_scan_device()`，因此 PCIe 逻辑是“挂在 PCI 扫描链路上的能力识别”，不是另起一套扫描（见 [pci_register_function](file:///data25/lidg/lite/drivers/pci/pci.c#L423-L597)）。
+
+### Q7.12: BDF 是什么？代码里怎么表示？为什么一个 bus 是 32 个 device、一个 device 是 8 个 function？
+**回答**：
+1.  BDF 是 `Bus:Device.Function` 的寻址三元组。Lite 里 `struct pci_dev` 用 `bus + devfn` 表示，其中 `devfn=(dev<<3)|func`（见 [pci.h](file:///data25/lidg/lite/include/linux/pci.h#L12-L34)、[pci_register_function](file:///data25/lidg/lite/drivers/pci/pci.c#L423-L456)）。
+2.  32 和 8 是 PCI/PCIe 配置空间寻址位宽决定的硬上限：device number 5 bit -> 32，function number 3 bit -> 8；PCIe 仍沿用该上限。
+3.  “multi-function”指同一 slot（同一 bus+device）下暴露多个 function（0..7），常见于同一颗芯片/同一张卡的多个逻辑功能块。
+
+### Q7.13: `prog_if` 是什么的缩写？有什么用？
+**回答**：
+`prog_if` 是 Programming Interface（编程接口）的缩写，是 class code 三元组的第 3 个字节，用于在相同 class/subclass 下区分寄存器语义不同的接口实现（见 [pci_register_function](file:///data25/lidg/lite/drivers/pci/pci.c#L423-L456)）。
+
+### Q7.14: 为什么 `lspci -t` 里会有很多 `pci0000:xx`（很多 bus）？这些都对应“物理硬件”吗？
+**回答**：
+1.  `pci0000:xx` 更多表示同一 domain 下的不同 bus 段。bus 的增多通常来自桥/root port/PCIe switch，下游会分配 secondary bus number，所以拓扑复杂时 bus 看起来很多。
+2.  `lspci` 里大量 “Intel Corporation Device ...” 往往是 Root Complex 集成的内部功能块（RCiEP/uncore），它们对软件呈现为 PCI function，但不一定对应可拔插的外设卡。
+3.  外设卡/盘（NIC/NVMe/HBA/GPU）通常是叶子上的 endpoint（例如 `0000:98:00.0`），并且经常在某个桥后面出现（`...-[98]----00.0` 这种形态）。
+
+### Q7.15: “host bridge” 和 “root complex” 为什么会有两个叫法？
+**回答**：
+1.  host bridge 更偏传统 PCI/OS 视角：CPU/内存体系与 PCI 总线体系的桥接逻辑。
+2.  root complex 是 PCIe 规范术语：PCIe 根节点系统，包含 root port、路由、错误处理等更大范围的根侧逻辑。
+3.  工程语境中两者常混用，因为都在指“PCIe 根侧入口”，但 root complex 概念范围通常更大。
+
+### Q7.16: `0x80000000 | bus<<16 | dev<<11 | func<<8 | (offset & 0xFC)` 是 PCI 协议规定的吗？
+**回答**：
+这不是 PCIe 传输层协议的通用格式，而是传统 PCI 配置访问机制（CF8/CFC，Configuration Mechanism #1）对 `CONFIG_ADDRESS` 寄存器的规定格式。在使用该机制的平台上它是固定的；而 PCIe 也可以通过 ECAM（MMIO）方式访问配置空间，不走 CF8 这套位拼装。
 
 ---
 
@@ -414,7 +478,7 @@ devtmpfs 负责把抽象设备节点暴露到 `/dev`，当前至少包含：
 - `request_fn`
 - 落到内存块设备后端
 
-在当前 ramdisk/内存块设备模型里，最终数据直接拷到 `bdev->data`（见 [blkdev.c](file:///data25/lidg/lite/drivers/block/blkdev.c#L21-L58)、[blkdev.c](file:///data25/lidg/lite/drivers/block/blkdev.c#L92-L148)）。
+在当前 ramdisk/内存块设备模型里，最终数据直接拷到 `backend->data`（vmalloc 出来的内存），见 [ramdisk_request_fn](file:///data25/lidg/lite/drivers/block/ramdisk.c#L43-L75)。
 
 ### Q8.2: buffer cache 和 page cache 在当前项目里是怎么分工的？
 **回答**：
@@ -439,6 +503,73 @@ devtmpfs 负责把抽象设备节点暴露到 `/dev`，当前至少包含：
 - 真实 LRU / aging / congestion feedback
 
 见 [filemap.c](file:///data25/lidg/lite/mm/filemap.c#L261-L311)、[vmscan.c](file:///data25/lidg/lite/mm/vmscan.c#L1-L80)、[swap.c](file:///data25/lidg/lite/mm/swap.c#L12-L112)。
+
+### Q8.4: `gendisk`、`block_device`、`request_queue` 在 Linux 里是什么关系？Lite 现在对齐到哪一步了？
+**回答**：
+1.  Linux 2.6 语义：`request_queue` 是“每块盘/每个 gendisk 一份”，所有分区与打开实例共享队列（见 [genhd.h](file:///data25/lidg/lite/linux2.6/include/linux/genhd.h#L100-L110)）。
+2.  Lite 现状（已对齐）：`struct gendisk` 持有 `queue`，I/O 提交路径从 `bio->bi_bdev->disk->queue` 取队列（见 [blkdev.h](file:///data25/lidg/lite/include/linux/blkdev.h)、[blk-core.c](file:///data25/lidg/lite/block/blk-core.c)）。
+3.  仍然简化的点：Lite 当前还没有 Linux 那种“同一 gendisk 下多个 block_device（分区/多打开实例）”的完整语义；多数场景仍是一盘一 bdev 的最小闭环，但队列所有权已经先对齐到正确层级。
+
+### Q8.5: ramdisk 的“后端”在哪里？为什么注册 `ram0/ram1` 不需要真实硬件？
+**回答**：
+1.  后端是 `vmalloc(size)` 出来的一段内存，作为块设备的存储空间（见 [ramdisk_bdev_init](file:///data25/lidg/lite/drivers/block/ramdisk.c#L90-L118)）。
+2.  request_fn 里把 bio 的数据 memcpy 到这段内存或从这段内存 memcpy 出来，形成最小块设备闭环（见 [ramdisk_request_fn](file:///data25/lidg/lite/drivers/block/ramdisk.c#L43-L75)）。
+3.  Linux 上也有同类概念（brd/ramdisk），本质同样是“用内存做后端”，只是 Linux 的块层、回写、队列与参数配置更完整。
+
+### Q8.6: Linux 的 `backing_dev_info`（BDI）是干什么的？和块设备是什么关系？
+**回答**：
+1.  BDI 是 writeback/page cache 的“回写端点”抽象：用于描述脏页回写、拥塞、节流、设备能力等。它服务的是 page cache/writeback，而不是直接替代 request_queue。
+2.  对块设备来说，BDI 往往绑定到“整盘/队列”这一层级，并通过 `bdi->dev` 关联到该盘的 `struct device`（`/sys/class/block/<disk>` 视角的设备对象），以便统计、限速和归属管理。
+3.  Lite 当前尚未实现 Linux 的完整 writeback/BDI 体系，因此暂时没有对应结构体是正常的；未来若对齐 writeback，BDI 会更靠近“每盘一份”的模型。
+
+### Q8.7: Linux 上 `sda`、`sda1`、`sda2` 分别对应几个 `device`/`block_device`/`request_queue`/`gendisk`？
+**回答**：
+1.  `struct device`：通常有 3 个，整盘 `sda` 1 个，分区 `sda1` 1 个，分区 `sda2` 1 个。
+2.  `struct block_device`：通常也对应 3 个，整盘 1 个，分区各 1 个（语义是“打开实例/分区对象”）。
+3.  `request_queue`：通常 1 个（整盘共享），所有分区 I/O 最终进同一队列。
+4.  `gendisk`：通常 1 个（整盘），分区通过 `gendisk->part/hd_struct` 之类结构描述。
+
+### Q8.8: Linux 2.6 的 NVMe（`linux2.6/drivers/nvme/host/pci.c`）里，每盘的 `gendisk/request_queue/block_device` 分别在哪个阶段创建？
+**回答**：
+先说明“每盘”的粒度：Linux NVMe 把一个 namespace 当作一个块盘（`nvme_ns`），因此这里的“每盘”指“每个 namespace”。
+1.  `request_queue`（每 namespace 一份）：在创建 namespace 时由 NVMe 驱动直接创建，代码是 `ns->queue = blk_mq_init_queue(&dev->tagset);`（见 [pci.c](file:///data25/lidg/lite/linux2.6/drivers/nvme/host/pci.c#L2246-L2285)）。
+2.  `gendisk`（每 namespace 一份）：同样在创建 namespace 时由 NVMe 驱动分配，代码是 `disk = alloc_disk_node(0, node);`，并设置 `disk->queue = ns->queue`、`disk->private_data = ns`（见 [pci.c](file:///data25/lidg/lite/linux2.6/drivers/nvme/host/pci.c#L2264-L2294)）。
+3.  盘对外注册：`add_disk(ns->disk);` 会把该盘注册到系统（sysfs/devfs/hotplug 等），这是“盘变得可见”的关键节点（见 [pci.c](file:///data25/lidg/lite/linux2.6/drivers/nvme/host/pci.c#L2305-L2319)）。
+4.  `block_device`（按 dev_t 获取/创建，不由 NVMe 驱动直接分配）：
+    - NVMe 驱动在 `add_disk` 之后，会用 `bdget_disk(ns->disk, 0)` 取“整盘 bdev”，并 `blkdev_get()` 打开一次触发 `blkdev_reread_part()`（用于读分区表），这一步通常会促使整盘 `block_device` 出现并完成绑定（见 [pci.c](file:///data25/lidg/lite/linux2.6/drivers/nvme/host/pci.c#L2307-L2318)）。
+    - 更底层的 bdev 绑定逻辑发生在块设备 open 路径：`do_open()` 会把 `bdev->bd_disk` 绑定到 `gendisk`，必要时触发 `rescan_partitions()` 并设置 BDI（见 [block_dev.c](file:///data25/lidg/lite/linux2.6/fs/block_dev.c#L560-L623)）。
+5.  分区对象（不是 bdev 本身）：分区扫描会通过 `add_partition()` 分配 `hd_struct` 并注册其 kobject（见 [check.c](file:///data25/lidg/lite/linux2.6/fs/partitions/check.c#L289-L314)）。
+
+### Q8.9: Lite 现在的 `scsi + virtio-scsi-pci` 是怎么挂到块层上的？和 Linux 2.6 的对应关系是什么？
+**回答**：
+1.  Linux 2.6 对应项：
+    - `drivers/scsi/virtio_scsi.c`：`struct virtio_scsi` 作为 HBA
+    - `include/scsi/scsi_host.h` / `scsi_device` / `sd`：SCSI host、device、disk 三层模型
+2.  Lite 现状（按 Linux 术语的最小闭环）：
+    - `drivers/scsi/virtio_scsi.c` 作为 `virtio-scsi-pci` HBA，探测 PCI virtio 设备并初始化 legacy virtqueue
+    - `drivers/scsi/scsi.c` 提供 `Scsi_Host`、`scsi_device`、`scsi_disk` 的最小对象与 class 视图
+    - Lite 现在新增了最小 `scsi_scan_target()` / `scsi_scan_host_selected()` 接口，把 host 边界校验与 target/LUN 遍历下沉到 SCSI 层，而不是留在 `virtio_scsi.c` 里做启发式停扫
+    - `drivers/scsi/sd.c` 把 `scsi_disk` 注册为块盘，落成 `/dev/sda`
+3.  启动路径：
+    - PCI 命中 `virtio-scsi-pci`
+    - 建 `Scsi_Host`
+    - 把 virtio-scsi config 里的 `max_channel/max_target/max_lun` 灌到 `Scsi_Host`
+    - `virtio_scsi.c` 现在和 Linux 一样在设置好 `shost->max_channel/max_id/max_lun` 后直接调用 `scsi_scan_host(shost)`，由 SCSI 层按 host 边界决定扫描范围
+    - `scsi.c` 负责 host 边界校验、channel/target/LUN 遍历，以及 `TEST UNIT READY`、`INQUIRY`、`READ CAPACITY`
+    - 当 `lun` 是 wild-card 时，Lite 会先探测 `lun 0`；只有目标有响应时，才继续发 `REPORT LUNS` 扩展该 target 的 LUN 边界；若 `REPORT LUNS` 不支持，则保留已发现的 `lun 0`
+    - 这使 Lite 的 target 边界不再由 `virtio_scsi.c` 硬编码为 `target 0`，而是回到 `shost->max_id` 所表达的 host 边界；只是仍未实现 Linux 那套完整 `scsi_target` 对象、顺序 LUN 扫描与传输层 target 发现
+    - 只有探测成功后，才正式 `scsi_add_device()`、`scsi_add_disk()` 并落成 `gendisk`，于是出现 `/dev/sda`
+    - 已发现盘保存在 `Scsi_Host` 私有列表里，失败 LUN 不进入 device model
+4.  与 Linux 的差异：
+    - Lite 目前虽然已经能保留多块已发现 disk，但仍没有完整 SCSI midlayer、异步扫描、热插拔重扫、error handling 和 task management
+    - Linux `virtio_scsi` 是设置 `shost->max_*` 后直接 `scsi_scan_host(shost)`；Lite 现在也已经收敛到这个入口，并补了“先 `lun 0`、再 `REPORT LUNS`”的最小 target 扫描顺序，但仍缺完整 `scsi_target` 生命周期、顺序 LUN 扫描回退、异步扫描与更丰富的 LUN addressing 支持，因此属于简化版 Linux 语义
+    - virtio 目前只走 legacy/transitional PCI I/O port 路径，没有实现 modern PCI capability 模型
+
+### Q8.10: 为什么 `virtio-scsi` 第一次 `TEST UNIT READY` 可能失败，但后续还能正常工作？
+**回答**：
+1.  这是标准 SCSI 现象：设备上电或总线 reset 后，第一次 `TEST UNIT READY` 常返回 `CHECK CONDITION`，sense key 常见为 `UNIT ATTENTION`。
+2.  本次运行时证据里，第一次 TUR 返回了 `key=6, asc/ascq=41/00`，含义是 `POWER ON, RESET, OR BUS DEVICE RESET OCCURRED`。
+3.  这种情况下最小正确做法通常是重试一次或几次 TUR，再继续 `INQUIRY/READ CAPACITY`；Lite 当前 `virtio-scsi` 就采用了这个最小重试策略。
 
 ---
 

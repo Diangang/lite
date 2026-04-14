@@ -40,8 +40,9 @@ static uint32_t block_attr_show_size(struct device *dev, struct device_attribute
     (void)attr;
     struct gendisk *disk = gendisk_from_dev(dev);
     uint32_t value = 0;
-    if (disk && disk->bdev && disk->bdev->block_size)
-        value = disk->bdev->size / disk->bdev->block_size;
+    /* Linux /sys/class/block/<disk>/size is in 512-byte sectors. */
+    if (disk)
+        value = (uint32_t)(disk->capacity > 0xFFFFFFFFu ? 0xFFFFFFFFu : disk->capacity);
     return blk_sysfs_emit_u32_line(buffer, cap, value);
 }
 
@@ -76,9 +77,9 @@ const struct device_type disk_type = {
     .devnode = disk_devnode,
 };
 
-int gendisk_init(struct gendisk *disk, const char *name, uint32_t major, uint32_t minor, struct block_device *bdev)
+int gendisk_init(struct gendisk *disk, const char *name, uint32_t major, uint32_t first_minor)
 {
-    if (!disk || !name || !bdev)
+    if (!disk || !name)
         return -1;
     memset(disk, 0, sizeof(*disk));
     uint32_t len = (uint32_t)strlen(name);
@@ -87,21 +88,112 @@ int gendisk_init(struct gendisk *disk, const char *name, uint32_t major, uint32_
     memcpy(disk->disk_name, name, len);
     disk->disk_name[len] = 0;
     disk->major = major;
-    disk->minor = minor;
-    disk->bdev = bdev;
+    disk->first_minor = first_minor;
+    disk->queue = NULL;
+    disk->capacity = 0;
+    disk->block_size = 512;
+    disk->private_data = NULL;
     disk->dev = NULL;
     disk->parent = NULL;
-    bdev->disk = disk;
+    return 0;
+}
+
+/* Simple whole-disk bdev registry keyed by devt (no partitions yet). */
+struct bdev_map_entry {
+    uint32_t devt;
+    struct block_device *bdev;
+};
+
+static struct bdev_map_entry bdev_map[32];
+static uint32_t bdev_map_count;
+
+static struct block_device *bdev_lookup(uint32_t devt)
+{
+    for (uint32_t i = 0; i < bdev_map_count; i++) {
+        if (bdev_map[i].devt == devt)
+            return bdev_map[i].bdev;
+    }
+    return NULL;
+}
+
+struct block_device *bdget(uint32_t devt)
+{
+    return bdev_lookup(devt);
+}
+
+static int bdev_register(uint32_t devt, struct block_device *bdev)
+{
+    if (!bdev || bdev_map_count >= (sizeof(bdev_map) / sizeof(bdev_map[0])))
+        return -1;
+    if (bdev_lookup(devt))
+        return 0;
+    bdev_map[bdev_map_count].devt = devt;
+    bdev_map[bdev_map_count].bdev = bdev;
+    bdev_map_count++;
+    return 0;
+}
+
+struct block_device *bdget_disk(struct gendisk *disk, int index)
+{
+    if (!disk || index != 0)
+        return NULL;
+    uint32_t devt = MKDEV(disk->major, disk->first_minor);
+    return bdev_lookup(devt);
+}
+
+int blkdev_get(struct block_device *bdev)
+{
+    if (!bdev)
+        return -1;
+    bdev->openers++;
+    return 0;
+}
+
+void blkdev_put(struct block_device *bdev)
+{
+    if (!bdev || bdev->openers == 0)
+        return;
+    bdev->openers--;
+}
+
+int add_disk(struct gendisk *disk)
+{
+    if (!disk)
+        return -1;
+    /* Minimal Linux-like wrapper: register the disk device and keep bdev reachable by dev_t. */
+    if (!block_register_disk(disk, disk->parent))
+        return -1;
     return 0;
 }
 
 struct device *block_register_disk(struct gendisk *disk, struct device *parent)
 {
-    if (!disk || !disk->bdev)
+    if (!disk)
         return NULL;
     struct class *cls = class_find("block");
     if (!cls)
         return NULL;
+
+    /*
+     * Linux mapping: the block layer owns block_device objects keyed by dev_t.
+     * Lite keeps a simplified whole-disk bdev and creates it at disk registration.
+     */
+    struct block_device *bdev = (struct block_device *)kmalloc(sizeof(*bdev));
+    if (!bdev)
+        return NULL;
+    memset(bdev, 0, sizeof(*bdev));
+    bdev->devt = MKDEV(disk->major, disk->first_minor);
+    bdev->disk = disk;
+    bdev->block_size = disk->block_size ? disk->block_size : 512;
+    bdev->size = disk->capacity * 512ULL;
+    bdev->private_data = NULL;
+    bdev->openers = 0;
+    bdev->inode = NULL;
+    if (bdev_register(bdev->devt, bdev) != 0) {
+        kfree(bdev);
+        return NULL;
+    }
+
     struct device *dev = (struct device *)kmalloc(sizeof(*dev));
     if (!dev)
         return NULL;
@@ -112,13 +204,17 @@ struct device *block_register_disk(struct gendisk *disk, struct device *parent)
     dev->driver_data = disk;
     if (parent)
         device_set_parent(dev, parent);
-    dev->devt = MKDEV(disk->major, disk->minor);
+    dev->devt = MKDEV(disk->major, disk->first_minor);
     if (device_add(dev) != 0) {
         kobject_put(&dev->kobj);
         return NULL;
     }
     disk->dev = dev;
     disk->parent = parent;
+
+    /* Keep a stable inode object for this bdev (Linux: bdev->bd_inode). */
+    if (!bdev->inode)
+        bdev->inode = blockdev_inode_create(bdev);
     return dev;
 }
 

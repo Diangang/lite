@@ -2092,6 +2092,68 @@ void test_minix_mount_write() {
     print("minixfs write-read OK.\n");
 }
 
+/* test_virtio_scsi_device: Detect a virtio-scsi disk exposed as /dev/sda. */
+void test_virtio_scsi_device() {
+    print("\n--- Test 37: Virtio-SCSI Device --\n");
+    int fd = open("/dev/sda", 0);
+    if (fd < 0) {
+        print("virtio-scsi disk not found, skipping test.\n");
+        return;
+    }
+    close(fd);
+    print("virtio-scsi disk detected OK.\n");
+}
+
+/* test_virtio_scsi_raw_rw: Basic raw read/write against /dev/sda. */
+void test_virtio_scsi_raw_rw() {
+    print("\n--- Test 38: Virtio-SCSI Raw R/W ---\n");
+    int fd = open("/dev/sda", 0);
+    if (fd < 0) {
+        print("virtio-scsi raw disk not found, skipping test.\n");
+        return;
+    }
+    close(fd);
+
+    char wbuf[4096];
+    char rbuf[4096];
+    for (int i = 0; i < 4096; i++) {
+        wbuf[i] = (char)(i ^ 0x5A);
+        rbuf[i] = 0;
+    }
+
+    fd = open("/dev/sda", 0);
+    if (fd < 0) {
+        fail("open /dev/sda for write");
+        return;
+    }
+    int wr = write(fd, wbuf, 4096);
+    close(fd);
+    if (wr != 4096) {
+        fail("virtio-scsi write 4k");
+        return;
+    }
+
+    fd = open("/dev/sda", 0);
+    if (fd < 0) {
+        fail("open /dev/sda for read");
+        return;
+    }
+    int rd = read(fd, rbuf, 4096);
+    close(fd);
+    if (rd != 4096) {
+        fail("virtio-scsi read 4k");
+        return;
+    }
+
+    for (int i = 0; i < 4096; i++) {
+        if (rbuf[i] != wbuf[i]) {
+            fail("virtio-scsi raw rw mismatch");
+            return;
+        }
+    }
+    print("virtio-scsi raw rw OK.\n");
+}
+
 /* main: Implement main. */
 int main() {
     print("================================\n");
@@ -2134,6 +2196,8 @@ int main() {
     test_nvme_device();
     test_nvme_raw_rw();
     test_minix_mount_write();
+    test_virtio_scsi_device();
+    test_virtio_scsi_raw_rw();
 
     print("\n================================\n");
     if (failures == 0) {

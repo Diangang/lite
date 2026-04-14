@@ -38,11 +38,27 @@ static struct address_space_operations blockdev_aops = {
     .writepage = blockdev_writepage
 };
 
+static void blockdev_open(struct inode *inode)
+{
+    if (!inode || (inode->flags & 0x7) != FS_BLOCKDEVICE)
+        return;
+    struct block_device *bdev = (struct block_device *)inode->private_data;
+    (void)blkdev_get(bdev);
+}
+
+static void blockdev_close(struct inode *inode)
+{
+    if (!inode || (inode->flags & 0x7) != FS_BLOCKDEVICE)
+        return;
+    struct block_device *bdev = (struct block_device *)inode->private_data;
+    blkdev_put(bdev);
+}
+
 static struct file_operations blockdev_ops = {
     .read = generic_file_read,
     .write = generic_file_write,
-    .open = NULL,
-    .close = NULL,
+    .open = blockdev_open,
+    .close = blockdev_close,
     .readdir = NULL,
     .ioctl = NULL
 };
@@ -52,6 +68,10 @@ struct inode *blockdev_inode_create(struct block_device *bdev)
 {
     if (!bdev)
         return NULL;
+    if (bdev->inode) {
+        bdev->inode->i_size = (uint32_t)bdev->size;
+        return bdev->inode;
+    }
     struct inode *inode = (struct inode *)kmalloc(sizeof(struct inode));
     if (!inode)
         return NULL;
@@ -72,5 +92,6 @@ struct inode *blockdev_inode_create(struct block_device *bdev)
     address_space_init(mapping, inode);
     mapping->a_ops = &blockdev_aops;
     inode->i_mapping = mapping;
+    bdev->inode = inode;
     return inode;
 }

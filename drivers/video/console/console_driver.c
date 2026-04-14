@@ -19,16 +19,6 @@ const struct device_type console_device_type = {
     .devnode = console_devnode,
 };
 
-static int console_class_init(void)
-{
-    memset(&console_class, 0, sizeof(console_class));
-    console_class.name = "console";
-    INIT_LIST_HEAD(&console_class.list);
-    INIT_LIST_HEAD(&console_class.devices);
-    return class_register(&console_class);
-}
-core_initcall(console_class_init);
-
 static int console_platform_probe(struct platform_device *pdev)
 {
     (void)pdev;
@@ -80,3 +70,13 @@ static int console_driver_init(void)
     return platform_driver_register(&console_platform_driver);
 }
 module_init(console_driver_init);
+
+static int console_class_init(void)
+{
+    memset(&console_class, 0, sizeof(console_class));
+    console_class.name = "console";
+    INIT_LIST_HEAD(&console_class.list);
+    INIT_LIST_HEAD(&console_class.devices);
+    return class_register(&console_class);
+}
+core_initcall(console_class_init);

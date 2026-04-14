@@ -6,7 +6,7 @@ LD = ld
 
 CFLAGS = -m32 -ffreestanding -O2 -Wall -Wextra -fno-pie -fno-builtin
 CFLAGS += -MMD -MP
-CFLAGS += -Iinclude -Ikernel -Iinit -Ilib -Iarch/x86 -Imm -Ifs -Idrivers -Idrivers/base -Idrivers/pci -Idrivers/pci/pcie -Idrivers/nvme -Idrivers/input -Idrivers/tty -Idrivers/tty/serial -Idrivers/clocksource -Idrivers/video -Idrivers/video/console
+CFLAGS += -Iinclude -Ikernel -Iinit -Ilib -Iarch/x86 -Imm -Ifs -Idrivers -Idrivers/base -Idrivers/pci -Idrivers/pci/pcie -Idrivers/nvme -Idrivers/input -Idrivers/tty -Idrivers/tty/serial -Idrivers/clocksource -Idrivers/video -Idrivers/video/console -Idrivers/scsi
 LDFLAGS = -m elf_i386 -T arch/x86/kernel/linker.ld -nostdlib
 
 SOURCES_S = arch/x86/boot/boot.s arch/x86/kernel/interrupt.s
@@ -22,6 +22,7 @@ SOURCES_C += fs/sysfs/sysfs.c init/initramfs.c
 SOURCES_C += drivers/base/core.c drivers/base/virtual.c drivers/base/uevent.c drivers/base/bus.c drivers/base/class.c drivers/base/driver.c drivers/base/platform.c drivers/base/init.c drivers/pci/pci.c drivers/pci/pcie/pcie.c drivers/nvme/nvme.c drivers/input/keyboard.c drivers/block/ramdisk.c
 SOURCES_C += drivers/clocksource/timer.c drivers/tty/tty.c drivers/tty/serial/serial.c
 SOURCES_C += drivers/video/console/console.c drivers/video/console/console_driver.c
+SOURCES_C += drivers/scsi/scsi.c drivers/scsi/sd.c drivers/scsi/virtio_scsi.c
 OBJECTS = $(SOURCES_S:.s=.o) $(SOURCES_C:.c=.o)
 DEPS = $(OBJECTS:.o=.d) $(USH_OBJS:.o=.d) $(INIT_OBJS:.o=.d) $(SMOKE_OBJS:.o=.d)
 
@@ -29,6 +30,7 @@ OUT_DIR = out
 KERNEL = $(OUT_DIR)/myos.bin
 ISO = $(OUT_DIR)/myos.iso
 INITRAMFS = $(OUT_DIR)/initramfs.cpio
+SCSI_IMG = scsi.img
 
 USH_ELF = $(OUT_DIR)/shell.elf
 USH_OBJS = usr/crt0.o usr/ulib.o usr/shell.o
@@ -86,24 +88,32 @@ $(INIT_ELF): $(INIT_OBJS) usr/ulinker.ld
 $(SMOKE_ELF): $(SMOKE_OBJS) usr/ulinker.ld
 	$(LD) -m elf_i386 -T usr/ulinker.ld -o $@ $(SMOKE_OBJS)
 
-run: $(KERNEL) $(INITRAMFS)
-	qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -serial stdio
+VIRTIO_SCSI_ARGS = -drive file=$(SCSI_IMG),format=raw,if=none,id=scsidisk0 -device virtio-scsi-pci,id=scsi0 -device scsi-hd,drive=scsidisk0,bus=scsi0.0
+
+$(SCSI_IMG):
+	truncate -s 16M $(SCSI_IMG)
+
+run: $(KERNEL) $(INITRAMFS) $(SCSI_IMG)
+	qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -serial stdio $(VIRTIO_SCSI_ARGS)
 
 SMOKE_TIMEOUT ?= 30
 
 smoke: smoke-512
 
-smoke-512: $(KERNEL) $(INITRAMFS)
-	sh -c 'tmp=$$(mktemp); timeout $(SMOKE_TIMEOUT)s sh -c "{ sleep 2; printf \"run /bin/smoke\\nexit\\n\"; } | qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -display none -monitor none -serial stdio" >$$tmp 2>&1; cat $$tmp; grep -q "All tests completed (OK)." $$tmp'
+smoke-512: $(KERNEL) $(INITRAMFS) $(SCSI_IMG)
+	sh -c 'tmp=$$(mktemp); timeout $(SMOKE_TIMEOUT)s sh -c "{ sleep 2; printf \"run /bin/smoke\\nexit\\n\"; } | qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -display none -monitor none -serial stdio $(VIRTIO_SCSI_ARGS)" >$$tmp 2>&1; cat $$tmp; grep -q "All tests completed (OK)." $$tmp'
 
-smoke-128: $(KERNEL) $(INITRAMFS)
-	sh -c 'tmp=$$(mktemp); timeout $(SMOKE_TIMEOUT)s sh -c "{ sleep 2; printf \"run /bin/smoke\\nexit\\n\"; } | qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 128M -display none -monitor none -serial stdio" >$$tmp 2>&1; cat $$tmp; grep -q "All tests completed (OK)." $$tmp'
+smoke-128: $(KERNEL) $(INITRAMFS) $(SCSI_IMG)
+	sh -c 'tmp=$$(mktemp); timeout $(SMOKE_TIMEOUT)s sh -c "{ sleep 2; printf \"run /bin/smoke\\nexit\\n\"; } | qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 128M -display none -monitor none -serial stdio $(VIRTIO_SCSI_ARGS)" >$$tmp 2>&1; cat $$tmp; grep -q "All tests completed (OK)." $$tmp'
 
 check-vocab:
 	sh scripts/check-vocab.sh
 
 run-nvme: $(KERNEL) $(INITRAMFS)
 	qemu-system-i386 -machine q35 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -serial stdio -drive file=nvme.img,format=raw,if=none,id=nvme0 -device nvme,drive=nvme0,serial=NVME0001
+
+run-virtio-scsi: $(KERNEL) $(INITRAMFS) $(SCSI_IMG)
+	qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -serial stdio $(VIRTIO_SCSI_ARGS)
 
 debug: $(KERNEL) $(INITRAMFS)
 	qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -s -S -serial stdio
@@ -112,4 +122,4 @@ clean:
 	rm -f $(OBJECTS) $(USH_OBJS) $(INIT_OBJS) $(SMOKE_OBJS) $(DEPS)
 	rm -rf $(OUT_DIR) isodir rootfs
 
-.PHONY: all iso run run-iso smoke smoke-512 smoke-128 check-vocab clean
+.PHONY: all iso run run-iso smoke smoke-512 smoke-128 check-vocab clean run-virtio-scsi

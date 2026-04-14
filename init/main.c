@@ -11,6 +11,7 @@
 #include "linux/procfs.h"
 #include "linux/devtmpfs.h"
 #include "linux/minixfs.h"
+#include "linux/blkdev.h"
 #include "linux/sysfs.h"
 #include "linux/sysfs.h"
 #include "linux/syscall.h"
@@ -80,8 +81,13 @@ static void prepare_namespace(void)
         minix_dev = "/dev/nvme0n1";
     if (!strcmp(minix_dev, "/dev/ram1")) {
         struct inode *ram1 = vfs_resolve(minix_dev);
-        if (ram1 && (ram1->flags & 0x7) == FS_BLOCKDEVICE)
-            minix_seed_example_image((struct block_device *)ram1->private_data);
+        if (ram1 && (ram1->flags & 0x7) == FS_BLOCKDEVICE) {
+            struct block_device *bdev = (struct block_device *)ram1->private_data;
+            if (bdev && blkdev_get(bdev) == 0) {
+                minix_seed_example_image(bdev);
+                blkdev_put(bdev);
+            }
+        }
     }
     vfs_mount_fs_dev("/mnt", "minix", minix_dev);
 

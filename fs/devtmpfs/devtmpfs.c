@@ -200,7 +200,8 @@ static void devtmpfs_add_for_device(struct device *dev)
 
     if (dev->type == &disk_type) {
         struct gendisk *disk = gendisk_from_dev(dev);
-        struct inode *inode = disk ? blockdev_inode_create(disk->bdev) : NULL;
+        struct block_device *bdev = disk ? bdget_disk(disk, 0) : NULL;
+        struct inode *inode = bdev ? blockdev_inode_create(bdev) : NULL;
         if (inode)
             devtmpfs_add_node(devnode, inode);
         return;

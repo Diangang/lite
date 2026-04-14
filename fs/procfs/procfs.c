@@ -538,9 +538,9 @@ static uint32_t proc_read_diskstats(struct inode *node, uint32_t offset, uint32_
         if (!dev || dev->type != &disk_type)
             continue;
         struct gendisk *disk = gendisk_from_dev(dev);
-        if (!disk || !disk->bdev)
+        struct block_device *bdev = disk ? bdget_disk(disk, 0) : NULL;
+        if (!disk || !bdev)
             continue;
-        struct block_device *bdev = disk->bdev;
 
         buf_append(tmp, &off, sizeof(tmp), disk->disk_name);
         buf_append(tmp, &off, sizeof(tmp), " reads=");

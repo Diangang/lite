@@ -61,31 +61,6 @@ static struct device *tty_virtual_root(void)
     return dev;
 }
 
-static int tty_device_init(void)
-{
-    struct class *cls = class_find("tty");
-    struct device *parent = tty_virtual_root();
-    if (!cls || !parent)
-        return -1;
-    /* Linux-like: /dev/tty is a class device (no bus). */
-    struct device *dev = (struct device *)kmalloc(sizeof(*dev));
-    if (!dev)
-        return -1;
-    memset(dev, 0, sizeof(*dev));
-    device_initialize(dev, "tty");
-    dev->type = &tty_dev_type;
-    dev->class = cls;
-    device_set_parent(dev, parent);
-    /* Provide a stable devtmpfs key: /dev/tty (Linux uses 5:0). */
-    dev->devt = MKDEV(5, 0);
-    if (device_add(dev) != 0) {
-        kobject_put(&dev->kobj);
-        return -1;
-    }
-    return 0;
-}
-device_initcall(tty_device_init);
-
 int tty_register_driver(struct tty_driver *drv, const char *name, uint32_t num)
 {
     if (!drv || !name || num == 0)
@@ -360,3 +335,28 @@ static int tty_class_init(void)
     return class_register(&tty_class);
 }
 core_initcall(tty_class_init);
+
+static int tty_device_init(void)
+{
+    struct class *cls = class_find("tty");
+    struct device *parent = tty_virtual_root();
+    if (!cls || !parent)
+        return -1;
+    /* Linux-like: /dev/tty is a class device (no bus). */
+    struct device *dev = (struct device *)kmalloc(sizeof(*dev));
+    if (!dev)
+        return -1;
+    memset(dev, 0, sizeof(*dev));
+    device_initialize(dev, "tty");
+    dev->type = &tty_dev_type;
+    dev->class = cls;
+    device_set_parent(dev, parent);
+    /* Provide a stable devtmpfs key: /dev/tty (Linux uses 5:0). */
+    dev->devt = MKDEV(5, 0);
+    if (device_add(dev) != 0) {
+        kobject_put(&dev->kobj);
+        return -1;
+    }
+    return 0;
+}
+device_initcall(tty_device_init);

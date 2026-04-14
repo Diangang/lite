@@ -62,7 +62,7 @@ int generic_make_request(struct bio *bio)
         bio_complete(bio, -1);
         return -1;
     }
-    struct request_queue *q = bio->bi_bdev->queue;
+    struct request_queue *q = (bio->bi_bdev->disk) ? bio->bi_bdev->disk->queue : NULL;
     if (!q) {
         bio_complete(bio, -1);
         return -1;

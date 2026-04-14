@@ -14,8 +14,6 @@ struct ramdisk_backend {
 };
 
 /* ramdisk_init: Initialize ramdisk. */
-static struct block_device ramdisk0_bdev;
-static struct block_device ramdisk1_bdev;
 static struct gendisk ramdisk0_disk;
 static struct gendisk ramdisk1_disk;
 
@@ -74,9 +72,21 @@ static void ramdisk_request_fn(struct request_queue *q)
     }
 }
 
-static int ramdisk_bdev_init(struct block_device *bdev, uint32_t size, uint32_t block_size)
+static void ramdisk_bdev_cleanup(struct ramdisk_backend *backend, struct request_queue *q)
 {
-    if (!bdev || size == 0)
+    if (q)
+        blk_cleanup_queue(q);
+    if (!backend)
+        return;
+    if (backend->data)
+        vfree(backend->data);
+    kfree(backend);
+}
+
+static int ramdisk_disk_init(struct gendisk *disk, const char *name, uint32_t minor,
+                             uint32_t size, uint32_t block_size, struct device *parent)
+{
+    if (!disk || !name || size == 0)
         return -1;
     struct ramdisk_backend *backend = (struct ramdisk_backend *)kmalloc(sizeof(*backend));
     if (!backend)
@@ -89,16 +99,30 @@ static int ramdisk_bdev_init(struct block_device *bdev, uint32_t size, uint32_t 
     }
     memset(backend->data, 0, size);
 
-    memset(bdev, 0, sizeof(*bdev));
-    bdev->size = size;
-    bdev->block_size = block_size ? block_size : 512;
-    bdev->private_data = backend;
-    bdev->queue = blk_init_queue(ramdisk_request_fn, backend);
-    if (!bdev->queue) {
-        vfree(backend->data);
-        kfree(backend);
-        bdev->private_data = NULL;
+    struct request_queue *q = blk_init_queue(ramdisk_request_fn, backend);
+    if (!q) {
+        ramdisk_bdev_cleanup(backend, NULL);
         return -1;
+    }
+    if (gendisk_init(disk, name, 1, minor) != 0) {
+        ramdisk_bdev_cleanup(backend, q);
+        return -1;
+    }
+    disk->queue = q;
+    disk->block_size = block_size ? block_size : 512;
+    disk->capacity = (uint64_t)size / 512ULL;
+    disk->private_data = backend;
+    disk->parent = parent;
+    if (add_disk(disk) != 0) {
+        ramdisk_bdev_cleanup(backend, q);
+        return -1;
+    }
+    /* whole-disk bdev exists after registration; initialize simplified bdev fields */
+    struct block_device *bdev = bdget_disk(disk, 0);
+    if (bdev) {
+        bdev->private_data = backend;
+        bdev->block_size = disk->block_size;
+        bdev->size = (uint64_t)size;
     }
     return 0;
 }
@@ -108,17 +132,9 @@ static int ramdisk_init(void)
     struct device *parent = ramdisk_virtual_root();
     if (!parent)
         return -1;
-    if (ramdisk_bdev_init(&ramdisk0_bdev, 8 * 1024 * 1024, 512) != 0)
+    if (ramdisk_disk_init(&ramdisk0_disk, "ram0", 0, 8 * 1024 * 1024, 512, parent) != 0)
         return -1;
-    if (gendisk_init(&ramdisk0_disk, "ram0", 1, 0, &ramdisk0_bdev) != 0)
-        return -1;
-    if (!block_register_disk(&ramdisk0_disk, parent))
-        return -1;
-    if (ramdisk_bdev_init(&ramdisk1_bdev, 8 * 1024 * 1024, 512) != 0)
-        return -1;
-    if (gendisk_init(&ramdisk1_disk, "ram1", 1, 1, &ramdisk1_bdev) != 0)
-        return -1;
-    if (!block_register_disk(&ramdisk1_disk, parent))
+    if (ramdisk_disk_init(&ramdisk1_disk, "ram1", 1, 8 * 1024 * 1024, 512, parent) != 0)
         return -1;
     return 0;
 }
