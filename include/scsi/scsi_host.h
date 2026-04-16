@@ -1,24 +1,32 @@
 #ifndef SCSI_SCSI_HOST_H
 #define SCSI_SCSI_HOST_H
 
+#include <stddef.h>
 #include <stdint.h>
 #include "linux/device.h"
 #include "linux/blkdev.h"
+#include "scsi/scsi_cmnd.h"
 
 #define SCSI_SCAN_WILD_CARD 0xFFFFFFFFU
 #define SCSI_SCAN_WILD_CARD_LUN (~0ULL)
 #define SCSI_HOST_MAX_DEVICES 8
 
+/* Minimal target flags (Linux: scsi_target flags/state in scsi_scan.c/scsi_device.h). */
+#define SCSI_TARGET_NO_REPORT_LUNS  (1U << 0)
+
 struct Scsi_Host;
+struct scsi_target;
 struct scsi_device;
 struct scsi_disk;
 
+/* Linux mapping: drivers/scsi/scsi_sysfs.c exports scsi_bus_type. */
+extern struct bus_type scsi_bus_type;
+
 struct scsi_host_template {
     const char *name;
-    int (*queuecommand)(struct Scsi_Host *shost, struct scsi_device *sdev,
-                        const uint8_t *cdb, uint32_t cdb_len,
-                        void *data, uint32_t data_len, int dir,
-                        uint8_t *sense, uint32_t *sense_len, uint8_t *status);
+    int (*queuecommand)(struct Scsi_Host *shost, struct scsi_cmnd *sc);
+    int (*target_alloc)(struct scsi_target *starget);
+    void (*target_destroy)(struct scsi_target *starget);
 };
 
 struct Scsi_Host {
@@ -29,14 +37,27 @@ struct Scsi_Host {
     uint16_t max_channel;
     uint16_t max_id;
     uint32_t max_lun;
+    uint32_t nr_targets;
     uint32_t nr_devices;
+    struct scsi_target *stargets[SCSI_HOST_MAX_DEVICES];
     struct scsi_device *sdevs[SCSI_HOST_MAX_DEVICES];
     struct scsi_disk *sdks[SCSI_HOST_MAX_DEVICES];
     char name[16];
 };
 
+struct scsi_target {
+    struct Scsi_Host *host;
+    struct device dev;
+    uint32_t channel;
+    uint32_t id;
+    uint32_t flags;
+    char name[32];
+    void *hostdata;
+};
+
 struct scsi_device {
     struct Scsi_Host *host;
+    struct scsi_target *sdev_target;
     struct device sdev_gendev;
     uint32_t channel;
     uint32_t id;
@@ -57,6 +78,11 @@ struct scsi_disk {
     uint32_t index;
     char name[32];
 };
+
+static inline struct scsi_target *scsi_target(struct scsi_device *sdev)
+{
+    return sdev ? sdev->sdev_target : NULL;
+}
 
 struct Scsi_Host *scsi_host_alloc(struct scsi_host_template *sht, void *hostdata);
 int scsi_add_host(struct Scsi_Host *shost, struct device *parent);

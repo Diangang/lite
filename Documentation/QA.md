@@ -414,6 +414,7 @@ Linux 也是两层分工，Lite 当前做法与其一致。
 1.  Linux uevent：设备 `add/remove/bind/unbind/change` 等事件发生时，内核会把一组 `KEY=VALUE` 环境变量通过 netlink（`NETLINK_KOBJECT_UEVENT`）广播给用户态（典型消费者是 udev/systemd-udevd），用于创建设备节点、自动加载模块、执行规则等。
 2.  “必须吗”：对内核能运行不是硬必须；但对热插拔、自动创 `/dev`、自动加载驱动等“像 Linux 一样可用”的用户态体系来说基本是必须。
 3.  Lite 当前实现：以简化版方式把事件写入内核缓冲区，并通过 `/sys/kernel/uevent` 以文本形式导出给用户态读取（见 [uevent.c](file:///data25/lidg/lite/drivers/base/uevent.c#L166-L257)、[ksysfs.c](file:///data25/lidg/lite/kernel/ksysfs.c#L65-L106)）。
+4.  语义边界（对齐 Linux）：Lite 当前只发 driver core 的 `ACTION=add/remove/bind/unbind`，其他“内部状态”（例如 BAR 分配、PCIe capability 识别）用日志表达，不再用自造 `ACTION=` 字符串。
 
 ### Q7.8: “监听 netlink uevent” 最底层是什么意思？会有“内核中断用户态”吗？
 **回答**：
@@ -546,24 +547,33 @@ Linux 也是两层分工，Lite 当前做法与其一致。
     - `drivers/scsi/virtio_scsi.c`：`struct virtio_scsi` 作为 HBA
     - `include/scsi/scsi_host.h` / `scsi_device` / `sd`：SCSI host、device、disk 三层模型
 2.  Lite 现状（按 Linux 术语的最小闭环）：
-    - `drivers/scsi/virtio_scsi.c` 作为 `virtio-scsi-pci` HBA，探测 PCI virtio 设备并初始化 legacy virtqueue
-    - `drivers/scsi/scsi.c` 提供 `Scsi_Host`、`scsi_device`、`scsi_disk` 的最小对象与 class 视图
+    - `drivers/virtio/virtio.c`：最小 `virtio` 总线（`virtio_bus_type`）与 `virtio_driver/virtio_device` 注册路径
+    - `drivers/virtio/virtio_pci.c`：最小 `virtio-pci` transport（`pci_driver`），负责把 PCI 上的 virtio 设备实例化为 `virtio_device`，并提供 `find_vqs/del_vqs` 以创建/销毁 virtqueue
+    - `drivers/virtio/virtqueue.c`：最小 virtqueue/vring helper（对应 Linux `drivers/virtio/virtio_ring.c` 的一小部分）
+    - `drivers/scsi/virtio_scsi.c`：前端 `virtio_driver`（不是 `pci_driver`），在 virtio 总线上探测 `VIRTIO_ID_SCSI`，并通过 virtqueue 提交 SCSI 命令
+    - `drivers/scsi/scsi.c` 提供 `Scsi_Host`、`scsi_target`、`scsi_device`、`scsi_disk` 的最小对象模型与 class 视图
     - Lite 现在新增了最小 `scsi_scan_target()` / `scsi_scan_host_selected()` 接口，把 host 边界校验与 target/LUN 遍历下沉到 SCSI 层，而不是留在 `virtio_scsi.c` 里做启发式停扫
     - `drivers/scsi/sd.c` 把 `scsi_disk` 注册为块盘，落成 `/dev/sda`
 3.  启动路径：
-    - PCI 命中 `virtio-scsi-pci`
+    - PCI 命中 `virtio-scsi-pci`（transport 层）
+    - `virtio-pci` 创建并注册 `virtio_device`（前端驱动匹配发生在 virtio 总线上）
     - 建 `Scsi_Host`
     - 把 virtio-scsi config 里的 `max_channel/max_target/max_lun` 灌到 `Scsi_Host`
     - `virtio_scsi.c` 现在和 Linux 一样在设置好 `shost->max_channel/max_id/max_lun` 后直接调用 `scsi_scan_host(shost)`，由 SCSI 层按 host 边界决定扫描范围
     - `scsi.c` 负责 host 边界校验、channel/target/LUN 遍历，以及 `TEST UNIT READY`、`INQUIRY`、`READ CAPACITY`
-    - 当 `lun` 是 wild-card 时，Lite 会先探测 `lun 0`；只有目标有响应时，才继续发 `REPORT LUNS` 扩展该 target 的 LUN 边界；若 `REPORT LUNS` 不支持，则保留已发现的 `lun 0`
-    - 这使 Lite 的 target 边界不再由 `virtio_scsi.c` 硬编码为 `target 0`，而是回到 `shost->max_id` 所表达的 host 边界；只是仍未实现 Linux 那套完整 `scsi_target` 对象、顺序 LUN 扫描与传输层 target 发现
+    - Lite 现在也补了最小 `scsi_target` 对象，`scsi_device` 不再直接挂在 `Scsi_Host` 下，而是挂在对应的 `targetH:C:T` 节点下；这和 Linux 把 `sdev` 组织在 `scsi_target` 下的层级更接近
+    - `scsi_host_template` 也新增了最小 `target_alloc/target_destroy` 钩子，`virtio_scsi.c` 现在把 target 私有 `hostdata` 绑定到 `scsi_target`，而不是继续把这类状态塞在 host 或 device 层
+    - 当 `lun` 是 wild-card 时，Lite 会先探测 `lun 0`；只有目标有响应时，才继续发 `REPORT LUNS` 扩展该 target 的 LUN 边界；若 `REPORT LUNS` 不支持，则回退到最小顺序 LUN 扫描（`lun 1..7`，遇到首个 miss 即停止）
+    - Lite 会在 `scsi_target` 上缓存 “REPORT LUNS 不支持” 状态（基于 `CHECK CONDITION + ILLEGAL REQUEST + ASC(0x20/0x24)`），后续扫描该 target 时直接跳过 `REPORT LUNS`，避免反复慢扫
+    - Lite 的 `REPORT LUNS` 初始分配长度也收敛到和 Linux 一样的 511 项上限，并在响应声明更长列表时按返回长度重试分配
+    - 这使 Lite 的 target 边界不再由 `virtio_scsi.c` 硬编码为 `target 0`，而是回到 `shost->max_id` 所表达的 host 边界；同时 `target` 也已经有了最小对象承载，但仍未实现 Linux 那套完整 `scsi_target` 状态位、引用计数与传输层 target 发现
     - 只有探测成功后，才正式 `scsi_add_device()`、`scsi_add_disk()` 并落成 `gendisk`，于是出现 `/dev/sda`
     - 已发现盘保存在 `Scsi_Host` 私有列表里，失败 LUN 不进入 device model
 4.  与 Linux 的差异：
     - Lite 目前虽然已经能保留多块已发现 disk，但仍没有完整 SCSI midlayer、异步扫描、热插拔重扫、error handling 和 task management
-    - Linux `virtio_scsi` 是设置 `shost->max_*` 后直接 `scsi_scan_host(shost)`；Lite 现在也已经收敛到这个入口，并补了“先 `lun 0`、再 `REPORT LUNS`”的最小 target 扫描顺序，但仍缺完整 `scsi_target` 生命周期、顺序 LUN 扫描回退、异步扫描与更丰富的 LUN addressing 支持，因此属于简化版 Linux 语义
-    - virtio 目前只走 legacy/transitional PCI I/O port 路径，没有实现 modern PCI capability 模型
+    - Linux `virtio_scsi` 是设置 `shost->max_*` 后直接 `scsi_scan_host(shost)`，并通过 `target_alloc/target_destroy` 挂载 `virtio_scsi_target_state`；Lite 现在也已经收敛到这个入口，并补了最小 `target_alloc/target_destroy` 与 target `hostdata` 绑定，同时保留“先 `lun 0`、再 `REPORT LUNS`、失败后最小顺序 LUN 扫描”的 target 扫描顺序；但仍缺完整 `scsi_target` 生命周期、异步扫描与更丰富的 LUN addressing 支持，因此属于简化版 Linux 语义
+    - virtio 目前只走 legacy/transitional PCI I/O port 路径（仍属 `virtio-pci` transport 的一种），没有实现 modern PCI capability 模型；但前端 `virtio_scsi.c` 已不再直接读写 `VIRTIO_PCI_*` 寄存器，队列创建与 notify 均下沉到 transport/virtqueue 层
+    - virtio/NVMe/PCI/PCIe/Block 等子系统的 Linux 2.6 对齐差异与计划，统一收录在 [Linux26-Subsystem-Alignment.md](Linux26-Subsystem-Alignment.md)
 
 ### Q8.10: 为什么 `virtio-scsi` 第一次 `TEST UNIT READY` 可能失败，但后续还能正常工作？
 **回答**：
@@ -572,7 +582,6 @@ Linux 也是两层分工，Lite 当前做法与其一致。
 3.  这种情况下最小正确做法通常是重试一次或几次 TUR，再继续 `INQUIRY/READ CAPACITY`；Lite 当前 `virtio-scsi` 就采用了这个最小重试策略。
 
 ---
-
 ## 9. 现状总结
 
 ### Q9.1: 如果只用一句话概括当前 Lite OS 的实现状态，应该怎么说？

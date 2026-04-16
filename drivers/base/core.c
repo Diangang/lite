@@ -50,17 +50,23 @@ void device_initialize(struct device *dev, const char *name)
     kobject_init_with_ktype(&dev->kobj, name, &ktype_device, NULL);
     INIT_LIST_HEAD(&dev->bus_list);
     INIT_LIST_HEAD(&dev->class_list);
+    /* Linux mapping: device_initialize should leave the device in a known state. */
+    dev->bus = NULL;
+    dev->driver = NULL;
+    dev->class = NULL;
     dev->groups = NULL;
+    dev->type = NULL;
     dev->devt = 0;
+    dev->driver_data = NULL;
     if (!dev->release)
         dev->release = device_default_release;
 }
 
-const char *device_get_devnode(struct device *dev)
+const char *device_get_devnode(struct device *dev, uint32_t *mode, uint32_t *uid, uint32_t *gid)
 {
     if (!dev || !dev->type || !dev->type->devnode)
         return NULL;
-    return dev->type->devnode(dev);
+    return dev->type->devnode(dev, mode, uid, gid);
 }
 
 static uint32_t sysfs_emit_text_line(char *buffer, uint32_t cap, const char *text)
@@ -108,6 +114,22 @@ static uint32_t device_attr_show_dev(struct device *dev, struct device_attribute
     return sysfs_emit_devno_line(buffer, cap, dev ? dev->devt : 0);
 }
 
+static uint32_t device_attr_show_modalias(struct device *dev, struct device_attribute *attr, char *buffer, uint32_t cap)
+{
+    (void)attr;
+    if (!dev || !buffer || cap == 0)
+        return 0;
+    buffer[0] = 0;
+    if (device_get_modalias(dev, buffer, cap) != 0)
+        return 0;
+    uint32_t n = (uint32_t)strlen(buffer);
+    if (n + 1 >= cap)
+        return n;
+    buffer[n++] = '\n';
+    buffer[n] = 0;
+    return n;
+}
+
 static struct device_attribute dev_attr_type = {
     .attr = { .name = "type", .mode = 0444 },
     .show = device_attr_show_type,
@@ -118,9 +140,15 @@ static struct device_attribute dev_attr_dev = {
     .show = device_attr_show_dev,
 };
 
+static struct device_attribute dev_attr_modalias = {
+    .attr = { .name = "modalias", .mode = 0444 },
+    .show = device_attr_show_modalias,
+};
+
 static const struct attribute *device_default_attrs[] = {
     &dev_attr_type.attr,
     &dev_attr_dev.attr,
+    &dev_attr_modalias.attr,
     NULL,
 };
 
@@ -132,7 +160,11 @@ static uint32_t device_attr_is_visible(struct kobject *kobj, const struct attrib
     if (!strcmp(attr->name, "type"))
         return (dev && dev->type && dev->type->name) ? attr->mode : 0;
     if (!strcmp(attr->name, "dev"))
-        return (dev && (device_get_devnode(dev) || dev->devt)) ? attr->mode : 0;
+        return (dev && (device_get_devnode(dev, NULL, NULL, NULL) || dev->devt)) ? attr->mode : 0;
+    if (!strcmp(attr->name, "modalias")) {
+        char modalias[64];
+        return (dev && device_get_modalias(dev, modalias, sizeof(modalias)) == 0) ? attr->mode : 0;
+    }
 
     return attr->mode;
 }
@@ -296,6 +328,7 @@ int device_unbind(struct device *dev)
     if (drv->remove)
         drv->remove(dev);
     device_uevent_emit("unbind", dev);
+    kobject_put(&drv->kobj);
     return 0;
 }
 
@@ -381,6 +414,8 @@ int device_unregister(struct device *dev)
 {
     if (!dev)
         return -1;
+    /* Avoid deferred-probe UAF if the device is destroyed while deferred. */
+    driver_deferred_probe_remove(dev);
     device_unbind(dev);
     if (dev->bus && dev->bus_list.next && dev->bus_list.prev)
         list_del(&dev->bus_list);
@@ -455,6 +490,5 @@ void devices_init(void)
 {
     device_sysfs_init_ktype();
     kset_init(&devices_subsys.kset, "devices");
-    devices_subsys.kset.kobj.ktype = &ktype_device;
     (void)subsystem_register(&devices_subsys);
 }

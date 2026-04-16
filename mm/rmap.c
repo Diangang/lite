@@ -20,6 +20,7 @@ void rmap_add(struct mm_struct *mm, uint32_t vaddr, uint32_t phys)
         pg->map_mm = mm;
         pg->map_vaddr = vaddr;
         pg->mapcount = 1;
+        lru_add_inactive(pg);
         return;
     }
     if (pg->map_mm == mm && pg->map_vaddr == vaddr)
@@ -56,6 +57,7 @@ void rmap_remove(struct mm_struct *mm, uint32_t vaddr, uint32_t phys)
             pg->map_mm = 0;
             pg->map_vaddr = 0;
             pg->mapcount = 0;
+            lru_del(pg);
             return;
         }
         struct rmap_item *node = pg->rmap_list;
@@ -70,6 +72,8 @@ void rmap_remove(struct mm_struct *mm, uint32_t vaddr, uint32_t phys)
         }
         if (pg->mapcount)
             pg->mapcount--;
+        if (pg->mapcount == 0)
+            lru_del(pg);
         return;
     }
     struct rmap_item *prev = 0;
@@ -83,6 +87,8 @@ void rmap_remove(struct mm_struct *mm, uint32_t vaddr, uint32_t phys)
             kfree(cur);
             if (pg->mapcount)
                 pg->mapcount--;
+            if (pg->mapcount == 0)
+                lru_del(pg);
             return;
         }
         prev = cur;

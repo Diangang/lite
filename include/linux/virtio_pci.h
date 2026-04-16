@@ -17,6 +17,35 @@
 #define VIRTIO_PCI_QUEUE_ADDR_SHIFT     12
 #define VIRTIO_PCI_VRING_ALIGN          4096
 
+/*
+ * Modern (PCI 1.0) virtio-pci vendor capabilities.
+ *
+ * Linux mapping:
+ * - include/uapi/linux/virtio_pci.h: struct virtio_pci_cap, VIRTIO_PCI_CAP_*
+ * - include/uapi/linux/virtio_config.h: status bits (already defined elsewhere too)
+ */
+#define VIRTIO_PCI_CAP_COMMON_CFG  1
+#define VIRTIO_PCI_CAP_NOTIFY_CFG  2
+#define VIRTIO_PCI_CAP_ISR_CFG     3
+#define VIRTIO_PCI_CAP_DEVICE_CFG  4
+#define VIRTIO_PCI_CAP_PCI_CFG     5
+
+struct virtio_pci_cap {
+    uint8_t cap_vndr;   /* PCI_CAP_ID_VNDR */
+    uint8_t cap_next;
+    uint8_t cap_len;
+    uint8_t cfg_type;   /* VIRTIO_PCI_CAP_* */
+    uint8_t bar;
+    uint8_t padding[3];
+    uint32_t offset;
+    uint32_t length;
+} __attribute__((packed));
+
+struct virtio_pci_notify_cap {
+    struct virtio_pci_cap cap;
+    uint32_t notify_off_multiplier;
+} __attribute__((packed));
+
 /* Virtio status bits */
 #define VIRTIO_CONFIG_S_ACKNOWLEDGE     0x01
 #define VIRTIO_CONFIG_S_DRIVER          0x02

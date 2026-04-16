@@ -123,6 +123,7 @@ static int ramdisk_disk_init(struct gendisk *disk, const char *name, uint32_t mi
         bdev->private_data = backend;
         bdev->block_size = disk->block_size;
         bdev->size = (uint64_t)size;
+        bdput(bdev);
     }
     return 0;
 }

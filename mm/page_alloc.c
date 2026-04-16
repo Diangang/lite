@@ -13,6 +13,38 @@ static int32_t* buddy_next = NULL;
 static unsigned int buddy_max_order = 0;
 static int buddy_ready = 0;
 
+static struct zonelist *default_zonelist_for_gfp(gfp_t gfp_mask)
+{
+    if (gfp_mask & GFP_DMA)
+        return &dma_zonelist;
+    return &contig_zonelist;
+}
+
+static void alloc_build_scan_control(gfp_t gfp_mask, struct scan_control *sc)
+{
+    (void)gfp_mask;
+    if (!sc)
+        return;
+    /*
+     * Linux mapping: allocator slow path reaches reclaim through a reclaim
+     * control structure rather than calling an unparameterized reclaim body.
+     * Lite keeps the knobs minimal but makes the boundary explicit.
+     */
+    sc->may_writepage = 1;
+    sc->may_unmap = 1;
+    sc->may_swap = 1;
+}
+
+static void alloc_reclaim_slowpath(struct zone *zone, gfp_t gfp_mask, unsigned int order)
+{
+    struct scan_control sc;
+    if (!zone)
+        return;
+    alloc_build_scan_control(gfp_mask, &sc);
+    wakeup_kswapd(zone);
+    try_to_free_pages_sc(zone, order, &sc);
+}
+
 /* zone_free_pages: Implement zone free pages. */
 unsigned long zone_free_pages(struct zone *zone)
 {
@@ -166,10 +198,7 @@ struct page *__alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
     }
 
     if (!zonelist) {
-        if (gfp_mask & GFP_DMA)
-            zonelist = &dma_zonelist;
-        else
-            zonelist = &contig_zonelist;
+        zonelist = default_zonelist_for_gfp(gfp_mask);
     }
 
     for (int pass = 0; pass < 3; pass++) {
@@ -184,8 +213,7 @@ struct page *__alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
                 continue;
             }
             if (pass == 2 && !zone_watermark_ok(zone, order, WMARK_MIN)) {
-                wakeup_kswapd(zone);
-                try_to_free_pages(zone, order);
+                alloc_reclaim_slowpath(zone, gfp_mask, order);
                 continue;
             }
             int frame = buddy_alloc(zone, order);
@@ -208,7 +236,7 @@ struct page *__alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
 void *alloc_pages(gfp_t gfp, unsigned int order)
 {
     for (int tries = 0; tries < 4; tries++) {
-        struct page *page = __alloc_pages_nodemask(gfp, order, &contig_zonelist, NULL);
+        struct page *page = __alloc_pages_nodemask(gfp, order, NULL, NULL);
         if (!page)
             return NULL;
         uint32_t pfn = page_to_pfn(page);
@@ -270,6 +298,13 @@ void free_pages(unsigned long addr, unsigned int order)
         struct page *pg = pfn_to_page(idx);
         if (!pg)
             continue;
+        /*
+         * Linux mapping: a page that returns to the buddy allocator must not
+         * remain on reclaim lists. Keep this as a safety net; normal paths
+         * should remove from LRU when unmapping.
+         */
+        if (pg->flags & PG_LRU)
+            lru_del(pg);
         if (pg->refcount > 1) {
             pg->refcount--;
             can_free = 0;

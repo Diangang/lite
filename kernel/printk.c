@@ -21,20 +21,27 @@ static void printk_putc(char c)
         printk_log_count++;
 }
 
+static void printk_putc_count(char c, int *count)
+{
+    printk_putc(c);
+    if (count)
+        (*count)++;
+}
+
 /* printk_puts: Implement printk puts. */
-static void printk_puts(const char *s)
+static void printk_puts(const char *s, int *count)
 {
     if (!s)
         s = "(null)";
     while (*s)
-        printk_putc(*s++);
+        printk_putc_count(*s++, count);
 }
 
 /* printk_pad: Implement printk pad. */
-static void printk_pad(int n, char pad)
+static void printk_pad(int n, char pad, int *count)
 {
     for (int i = 0; i < n; i++)
-        printk_putc(pad);
+        printk_putc_count(pad, count);
 }
 
 /* printk_strlen: Implement printk strlen. */
@@ -49,7 +56,7 @@ static int printk_strlen(const char *s)
 }
 
 /* printk_u32_hex: Implement printk u32 hex. */
-static void printk_u32_hex(uint32_t v, int width, int upper, char pad)
+static void printk_u32_hex(uint32_t v, int width, int upper, char pad, int *count)
 {
     char tmp[16];
     int len = 0;
@@ -68,13 +75,13 @@ static void printk_u32_hex(uint32_t v, int width, int upper, char pad)
         }
     }
     if (width > len)
-        printk_pad(width - len, pad);
+        printk_pad(width - len, pad, count);
     for (int i = len - 1; i >= 0; i--)
-        printk_putc(tmp[i]);
+        printk_putc_count(tmp[i], count);
 }
 
 /* printk_u32_dec: Implement printk u32 dec. */
-static void printk_u32_dec(uint32_t v, int width, char pad)
+static void printk_u32_dec(uint32_t v, int width, char pad, int *count)
 {
     char tmp[16];
     int len = 0;
@@ -88,21 +95,21 @@ static void printk_u32_dec(uint32_t v, int width, char pad)
         }
     }
     if (width > len)
-        printk_pad(width - len, pad);
+        printk_pad(width - len, pad, count);
     for (int i = len - 1; i >= 0; i--)
-        printk_putc(tmp[i]);
+        printk_putc_count(tmp[i], count);
 }
 
 /* printk_s32_dec: Implement printk s32 dec. */
-static void printk_s32_dec(int32_t v, int width, char pad)
+static void printk_s32_dec(int32_t v, int width, char pad, int *count)
 {
     if (v < 0) {
         uint32_t uv = (uint32_t)(-v);
         if (pad == '0') {
-            printk_putc('-');
+            printk_putc_count('-', count);
             if (width > 0)
                 width--;
-            printk_u32_dec(uv, width, pad);
+            printk_u32_dec(uv, width, pad, count);
         } else {
             int len = 1;
             uint32_t t = uv;
@@ -113,13 +120,13 @@ static void printk_s32_dec(int32_t v, int width, char pad)
                 t /= 10;
             }
             if (width > len)
-                printk_pad(width - len, pad);
-            printk_putc('-');
-            printk_u32_dec(uv, 0, '0');
+                printk_pad(width - len, pad, count);
+            printk_putc_count('-', count);
+            printk_u32_dec(uv, 0, '0', count);
         }
         return;
     }
-    printk_u32_dec((uint32_t)v, width, pad);
+    printk_u32_dec((uint32_t)v, width, pad, count);
 }
 
 /* vprintk: Implement vprintk. */
@@ -131,16 +138,17 @@ int vprintk(const char *format, va_list args)
     if (format[0] == '<' && format[1] >= '0' && format[1] <= '7' && format[2] == '>')
         format += 3;
 
+    int printed = 0;
     for (int i = 0; format[i] != 0; i++) {
         if (format[i] != '%') {
-            printk_putc(format[i]);
+            printk_putc_count(format[i], &printed);
             continue;
         }
         i++;
         if (format[i] == 0)
             break;
         if (format[i] == '%') {
-            printk_putc('%');
+            printk_putc_count('%', &printed);
             continue;
         }
 
@@ -161,50 +169,50 @@ int vprintk(const char *format, va_list args)
         switch (spec) {
             case 'd': {
                 int v = va_arg(args, int);
-                printk_s32_dec(v, width, pad);
+                printk_s32_dec(v, width, pad, &printed);
                 break;
             }
             case 'u': {
                 uint32_t v = va_arg(args, uint32_t);
-                printk_u32_dec(v, width, pad);
+                printk_u32_dec(v, width, pad, &printed);
                 break;
             }
             case 'x': {
                 uint32_t v = va_arg(args, uint32_t);
-                printk_u32_hex(v, width, 0, pad);
+                printk_u32_hex(v, width, 0, pad, &printed);
                 break;
             }
             case 'X': {
                 uint32_t v = va_arg(args, uint32_t);
-                printk_u32_hex(v, width, 1, pad);
+                printk_u32_hex(v, width, 1, pad, &printed);
                 break;
             }
             case 'p': {
                 uintptr_t p = (uintptr_t)va_arg(args, void*);
-                printk_puts("0x");
-                printk_u32_hex((uint32_t)p, (width > 0) ? width : 8, 0, '0');
+                printk_puts("0x", &printed);
+                printk_u32_hex((uint32_t)p, (width > 0) ? width : 8, 0, '0', &printed);
                 break;
             }
             case 'c': {
                 char c = (char)va_arg(args, int);
-                printk_putc(c);
+                printk_putc_count(c, &printed);
                 break;
             }
             case 's': {
                 const char *s = va_arg(args, const char*);
                 int slen = printk_strlen(s);
                 if (width > slen)
-                    printk_pad(width - slen, pad);
-                printk_puts(s);
+                    printk_pad(width - slen, pad, &printed);
+                printk_puts(s, &printed);
                 break;
             }
             default:
-                printk_putc('%');
-                printk_putc(spec);
+                printk_putc_count('%', &printed);
+                printk_putc_count(spec, &printed);
                 break;
         }
     }
-    return 0;
+    return printed;
 }
 
 /* printk: Implement printk. */

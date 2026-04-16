@@ -33,4 +33,6 @@ int kill(int pid, int sig);
 void print(const char *str);
 void print_int(int val);
 
+void *memmove(void *dest, const void *src, int n);
+
 #endif

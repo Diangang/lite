@@ -16,7 +16,11 @@ struct device_type;
 struct device_type {
     const char *name;
     const struct attribute_group **groups;
-    const char *(*devnode)(struct device *dev);
+    /*
+     * Linux mapping: device_get_devnode() can provide both the node name and
+     * mode/uid/gid metadata for devtmpfs.
+     */
+    const char *(*devnode)(struct device *dev, uint32_t *mode, uint32_t *uid, uint32_t *gid);
 };
 
 struct device_attribute {
@@ -110,7 +114,7 @@ int device_reprobe(struct device *dev);
 int device_get_devpath(struct device *dev, char *buf, uint32_t cap);
 int device_get_sysfs_path(struct device *dev, char *buf, uint32_t cap);
 int device_get_modalias(struct device *dev, char *buf, uint32_t cap);
-const char *device_get_devnode(struct device *dev);
+const char *device_get_devnode(struct device *dev, uint32_t *mode, uint32_t *uid, uint32_t *gid);
 
 void init_driver(struct device_driver *drv, const char *name, struct bus_type *bus, int (*probe)(struct device *));
 int class_register(struct class *cls);
@@ -121,6 +125,7 @@ struct class *class_find(const char *name);
 void device_uevent_emit(const char *action, struct device *dev);
 uint32_t device_uevent_read(uint32_t offset, uint32_t size, uint8_t *buffer);
 void driver_deferred_probe_add(struct device *dev);
+void driver_deferred_probe_remove(struct device *dev);
 void driver_deferred_probe_trigger(void);
 int bus_default_match(struct device *dev, struct device_driver *drv);
 

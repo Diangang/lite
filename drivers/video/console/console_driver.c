@@ -9,8 +9,14 @@
 static struct class console_class;
 static struct device *console_class_dev;
 
-static const char *console_devnode(struct device *dev)
+static const char *console_devnode(struct device *dev, uint32_t *mode, uint32_t *uid, uint32_t *gid)
 {
+    if (mode)
+        *mode = 0600;
+    if (uid)
+        *uid = 0;
+    if (gid)
+        *gid = 0;
     return dev ? dev->kobj.name : NULL;
 }
 

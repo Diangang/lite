@@ -78,7 +78,10 @@ void init_zones(void)
     mem_map = (struct page*)memlayout_directmap_phys_to_virt(mem_map_phys);
     memset(mem_map, 0, sizeof(struct page) * total);
     for (uint32_t i = 0; i < total; i++)
+    {
         mem_map[i].flags = PG_RESERVED;
+        INIT_LIST_HEAD(&mem_map[i].lru);
+    }
 
     contig_page_data.node_id = 0;
     contig_page_data.node_start_pfn = 0;
@@ -104,6 +107,8 @@ void init_zones(void)
         contig_page_data.zone_dma.free_area[i].free_list = -1;
         contig_page_data.zone_dma.free_area[i].nr_free = 0;
     }
+    INIT_LIST_HEAD(&contig_page_data.zone_dma.inactive_list);
+    contig_page_data.zone_dma.nr_inactive = 0;
 
     contig_page_data.zone_normal.type = ZONE_NORMAL;
     contig_page_data.zone_normal.start_pfn = dma_pages;
@@ -118,4 +123,36 @@ void init_zones(void)
         contig_page_data.zone_normal.free_area[i].free_list = -1;
         contig_page_data.zone_normal.free_area[i].nr_free = 0;
     }
+    INIT_LIST_HEAD(&contig_page_data.zone_normal.inactive_list);
+    contig_page_data.zone_normal.nr_inactive = 0;
+}
+
+void lru_add_inactive(struct page *pg)
+{
+    if (!pg)
+        return;
+    if (pg->flags & (PG_BUDDY | PG_RESERVED | PG_LRU | PG_ISOLATED))
+        return;
+    uint32_t pfn = page_to_pfn(pg);
+    struct zone *zone = pfn_to_zone(pfn);
+    if (!zone)
+        return;
+    list_add_tail(&pg->lru, &zone->inactive_list);
+    zone->nr_inactive++;
+    pg->flags |= PG_LRU;
+}
+
+void lru_del(struct page *pg)
+{
+    if (!pg)
+        return;
+    if (!(pg->flags & PG_LRU))
+        return;
+    uint32_t pfn = page_to_pfn(pg);
+    struct zone *zone = pfn_to_zone(pfn);
+    if (zone && zone->nr_inactive)
+        zone->nr_inactive--;
+    list_del(&pg->lru);
+    INIT_LIST_HEAD(&pg->lru);
+    pg->flags &= ~PG_LRU;
 }

@@ -500,6 +500,71 @@ static void pf_oom_dump(uint32_t faulting_address, uint32_t eip)
            contig_page_data.zone_normal.present_pages);
 }
 
+/*
+ * Linux mapping: user faults are resolved by a structured mm fault handler
+ * (handle_mm_fault -> handle_pte_fault) which consults the VMA as the source
+ * of truth for permissions and then performs COW / alloc / swap-in as needed.
+ *
+ * Lite keeps the implementation small but centralizes user-fault decisions
+ * here so do_page_fault() stays mostly about classification and accounting.
+ *
+ * Returns:
+ * - 1: handled (mapping/permissions updated)
+ * - 0: not handled (treat as protection/invalid)
+ * - -1: OOM or unrecoverable internal failure
+ */
+static int handle_mm_fault(struct mm_struct *mm, uint32_t page_base, int is_present, int is_write, int is_exec)
+{
+    if (!mm)
+        return 0;
+
+    if (!vma_allows(mm, page_base, is_write, is_exec))
+        return 0;
+
+    if (is_present) {
+        if (!is_write)
+            return 0;
+
+        int res = resolve_cow(page_base);
+        if (res > 0)
+            return 1;
+        if (res < 0)
+            return -1;
+
+        /*
+         * Linux mapping: a write-protect fault on a user page that is not COW
+         * should either be rejected (mprotect) or have permissions upgraded if
+         * VMA allows and the PTE is stale. Never allocate a fresh zero page.
+         */
+        if (vma_allows(mm, page_base, 1, 0)) {
+            pteval_t pte = get_pte_flags(page_directory, (void *)page_base);
+            if (pte && pte_user(pte) && !pte_write(pte) && !(pte & PTE_COW)) {
+                pteval_t flags = (pte & (PAGE_SIZE - 1)) | PTE_READ_WRITE;
+                set_pte_flags(page_directory, (void *)page_base, flags);
+                return 1;
+            }
+        }
+
+        return 0;
+    }
+
+    int swap_res = swap_in_mm(mm, page_base);
+    if (swap_res > 0)
+        return 1;
+
+    void *phys = alloc_page(GFP_KERNEL);
+    if (!phys)
+        return -1;
+
+    pteval_t flags = PTE_PRESENT | PTE_USER;
+    if (vma_allows(mm, page_base, 1, 0))
+        flags |= PTE_READ_WRITE;
+    map_page_ex(page_directory, phys, (void *)page_base, flags);
+    rmap_add(mm, page_base, (uint32_t)phys);
+    memset((void *)page_base, 0, PAGE_SIZE);
+    return 1;
+}
+
 /* do_page_fault: Handle page faults for kernel and user mappings. */
 struct pt_regs *do_page_fault(struct pt_regs *regs)
 {
@@ -543,29 +608,12 @@ struct pt_regs *do_page_fault(struct pt_regs *regs)
             panic("KERNEL PANIC: Unhandled Kernel Page Fault.");
         }
 
-        if (is_write) {
-            int res = resolve_cow(page_base);
-            if (res > 0)
-                return regs;
-        }
-
-        if (vma_allows(current ? current->mm : NULL, page_base, is_write, is_instr_fetch)) {
-            pteval_t pte = get_pte_flags(page_directory, (void*)page_base);
-            if (pte && (!pte_user(pte) || (is_write && !pte_write(pte)))) {
-                void *phys = alloc_page(GFP_KERNEL);
-                if (!phys) {
-                    pf_oom_dump(faulting_address, regs->eip);
-                    panic("KERNEL PANIC: Out of physical memory in Page Fault handler.");
-                }
-                pteval_t flags = PTE_PRESENT | PTE_USER;
-                if (vma_allows(current ? current->mm : NULL, page_base, 1, 0))
-                    flags |= PTE_READ_WRITE;
-                map_page_ex(page_directory, phys, (void*)page_base, flags);
-                if (current && current->mm)
-                    rmap_add(current->mm, page_base, (uint32_t)phys);
-                memset((void*)page_base, 0, PAGE_SIZE);
-                return regs;
-            }
+        int hm = handle_mm_fault(current ? current->mm : NULL, page_base, 1, is_write, is_instr_fetch);
+        if (hm > 0)
+            return regs;
+        if (hm < 0) {
+            pf_oom_dump(faulting_address, regs->eip);
+            panic("KERNEL PANIC: Out of physical memory in Page Fault handler.");
         }
 
         printf("User Page Fault: unhandled protection fault.\n");
@@ -583,6 +631,7 @@ struct pt_regs *do_page_fault(struct pt_regs *regs)
             struct pt_regs *task_schedule(struct pt_regs *r);
             return task_schedule(regs);
         }
+        printf("Kernel Page Fault: null access at 0x%x - EIP: 0x%x\n", faulting_address, regs->eip);
         panic("KERNEL PANIC: Null pointer access.");
     }
     if (user_access && faulting_address >= TASK_SIZE) {
@@ -600,10 +649,20 @@ struct pt_regs *do_page_fault(struct pt_regs *regs)
         return task_schedule(regs);
     }
 
-    if (user_access && current && current->mm) {
-        int swap_res = swap_in_mm(current->mm, page_base);
-        if (swap_res > 0)
+    if (user_access) {
+        int hm = handle_mm_fault(current ? current->mm : NULL, page_base, 0, is_write, is_instr_fetch);
+        if (hm > 0)
             return regs;
+        if (hm < 0) {
+            pf_oom_dump(faulting_address, regs->eip);
+            panic("KERNEL PANIC: Out of physical memory in Page Fault handler.");
+        }
+
+        printf("User Page Fault: unhandled not-present fault.\n");
+        pf_out_of_range++;
+        do_exit_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
+        struct pt_regs *task_schedule(struct pt_regs *r);
+        return task_schedule(regs);
     }
 
     void *phys = alloc_page(GFP_KERNEL);

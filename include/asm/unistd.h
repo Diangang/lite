@@ -32,4 +32,7 @@ enum {
     SYS_RMDIR = 28
 };
 
+/* Linux mapping: NR_syscalls is used for syscall table sizing/bounds. */
+enum { NR_syscalls = 32 };
+
 #endif

@@ -19,32 +19,12 @@ struct devtmpfs_node {
     char name[32];
     struct inode *inode;
 };
-/* dev_console_read: Implement dev console read. */
 static struct devtmpfs_node devtmpfs_nodes[MAX_DEVICES];
 static uint32_t devtmpfs_node_count;
 static int devtmpfs_ready;
 
-static uint32_t dev_console_read(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static int devtmpfs_console_ioctl(uint32_t request, uint32_t arg)
 {
-    (void)node;
-    (void)offset;
-    if (!buffer || size == 0)
-        return 0;
-    return tty_read_blocking((char*)buffer, size);
-}
-
-/* dev_console_write: Implement dev console write. */
-static uint32_t dev_console_write(struct inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer)
-{
-    (void)node;
-    (void)offset;
-    return console_write(buffer, size);
-}
-
-/* dev_console_ioctl: Implement dev console ioctl. */
-static int dev_console_ioctl(struct inode *node, uint32_t request, uint32_t arg)
-{
-    (void)node;
     if (request == CONSOLE_IOCTL_GETFLAGS)
         return (int)tty_get_flags();
     if (request == CONSOLE_IOCTL_SETFLAGS) {
@@ -54,28 +34,38 @@ static int dev_console_ioctl(struct inode *node, uint32_t request, uint32_t arg)
     return -1;
 }
 
-/* dev_tty_read: Implement dev TTY read. */
-static uint32_t dev_tty_read(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+static uint32_t devtmpfs_chr_read(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
-    (void)node;
     (void)offset;
     if (!buffer || size == 0)
         return 0;
-    return tty_read_blocking((char*)buffer, size);
+    if (!node)
+        return 0;
+    dev_t devt = (dev_t)node->impl;
+    if (devt == MKDEV(5, 1) || devt == MKDEV(5, 0) || MAJOR(devt) == 4)
+        return tty_read_blocking((char *)buffer, size);
+    return 0;
 }
 
-/* dev_tty_write: Implement dev TTY write. */
-static uint32_t dev_tty_write(struct inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer)
+static uint32_t devtmpfs_chr_write(struct inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer)
+{
+    (void)offset;
+    if (!buffer || size == 0)
+        return 0;
+    if (!node)
+        return 0;
+    dev_t devt = (dev_t)node->impl;
+    if (devt == MKDEV(5, 1))
+        return console_write(buffer, size);
+    if (devt == MKDEV(5, 0) || MAJOR(devt) == 4)
+        return tty_write(buffer, size);
+    return 0;
+}
+
+static int devtmpfs_chr_ioctl(struct inode *node, uint32_t request, uint32_t arg)
 {
     (void)node;
-    (void)offset;
-    return tty_write(buffer, size);
-}
-
-/* dev_tty_ioctl: Implement dev TTY ioctl. */
-static int dev_tty_ioctl(struct inode *node, uint32_t request, uint32_t arg)
-{
-    return dev_console_ioctl(node, request, arg);
+    return devtmpfs_console_ioctl(request, arg);
 }
 
 /* devtmpfs_readdir: Implement devtmpfs readdir. */
@@ -103,22 +93,13 @@ static struct inode *devtmpfs_finddir(struct inode *node, const char *name)
     return NULL;
 }
 
-static struct file_operations dev_console_ops = {
-    .read = dev_console_read,
-    .write = dev_console_write,
+static struct file_operations devtmpfs_chr_ops = {
+    .read = devtmpfs_chr_read,
+    .write = devtmpfs_chr_write,
     .open = NULL,
     .close = NULL,
     .readdir = NULL,
-    .ioctl = dev_console_ioctl
-};
-
-static struct file_operations dev_tty_ops = {
-    .read = dev_tty_read,
-    .write = dev_tty_write,
-    .open = NULL,
-    .close = NULL,
-    .readdir = NULL,
-    .ioctl = dev_tty_ioctl
+    .ioctl = devtmpfs_chr_ioctl
 };
 
 static struct file_operations devtmpfs_dir_ops = {
@@ -191,10 +172,13 @@ static int devtmpfs_remove_node(const char *name)
 static void devtmpfs_add_for_device(struct device *dev)
 {
     const char *devnode;
+    uint32_t mode = 0666;
+    uint32_t uid = 0;
+    uint32_t gid = 0;
 
     if (!dev)
         return;
-    devnode = device_get_devnode(dev);
+    devnode = device_get_devnode(dev, &mode, &uid, &gid);
     if (!devnode || !devnode[0])
         return;
 
@@ -202,20 +186,31 @@ static void devtmpfs_add_for_device(struct device *dev)
         struct gendisk *disk = gendisk_from_dev(dev);
         struct block_device *bdev = disk ? bdget_disk(disk, 0) : NULL;
         struct inode *inode = bdev ? blockdev_inode_create(bdev) : NULL;
-        if (inode)
+        bdput(bdev);
+        if (inode) {
+            inode->i_mode = (mode & 0777);
+            inode->uid = uid;
+            inode->gid = gid;
             devtmpfs_add_node(devnode, inode);
+        }
         return;
     }
 
-    /* Minimal char device dispatch: only tty-like and console are supported. */
-    if (dev->devt == MKDEV(5, 1)) {
-        devtmpfs_add_node(devnode, &dev_console);
+    if (!dev->devt)
         return;
-    }
-    if (MAJOR(dev->devt) == 4 || dev->devt == MKDEV(5, 0)) {
-        devtmpfs_add_node(devnode, &dev_tty);
+
+    struct inode *inode = (struct inode *)kmalloc(sizeof(*inode));
+    if (!inode)
         return;
-    }
+    memset(inode, 0, sizeof(*inode));
+    inode->flags = FS_CHARDEVICE;
+    inode->i_ino = 0x3000 + devtmpfs_node_count;
+    inode->i_mode = (mode & 0777);
+    inode->uid = uid;
+    inode->gid = gid;
+    inode->impl = (uintptr_t)dev->devt;
+    inode->f_ops = &devtmpfs_chr_ops;
+    devtmpfs_add_node(devnode, inode);
 }
 
 /* devtmpfs_register_device: Implement devtmpfs register device. */
@@ -233,7 +228,7 @@ void devtmpfs_unregister_device(struct device *dev)
 
     if (!devtmpfs_ready || !dev)
         return;
-    devnode = device_get_devnode(dev);
+    devnode = device_get_devnode(dev, NULL, NULL, NULL);
     if (devnode && devnode[0])
         devtmpfs_remove_node(devnode);
 }
@@ -261,19 +256,21 @@ static int devtmpfs_fill_super(struct super_block *sb, void *data, int silent)
     dev_console.flags = FS_CHARDEVICE;
     dev_console.i_ino = 2;
     dev_console.i_size = 0;
-    dev_console.f_ops = &dev_console_ops;
+    dev_console.f_ops = &devtmpfs_chr_ops;
     dev_console.uid = 0;
     dev_console.gid = 0;
-    dev_console.i_mode = 0666;
+    dev_console.i_mode = 0600;
+    dev_console.impl = (uintptr_t)MKDEV(5, 1);
 
     memset(&dev_tty, 0, sizeof(dev_tty));
     dev_tty.flags = FS_CHARDEVICE;
     dev_tty.i_ino = 3;
     dev_tty.i_size = 0;
-    dev_tty.f_ops = &dev_tty_ops;
+    dev_tty.f_ops = &devtmpfs_chr_ops;
     dev_tty.uid = 0;
     dev_tty.gid = 0;
     dev_tty.i_mode = 0666;
+    dev_tty.impl = (uintptr_t)MKDEV(5, 0);
 
     devtmpfs_node_count = 0;
     devtmpfs_ready = 0;

@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include "linux/kernel.h"
 #include "linux/device.h"
+#include "linux/resource.h"
 
 /* Linux 2.6 compatible PCI core naming (minimal subset). */
 #define PCI_ANY_ID 0xFFFF
@@ -31,6 +32,28 @@ struct pci_dev {
     uint32_t mem_limit;
     uint64_t pref_base;
     uint64_t pref_limit;
+};
+
+/*
+ * Linux mapping: struct pci_bus represents a PCI bus segment and is associated
+ * with a sysfs node under /sys/class/pci_bus/<domain:bus>.
+ *
+ * Lite keeps a minimal subset to replace ad-hoc per-bus global arrays.
+ */
+struct pci_bus {
+    uint8_t number;
+    uint8_t scanned;
+    struct pci_bus *parent;      /* Linux: pci_bus->parent */
+    struct device *bridge;       /* Linux: pci_bus->self (bridge device) */
+    struct resource io_res;
+    struct resource mem_res;
+    struct resource pref_res;
+    uint32_t io_next;
+    uint64_t mem_next;
+    uint64_t pref_next;
+
+    /* Linux: pci_bus has an embedded struct device for sysfs. */
+    struct device dev;
 };
 
 struct pci_device_id {

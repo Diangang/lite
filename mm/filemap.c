@@ -10,16 +10,37 @@ static struct address_space *mapping_list = NULL;
 static uint32_t wb_dirty_pages = 0;
 static uint32_t wb_cleaned_pages = 0;
 static uint32_t wb_discarded_pages = 0;
+static uint32_t wb_throttled = 0;
 static uint32_t pcache_hits = 0;
 static uint32_t pcache_misses = 0;
+
+/*
+ * Linux mapping: balance_dirty_pages() throttles writers when too many pages
+ * are dirty. Lite keeps a deterministic minimal policy: if the global dirty
+ * count crosses a small threshold, do one synchronous flush and keep a counter
+ * of throttle events.
+ */
+#define WB_DIRTY_LIMIT 64u
+static void balance_dirty_pages_lite(void)
+{
+    if (wb_dirty_pages > WB_DIRTY_LIMIT) {
+        wb_throttled++;
+        writeback_flush_all();
+    }
+}
 
 /* address_space_init: Initialize address space. */
 void address_space_init(struct address_space *mapping, struct inode *host)
 {
     mapping->host = host;
     mapping->a_ops = NULL;
-    mapping->pages = NULL;
     mapping->nrpages = 0;
+    mapping->nrpages_clean = 0;
+    mapping->nrpages_dirty = 0;
+    INIT_LIST_HEAD(&mapping->clean_pages);
+    INIT_LIST_HEAD(&mapping->dirty_pages);
+    for (uint32_t i = 0; i < PAGECACHE_HASH_SIZE; i++)
+        mapping->page_hash[i] = NULL;
     mapping->next = mapping_list;
     mapping_list = mapping;
 }
@@ -46,13 +67,35 @@ void address_space_release(struct address_space *mapping)
 /* find_get_page: Find get page. */
 static struct page_cache_entry *find_get_page(struct address_space *mapping, uint32_t index)
 {
-    struct page_cache_entry *p = mapping->pages;
+    uint32_t b = index & (PAGECACHE_HASH_SIZE - 1);
+    struct page_cache_entry *p = mapping->page_hash[b];
     while (p) {
         if (p->index == index)
             return p;
-        p = p->next;
+        p = p->hash_next;
     }
     return NULL;
+}
+
+static void page_cache_hash_add(struct address_space *mapping, struct page_cache_entry *p)
+{
+    uint32_t b = p->index & (PAGECACHE_HASH_SIZE - 1);
+    p->hash_next = mapping->page_hash[b];
+    mapping->page_hash[b] = p;
+}
+
+static void page_cache_hash_del(struct address_space *mapping, struct page_cache_entry *p)
+{
+    uint32_t b = p->index & (PAGECACHE_HASH_SIZE - 1);
+    struct page_cache_entry **pp = &mapping->page_hash[b];
+    while (*pp) {
+        if (*pp == p) {
+            *pp = p->hash_next;
+            p->hash_next = NULL;
+            return;
+        }
+        pp = &(*pp)->hash_next;
+    }
 }
 
 /* add_to_page_cache: Implement add to page cache. */
@@ -61,6 +104,7 @@ static struct page_cache_entry *add_to_page_cache(struct address_space *mapping,
     struct page_cache_entry *p = (struct page_cache_entry *)kmalloc(sizeof(struct page_cache_entry));
     if (!p)
         return NULL;
+    memset(p, 0, sizeof(*p));
     p->index = index;
     // Allocate a physical page for cache
     p->phys_addr = (uint32_t)alloc_page(GFP_KERNEL);
@@ -72,9 +116,11 @@ static struct page_cache_entry *add_to_page_cache(struct address_space *mapping,
 
     memset(memlayout_directmap_phys_to_virt(p->phys_addr), 0, 4096);
 
-    p->next = mapping->pages;
-    mapping->pages = p;
     mapping->nrpages++;
+    mapping->nrpages_clean++;
+    INIT_LIST_HEAD(&p->lru);
+    list_add_tail(&p->lru, &mapping->clean_pages);
+    page_cache_hash_add(mapping, p);
     return p;
 }
 
@@ -169,7 +215,13 @@ uint32_t generic_file_write(struct inode *node, uint32_t offset, uint32_t size, 
         if (!p->dirty) {
             p->dirty = 1;
             wb_dirty_pages++;
+            if (mapping->nrpages_clean)
+                mapping->nrpages_clean--;
+            mapping->nrpages_dirty++;
+            list_del(&p->lru);
+            list_add_tail(&p->lru, &mapping->dirty_pages);
         }
+        balance_dirty_pages_lite();
 
         offset += bytes;
         bytes_written += bytes;
@@ -190,25 +242,39 @@ void truncate_inode_pages(struct address_space *mapping, uint32_t lstart)
 
     // For simplicity, we just free all pages if lstart is 0
     if (lstart == 0) {
-        struct page_cache_entry *p = mapping->pages;
-        while (p) {
-            struct page_cache_entry *next = p->next;
+        struct list_head *pos, *n;
+        list_for_each_safe(pos, n, &mapping->dirty_pages) {
+            struct page_cache_entry *p = list_entry(pos, struct page_cache_entry, lru);
+            list_del(&p->lru);
+            INIT_LIST_HEAD(&p->lru);
             if (p->dirty) {
                 p->dirty = 0;
                 if (wb_dirty_pages)
                     wb_dirty_pages--;
                 wb_discarded_pages++;
             }
+            page_cache_hash_del(mapping, p);
             if (p->phys_addr)
                 free_page((unsigned long)p->phys_addr);
-
-            // Also need to remove it from the mapping list?
-            // Since we are clearing the whole mapping, we can just free the structs
             kfree(p);
-            p = next;
+            if (mapping->nrpages)
+                mapping->nrpages--;
+            if (mapping->nrpages_dirty)
+                mapping->nrpages_dirty--;
         }
-        mapping->pages = NULL;
-        mapping->nrpages = 0;
+        list_for_each_safe(pos, n, &mapping->clean_pages) {
+            struct page_cache_entry *p = list_entry(pos, struct page_cache_entry, lru);
+            list_del(&p->lru);
+            INIT_LIST_HEAD(&p->lru);
+            page_cache_hash_del(mapping, p);
+            if (p->phys_addr)
+                free_page((unsigned long)p->phys_addr);
+            kfree(p);
+            if (mapping->nrpages)
+                mapping->nrpages--;
+            if (mapping->nrpages_clean)
+                mapping->nrpages_clean--;
+        }
     }
 }
 
@@ -217,25 +283,19 @@ int page_cache_reclaim_one(void)
 {
     struct address_space *m = mapping_list;
     while (m) {
-        if (m->pages) {
-            struct page_cache_entry *p = m->pages;
-            struct page_cache_entry *prev = NULL;
-            while (p) {
-                if (!p->dirty) {
-                    if (prev)
-                        prev->next = p->next;
-                    else
-                        m->pages = p->next;
-                    if (m->nrpages)
-                        m->nrpages--;
-                    if (p->phys_addr)
-                        free_page((unsigned long)p->phys_addr);
-                    kfree(p);
-                    return 1;
-                }
-                prev = p;
-                p = p->next;
-            }
+        if (m->nrpages_clean && !list_empty(&m->clean_pages)) {
+            struct page_cache_entry *p = list_first_entry(&m->clean_pages, struct page_cache_entry, lru);
+            list_del(&p->lru);
+            INIT_LIST_HEAD(&p->lru);
+            page_cache_hash_del(m, p);
+            if (m->nrpages)
+                m->nrpages--;
+            if (m->nrpages_clean)
+                m->nrpages_clean--;
+            if (p->phys_addr)
+                free_page((unsigned long)p->phys_addr);
+            kfree(p);
+            return 1;
         }
         m = m->next;
     }
@@ -248,8 +308,9 @@ int writeback_flush_all(void)
     int flushed = 0;
     struct address_space *m = mapping_list;
     while (m) {
-        struct page_cache_entry *p = m->pages;
-        while (p) {
+        struct list_head *pos, *n;
+        list_for_each_safe(pos, n, &m->dirty_pages) {
+            struct page_cache_entry *p = list_entry(pos, struct page_cache_entry, lru);
             if (p->dirty) {
                 struct inode *host = m->host;
                 if (host && m->a_ops && m->a_ops->writepage)
@@ -260,7 +321,12 @@ int writeback_flush_all(void)
                 wb_cleaned_pages++;
                 flushed++;
             }
-            p = p->next;
+            /* Move to clean list regardless (writepage may be missing). */
+            list_del(&p->lru);
+            list_add_tail(&p->lru, &m->clean_pages);
+            if (m->nrpages_dirty)
+                m->nrpages_dirty--;
+            m->nrpages_clean++;
         }
         m = m->next;
     }
@@ -268,7 +334,7 @@ int writeback_flush_all(void)
 }
 
 /* get_writeback_stats: Get writeback stats. */
-void get_writeback_stats(uint32_t *dirty, uint32_t *cleaned, uint32_t *discarded)
+void get_writeback_stats(uint32_t *dirty, uint32_t *cleaned, uint32_t *discarded, uint32_t *throttled)
 {
     if (dirty)
         *dirty = wb_dirty_pages;
@@ -276,6 +342,8 @@ void get_writeback_stats(uint32_t *dirty, uint32_t *cleaned, uint32_t *discarded
         *cleaned = wb_cleaned_pages;
     if (discarded)
         *discarded = wb_discarded_pages;
+    if (throttled)
+        *throttled = wb_throttled;
 }
 
 /* get_pagecache_stats: Get page cache stats. */

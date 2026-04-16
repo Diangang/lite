@@ -8,6 +8,7 @@ struct vm_area_struct {
     uint32_t vm_start;
     uint32_t vm_end;
     uint32_t vm_flags;
+    uint32_t anon_vma_id;
     struct vm_area_struct *vm_next;
 };
 

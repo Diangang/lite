@@ -15,6 +15,15 @@ static uint32_t align_up(uint32_t value)
     return (value + 0xFFF) & ~0xFFF;
 }
 
+static uint32_t next_anon_vma_id = 1;
+
+static uint32_t alloc_anon_vma_id(void)
+{
+    if (next_anon_vma_id == 0)
+        next_anon_vma_id = 1;
+    return next_anon_vma_id++;
+}
+
 /* task_free_user_page_mapped: Implement task free user page mapped. */
 static int task_free_user_page_mapped(struct mm_struct *mm, pgd_t *dir, uint32_t va_page)
 {
@@ -40,6 +49,62 @@ static int task_free_user_page_mapped(struct mm_struct *mm, pgd_t *dir, uint32_t
     return 1;
 }
 
+static int pte_table_empty(pte_t *table)
+{
+    if (!table)
+        return 1;
+    for (uint32_t i = 0; i < 1024; i++) {
+        if (pte_present(table[i]))
+            return 0;
+    }
+    return 1;
+}
+
+/*
+ * Linux mapping: zap_page_range() separates VMA surgery from the teardown of
+ * PTEs/pages. Lite keeps a minimal form here and also reclaims now-empty user
+ * page tables so munmap/mremap shrink do not leak PTE pages until mm teardown.
+ */
+static void zap_page_range(struct mm_struct *mm, pgd_t *dir, uint32_t start, uint32_t end)
+{
+    if (!dir)
+        return;
+    uint32_t page_start = start & ~0xFFFu;
+    uint32_t page_end = (end + 0xFFFu) & ~0xFFFu;
+    if (page_end <= page_start)
+        return;
+
+    pgd_t *kernel_dir = get_pgd_kernel();
+    uint32_t last_pde_idx = 0xFFFFFFFFu;
+
+    for (uint32_t va = page_start; va < page_end; va += PAGE_SIZE) {
+        uint32_t pde_idx = pgd_index(va);
+        task_free_user_page_mapped(mm, dir, va);
+
+        if (pde_idx == last_pde_idx)
+            continue;
+        last_pde_idx = pde_idx;
+
+        pgdval_t pde = dir[pde_idx];
+        if (!pgd_present(pde))
+            continue;
+
+        uint32_t pde_phys = pde & ~0xFFFu;
+        uint32_t kernel_pde_phys = 0;
+        if (kernel_dir && pgd_present(kernel_dir[pde_idx]))
+            kernel_pde_phys = kernel_dir[pde_idx] & ~0xFFFu;
+        if (kernel_pde_phys && kernel_pde_phys == pde_phys)
+            continue;
+
+        pte_t *table = (pte_t *)memlayout_directmap_phys_to_virt(pde_phys);
+        if (!pte_table_empty(table))
+            continue;
+
+        dir[pde_idx] = 0;
+        free_page((unsigned long)pde_phys);
+    }
+}
+
 /* vma_list_free: Implement VMA list free. */
 static void vma_list_free(struct mm_struct *mm)
 {
@@ -54,21 +119,85 @@ static void vma_list_free(struct mm_struct *mm)
     mm->mmap = NULL;
 }
 
-/* vma_add: Implement VMA add. */
-static void vma_add(struct mm_struct *mm, uint32_t start, uint32_t end, uint32_t flags)
+static int vma_can_merge(struct vm_area_struct *a, struct vm_area_struct *b)
+{
+    if (!a || !b)
+        return 0;
+    if (a->vm_flags != b->vm_flags)
+        return 0;
+    if (a->anon_vma_id != b->anon_vma_id)
+        return 0;
+    return a->vm_end == b->vm_start;
+}
+
+static void vma_merge_adjacent(struct mm_struct *mm)
+{
+    if (!mm)
+        return;
+    struct vm_area_struct *v = mm->mmap;
+    while (v && v->vm_next) {
+        if (vma_can_merge(v, v->vm_next)) {
+            struct vm_area_struct *next = v->vm_next;
+            v->vm_end = next->vm_end;
+            v->vm_next = next->vm_next;
+            kfree(next);
+            continue;
+        }
+        v = v->vm_next;
+    }
+}
+
+static void vma_add_anon(struct mm_struct *mm, uint32_t start, uint32_t end,
+                         uint32_t flags, uint32_t anon_vma_id)
 {
     if (!mm)
         return;
     if (start >= end)
         return;
-    struct vm_area_struct *v = (struct vm_area_struct*)kmalloc(sizeof(struct vm_area_struct));
+
+    struct vm_area_struct *prev = NULL;
+    struct vm_area_struct *cur = mm->mmap;
+
+    while (cur && cur->vm_start < start) {
+        prev = cur;
+        cur = cur->vm_next;
+    }
+
+    struct vm_area_struct *v = (struct vm_area_struct *)kmalloc(sizeof(*v));
     if (!v)
         return;
     v->vm_start = start;
     v->vm_end = end;
     v->vm_flags = flags;
-    v->vm_next = mm->mmap;
-    mm->mmap = v;
+    v->anon_vma_id = anon_vma_id;
+    v->vm_next = cur;
+
+    if (prev)
+        prev->vm_next = v;
+    else
+        mm->mmap = v;
+
+    /* Merge with previous if adjacent and compatible. */
+    if (prev && vma_can_merge(prev, v)) {
+        prev->vm_end = v->vm_end;
+        prev->vm_next = v->vm_next;
+        kfree(v);
+        v = prev;
+    }
+
+    /* Merge with next if adjacent and compatible (may happen after prev-merge). */
+    while (v->vm_next && vma_can_merge(v, v->vm_next)) {
+        struct vm_area_struct *next = v->vm_next;
+        v->vm_end = next->vm_end;
+        v->vm_next = next->vm_next;
+        kfree(next);
+    }
+}
+
+/* vma_add: Insert a new anonymous VMA with a fresh anon_vma lineage. */
+static void vma_add(struct mm_struct *mm, uint32_t start, uint32_t end, uint32_t flags)
+{
+    vma_add_anon(mm, start, end, flags, alloc_anon_vma_id());
 }
 
 /* vma_range_free: Implement VMA range free. */
@@ -157,6 +286,7 @@ static struct vm_area_struct *vma_clone_list(struct vm_area_struct *src)
         v->vm_start = src->vm_start;
         v->vm_end = src->vm_end;
         v->vm_flags = src->vm_flags;
+        v->anon_vma_id = src->anon_vma_id;
         v->vm_next = NULL;
         *tail = v;
         tail = &v->vm_next;
@@ -248,10 +378,8 @@ void mm_destroy(struct mm_struct *mm)
     while (v) {
         uint32_t start = v->vm_start & ~0xFFF;
         uint32_t end = (v->vm_end + 0xFFF) & ~0xFFF;
-        if (end > start) {
-            for (uint32_t va = start; va < end; va += 4096)
-                task_free_user_page_mapped(mm, mm->pgd, va);
-        }
+        if (end > start)
+            zap_page_range(mm, mm->pgd, start, end);
         v = v->vm_next;
     }
 
@@ -377,6 +505,7 @@ int do_munmap(struct mm_struct *mm, uint32_t addr, uint32_t length)
                 right->vm_start = end;
                 right->vm_end = v->vm_end;
                 right->vm_flags = v->vm_flags;
+                right->anon_vma_id = v->anon_vma_id;
                 right->vm_next = v->vm_next;
                 v->vm_end = addr;
                 v->vm_next = right;
@@ -390,10 +519,8 @@ int do_munmap(struct mm_struct *mm, uint32_t addr, uint32_t length)
     }
     irq_restore(flags);
 
-    uint32_t page_start = addr & ~0xFFF;
-    uint32_t page_end = (end + 0xFFF) & ~0xFFF;
-    for (uint32_t va = page_start; va < page_end; va += 4096)
-        task_free_user_page_mapped(mm, mm->pgd, va);
+    vma_merge_adjacent(mm);
+    zap_page_range(mm, mm->pgd, addr, end);
     return 0;
 }
 
@@ -460,14 +587,15 @@ uint32_t do_mprotect(struct mm_struct *mm, uint32_t addr, uint32_t length, uint3
         return 0;
 
     if (addr > v->vm_start)
-        vma_add(mm, v->vm_start, addr, v->vm_flags);
+        vma_add_anon(mm, v->vm_start, addr, v->vm_flags, v->anon_vma_id);
     if (end < v->vm_end)
-        vma_add(mm, end, v->vm_end, v->vm_flags);
+        vma_add_anon(mm, end, v->vm_end, v->vm_flags, v->anon_vma_id);
     v->vm_start = addr;
     v->vm_end = end;
     v->vm_flags = flags;
 
     update_mapped_page_flags(mm, addr, end, flags);
+    vma_merge_adjacent(mm);
     return 1;
 }
 
@@ -510,10 +638,8 @@ uint32_t do_mremap(struct mm_struct *mm, uint32_t addr, uint32_t old_length, uin
 
     if (new_len < old_len) {
         v->vm_end = addr + new_len;
-        uint32_t page_start = v->vm_end & ~0xFFF;
-        uint32_t page_end = (old_end + 0xFFF) & ~0xFFF;
-        for (uint32_t va = page_start; va < page_end; va += 4096)
-            task_free_user_page_mapped(mm, mm->pgd, va);
+        zap_page_range(mm, mm->pgd, v->vm_end, old_end);
+        vma_merge_adjacent(mm);
         return addr;
     }
 
@@ -523,6 +649,7 @@ uint32_t do_mremap(struct mm_struct *mm, uint32_t addr, uint32_t old_length, uin
     if (!vma_range_free(mm, old_end, new_end))
         return 0;
     v->vm_end = new_end;
+    vma_merge_adjacent(mm);
     return addr;
 }
 

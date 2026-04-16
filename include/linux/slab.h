@@ -15,4 +15,7 @@ void *kmalloc(size_t size);
 void kfree(void *ptr);
 void kheap_print_stats(void);
 
+/* Minimal slab reclaim hook (Linux mapping: shrinkers / cache reaping). */
+int slab_reclaim_one(void);
+
 #endif

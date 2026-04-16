@@ -4,31 +4,163 @@
 #include "linux/libc.h"
 #include "linux/init.h"
 #include "linux/slab.h"
+#include "linux/memlayout.h"
 #include "base.h"
 
 struct bus_type pci_bus_type;
 static struct device *pci_root_dev;
 const struct device_type pci_dev_type = { .name = "pci" };
-static uint8_t pci_bus_scanned[256];
-static struct device *pci_bus_parent[256];
-static uint32_t pci_bus_io_base[256];
-static uint32_t pci_bus_io_limit[256];
-static uint32_t pci_bus_mem_base[256];
-static uint32_t pci_bus_mem_limit[256];
-static uint64_t pci_bus_pref_base[256];
-static uint64_t pci_bus_pref_limit[256];
-static uint32_t pci_io_alloc = 0x1000;
-/*
- * PCI MMIO window allocator base.
- *
- * Linux relies on firmware-provided resource windows (PCI host bridge) and does
- * not "blindly" assign BARs into RAM. Lite has no firmware resource model yet,
- * so we pick a conservative high MMIO window below 4G to avoid mapping into
- * RAM when QEMU is configured with large guest memory.
- */
-static uint64_t pci_mem_alloc = 0xE0000000u;
-static uint64_t pci_pref_alloc = 0xE8000000u;
+static const struct device_type pci_bus_dev_type = { .name = "pci_bus" };
+static struct class pcibus_class;
+static struct pci_bus *pci_buses[256];
 static uint8_t pci_next_bus = 1;
+
+static uint64_t pci_align64(uint64_t val, uint64_t align);
+static uint32_t pci_align32(uint32_t val, uint32_t align);
+
+static void pci_bus_init_root_windows(struct pci_bus *bus)
+{
+    if (!bus)
+        return;
+
+    /*
+     * Linux mapping: host bridge provides IO/MEM/PREFETCH windows.
+     * Lite has no host bridge resource discovery yet, so we use the QEMU
+     * "PCI hole" defaults, but ensure we never overlap lowmem RAM.
+     */
+    uint64_t io_start = 0x1000u;
+    uint64_t io_end = 0xFFFFu;
+    uint64_t mem_end = 0xFEBFFFFFull;
+    uint64_t mem_start = 0xE0000000ull;
+    uint64_t pref_start = 0xE8000000ull;
+    uint64_t pref_end = mem_end;
+
+    uint32_t lowmem_end = memlayout_lowmem_phys_end();
+    if (lowmem_end) {
+        uint64_t safe_start = pci_align64((uint64_t)lowmem_end + 0x01000000ull, 0x00100000ull);
+        if (mem_start < safe_start)
+            mem_start = safe_start;
+        if (pref_start < safe_start)
+            pref_start = safe_start;
+    }
+
+    if (mem_start > mem_end)
+        mem_start = mem_end = 0;
+    if (pref_start > pref_end)
+        pref_start = pref_end = 0;
+
+    bus->io_res.name = "PCI I/O";
+    bus->io_res.start = io_start;
+    bus->io_res.end = io_end;
+    bus->io_res.flags = IORESOURCE_IO;
+    bus->io_next = (uint32_t)io_start;
+
+    bus->mem_res.name = "PCI MMIO";
+    bus->mem_res.start = mem_start;
+    bus->mem_res.end = mem_end;
+    bus->mem_res.flags = IORESOURCE_MEM;
+    bus->mem_next = mem_start;
+
+    bus->pref_res.name = "PCI PREFETCH";
+    bus->pref_res.start = pref_start;
+    bus->pref_res.end = pref_end;
+    bus->pref_res.flags = IORESOURCE_MEM | IORESOURCE_PREFETCH;
+    bus->pref_next = pref_start;
+}
+
+static void pci_bus_set_bridge_windows(struct pci_bus *bus, const struct pci_dev *bridge)
+{
+    if (!bus || !bridge)
+        return;
+
+    if (bridge->io_limit > bridge->io_base) {
+        bus->io_res.name = "PCI I/O";
+        bus->io_res.start = bridge->io_base;
+        bus->io_res.end = bridge->io_limit;
+        bus->io_res.flags = IORESOURCE_IO;
+        bus->io_next = bridge->io_base;
+    }
+    if (bridge->mem_limit > bridge->mem_base) {
+        bus->mem_res.name = "PCI MMIO";
+        bus->mem_res.start = bridge->mem_base;
+        bus->mem_res.end = bridge->mem_limit;
+        bus->mem_res.flags = IORESOURCE_MEM;
+        bus->mem_next = bridge->mem_base;
+    }
+    if (bridge->pref_limit > bridge->pref_base) {
+        bus->pref_res.name = "PCI PREFETCH";
+        bus->pref_res.start = bridge->pref_base;
+        bus->pref_res.end = bridge->pref_limit;
+        bus->pref_res.flags = IORESOURCE_MEM | IORESOURCE_PREFETCH;
+        bus->pref_next = bridge->pref_base;
+    }
+}
+
+static void pci_bus_dev_release(struct device *dev)
+{
+    struct pci_bus *bus = container_of(dev, struct pci_bus, dev);
+    kfree(bus);
+}
+
+static void pci_make_bus_name(char *buf, uint8_t bus)
+{
+    static const char hex[] = "0123456789abcdef";
+    if (!buf)
+        return;
+    buf[0] = '0';
+    buf[1] = '0';
+    buf[2] = '0';
+    buf[3] = '0';
+    buf[4] = ':';
+    buf[5] = hex[(bus >> 4) & 0xF];
+    buf[6] = hex[bus & 0xF];
+    buf[7] = 0;
+}
+
+static struct pci_bus *pci_bus_create(uint8_t busnr, struct device *bridge)
+{
+    if (pci_buses[busnr])
+        return pci_buses[busnr];
+    if (!pcibus_class.name || !pcibus_class.name[0])
+        return NULL;
+
+    struct pci_bus *bus = (struct pci_bus *)kmalloc(sizeof(*bus));
+    if (!bus)
+        return NULL;
+    memset(bus, 0, sizeof(*bus));
+    bus->number = busnr;
+    bus->bridge = bridge;
+    char name[8];
+    pci_make_bus_name(name, busnr);
+    device_initialize(&bus->dev, name);
+    bus->dev.type = &pci_bus_dev_type;
+    bus->dev.class = &pcibus_class;
+    bus->dev.release = pci_bus_dev_release;
+
+    if (bus->bridge)
+        device_set_parent(&bus->dev, bus->bridge);
+    else if (pci_root_device())
+        device_set_parent(&bus->dev, pci_root_device());
+
+    if (device_add(&bus->dev) != 0) {
+        kobject_put(&bus->dev.kobj);
+        return NULL;
+    }
+    pci_buses[busnr] = bus;
+    if (busnr == 0)
+        pci_bus_init_root_windows(bus);
+    return bus;
+}
+
+static int pcibus_class_init(void)
+{
+    memset(&pcibus_class, 0, sizeof(pcibus_class));
+    pcibus_class.name = "pci_bus";
+    INIT_LIST_HEAD(&pcibus_class.list);
+    INIT_LIST_HEAD(&pcibus_class.devices);
+    return class_register(&pcibus_class);
+}
+core_initcall(pcibus_class_init);
 
 static uint32_t pci_emit_hex_line(char *buffer, uint32_t cap, uint32_t value, uint32_t digits)
 {
@@ -71,22 +203,6 @@ static uint32_t pci_attr_show_class(struct device *dev, struct device_attribute 
     return pci_emit_hex_line(buffer, cap, cls, 6);
 }
 
-static uint32_t pci_attr_show_modalias(struct device *dev, struct device_attribute *attr, char *buffer, uint32_t cap)
-{
-    (void)attr;
-    if (!buffer || cap == 0)
-        return 0;
-    buffer[0] = 0;
-    if (device_get_modalias(dev, buffer, cap) != 0)
-        return 0;
-    uint32_t n = (uint32_t)strlen(buffer);
-    if (n + 1 >= cap)
-        return n;
-    buffer[n++] = '\n';
-    buffer[n] = 0;
-    return n;
-}
-
 static struct device_attribute pci_attr_vendor = {
     .attr = { .name = "vendor", .mode = 0444 },
     .show = pci_attr_show_vendor,
@@ -102,11 +218,6 @@ static struct device_attribute pci_attr_class = {
     .show = pci_attr_show_class,
 };
 
-static struct device_attribute pci_attr_modalias = {
-    .attr = { .name = "modalias", .mode = 0444 },
-    .show = pci_attr_show_modalias,
-};
-
 static uint32_t pci_dev_attr_visible(struct kobject *kobj, const struct attribute *attr)
 {
     (void)attr;
@@ -117,7 +228,6 @@ static const struct attribute *pci_dev_attrs[] = {
     &pci_attr_vendor.attr,
     &pci_attr_device.attr,
     &pci_attr_class.attr,
-    &pci_attr_modalias.attr,
     NULL,
 };
 
@@ -155,7 +265,6 @@ void set_pci_root_device(struct device *dev)
     pci_root_dev = dev;
 }
 
-/* pci_align32: Implement PCI align32. */
 static uint32_t pci_align32(uint32_t val, uint32_t align)
 {
     if (!align)
@@ -163,7 +272,6 @@ static uint32_t pci_align32(uint32_t val, uint32_t align)
     return (val + align - 1) & ~(align - 1);
 }
 
-/* pci_align64: Implement PCI align64. */
 static uint64_t pci_align64(uint64_t val, uint64_t align)
 {
     if (!align)
@@ -183,21 +291,17 @@ static uint32_t pci_alloc_io(uint8_t bus, uint32_t size, int *ok)
         *ok = 0;
         return 0;
     }
-    uint32_t base = pci_io_alloc;
-    uint32_t limit = 0;
-    if (pci_bus_io_limit[bus] > pci_bus_io_base[bus]) {
-        base = pci_bus_io_base[bus];
-        limit = pci_bus_io_limit[bus];
-    }
-    base = pci_align32(base, size);
-    if (limit && base + size - 1 > limit) {
+    struct pci_bus *pb = pci_buses[bus];
+    if (!pb || pb->io_res.end <= pb->io_res.start) {
         *ok = 0;
         return 0;
     }
-    if (limit)
-        pci_bus_io_base[bus] = base + size;
-    else
-        pci_io_alloc = base + size;
+    uint32_t base = pci_align32(pb->io_next, size);
+    if ((uint64_t)base + (uint64_t)size - 1 > pb->io_res.end) {
+        *ok = 0;
+        return 0;
+    }
+    pb->io_next = base + size;
     *ok = 1;
     return base;
 }
@@ -214,38 +318,39 @@ static uint64_t pci_alloc_mem64(uint8_t bus, uint64_t size, int pref, int *ok)
         *ok = 0;
         return 0;
     }
-    uint64_t base = pref ? pci_pref_alloc : pci_mem_alloc;
-    uint64_t limit = 0;
-    if (pref) {
-        if (pci_bus_pref_limit[bus] > pci_bus_pref_base[bus]) {
-            base = pci_bus_pref_base[bus];
-            limit = pci_bus_pref_limit[bus];
-        }
-    } else {
-        if (pci_bus_mem_limit[bus] > pci_bus_mem_base[bus]) {
-            base = pci_bus_mem_base[bus];
-            limit = pci_bus_mem_limit[bus];
-        }
-    }
-    base = pci_align64(base, size);
-    if (limit && base + size - 1 > limit) {
+    struct pci_bus *pb = pci_buses[bus];
+    struct resource *res = NULL;
+    uint64_t *nextp = NULL;
+    if (!pb) {
         *ok = 0;
         return 0;
     }
-    if (limit) {
-        if (pref)
-            pci_bus_pref_base[bus] = base + size;
-        else
-            pci_bus_mem_base[bus] = (uint32_t)(base + size);
+    if (pref) {
+        res = &pb->pref_res;
+        nextp = &pb->pref_next;
     } else {
-        if (pref)
-            pci_pref_alloc = base + size;
-        else
-            pci_mem_alloc = base + size;
+        res = &pb->mem_res;
+        nextp = &pb->mem_next;
     }
+    if (!res || res->end <= res->start) {
+        *ok = 0;
+        return 0;
+    }
+
+    if (*nextp < res->start)
+        *nextp = res->start;
+
+    uint64_t base = pci_align64(*nextp, size);
+    if (base + size - 1 > res->end) {
+        *ok = 0;
+        return 0;
+    }
+
+    *nextp = base + size;
     *ok = 1;
     return base;
 }
+
 
 /* pci_alloc_mem32: Implement PCI alloc mem32. */
 static uint32_t pci_alloc_mem32(uint8_t bus, uint32_t size, int pref, int *ok)
@@ -269,7 +374,6 @@ static void pci_enable_device(struct pci_dev *pdev)
     cmd |= 0x0004;
     if (pci_write_config_word(pdev, 0x04, cmd) != 0)
         return;
-    device_uevent_emit("enable", &pdev->dev);
 }
 
 /* pci_config_addr: Implement PCI config addr. */
@@ -413,10 +517,13 @@ static uint8_t pci_assign_bridge_bus(struct pci_dev *pdev, uint8_t parent_bus)
         secondary = pci_next_bus++;
         uint32_t new_reg = (bus_reg & 0xFF000000) | ((uint32_t)0xFF << 16) | ((uint32_t)secondary << 8) | parent_bus;
         pci_write_config_dword(pdev, 0x18, new_reg);
-        device_uevent_emit("busnum", &pdev->dev);
     }
-    if (secondary)
-        pci_bus_parent[secondary] = &pdev->dev;
+    if (secondary) {
+        /* Create bus object with bridge parent, similar to Linux sysfs placement. */
+        struct pci_bus *child = pci_bus_create(secondary, &pdev->dev);
+        if (child)
+            child->parent = pci_buses[parent_bus];
+    }
     return secondary;
 }
 
@@ -454,15 +561,16 @@ static void pci_register_function(uint8_t bus, uint8_t dev, uint8_t func)
     pdev->bus = bus;
     pdev->devfn = (uint8_t)((dev << 3) | (func & 0x7));
 
-    if (pci_bus_parent[bus])
-        device_set_parent(&pdev->dev, pci_bus_parent[bus]);
+    struct pci_bus *pb = pci_buses[bus];
+    if (pb && pb->bridge)
+        device_set_parent(&pdev->dev, pb->bridge);
+    else if (pci_root_device())
+        device_set_parent(&pdev->dev, pci_root_device());
 
     if (device_add(&pdev->dev) != 0) {
         kobject_put(&pdev->dev.kobj);
         return;
     }
-    if (class_id == 0x01 && subclass_id == 0x08)
-        device_uevent_emit("nvme", &pdev->dev);
     if (header == 0) {
         for (int i = 0; i < 6; i++) {
             uint8_t off = 0x10 + i * 4;
@@ -485,9 +593,8 @@ static void pci_register_function(uint8_t bus, uint8_t dev, uint8_t func)
                     if (ok) {
                         pci_write_config_dword(pdev, off, base | 0x1);
                         pdev->bar[i] = base | 0x1;
-                        device_uevent_emit("bar", &pdev->dev);
                     } else {
-                        device_uevent_emit("barfail", &pdev->dev);
+                        printf("pci: BAR IO alloc failed dev=%s size=0x%x\n", pdev->dev.kobj.name, size);
                     }
                 }
                 continue;
@@ -519,9 +626,9 @@ static void pci_register_function(uint8_t bus, uint8_t dev, uint8_t func)
                         pci_write_config_dword(pdev, off + 4, base_high);
                         pdev->bar[i] = base_low;
                         pdev->bar[i + 1] = base_high;
-                        device_uevent_emit("bar", &pdev->dev);
                     } else {
-                        device_uevent_emit("barfail", &pdev->dev);
+                        printf("pci: BAR MEM64 alloc failed dev=%s size=0x%x%08x\n",
+                               pdev->dev.kobj.name, (uint32_t)(size64 >> 32), (uint32_t)size64);
                     }
                 }
                 i++;
@@ -538,9 +645,8 @@ static void pci_register_function(uint8_t bus, uint8_t dev, uint8_t func)
                     if (ok) {
                         pci_write_config_dword(pdev, off, base);
                         pdev->bar[i] = base;
-                        device_uevent_emit("bar", &pdev->dev);
                     } else {
-                        device_uevent_emit("barfail", &pdev->dev);
+                        printf("pci: BAR MEM32 alloc failed dev=%s size=0x%x\n", pdev->dev.kobj.name, size);
                     }
                 }
             }
@@ -577,18 +683,9 @@ static void pci_register_function(uint8_t bus, uint8_t dev, uint8_t func)
         pdev->pref_limit = pref_limit;
         uint8_t secondary = pci_assign_bridge_bus(pdev, bus);
         if (secondary) {
-            if (pdev->io_limit > pdev->io_base) {
-                pci_bus_io_base[secondary] = pdev->io_base;
-                pci_bus_io_limit[secondary] = pdev->io_limit;
-            }
-            if (pdev->mem_limit > pdev->mem_base) {
-                pci_bus_mem_base[secondary] = pdev->mem_base;
-                pci_bus_mem_limit[secondary] = pdev->mem_limit;
-            }
-            if (pdev->pref_limit > pdev->pref_base) {
-                pci_bus_pref_base[secondary] = pdev->pref_base;
-                pci_bus_pref_limit[secondary] = pdev->pref_limit;
-            }
+            struct pci_bus *cb = pci_buses[secondary];
+            if (cb)
+                pci_bus_set_bridge_windows(cb, pdev);
         }
         if (secondary && secondary != bus)
             pci_scan_bus(secondary);
@@ -614,9 +711,14 @@ static void pci_scan_device(uint8_t bus, uint8_t dev)
 /* pci_scan_bus: Implement PCI scan bus. */
 static void pci_scan_bus(uint8_t bus)
 {
-    if (pci_bus_scanned[bus])
+    struct pci_bus *pb = pci_buses[bus];
+    if (!pb)
+        pb = pci_bus_create(bus, NULL);
+    if (!pb)
         return;
-    pci_bus_scanned[bus] = 1;
+    if (pb->scanned)
+        return;
+    pb->scanned = 1;
     for (uint8_t dev = 0; dev < 32; dev++)
         pci_scan_device(bus, dev);
 }
@@ -719,14 +821,7 @@ static int pci_init(void)
     INIT_LIST_HEAD(&pci_bus_type.devices);
     if (bus_register_static(&pci_bus_type) != 0)
         return -1;
-    memset(pci_bus_scanned, 0, sizeof(pci_bus_scanned));
-    memset(pci_bus_parent, 0, sizeof(pci_bus_parent));
-    memset(pci_bus_io_base, 0, sizeof(pci_bus_io_base));
-    memset(pci_bus_io_limit, 0, sizeof(pci_bus_io_limit));
-    memset(pci_bus_mem_base, 0, sizeof(pci_bus_mem_base));
-    memset(pci_bus_mem_limit, 0, sizeof(pci_bus_mem_limit));
-    memset(pci_bus_pref_base, 0, sizeof(pci_bus_pref_base));
-    memset(pci_bus_pref_limit, 0, sizeof(pci_bus_pref_limit));
+    memset(pci_buses, 0, sizeof(pci_buses));
     pci_next_bus = 1;
     struct device *root = (struct device*)kmalloc(sizeof(struct device));
     if (root) {
@@ -736,7 +831,7 @@ static int pci_init(void)
         root->bus = &pci_bus_type;
         if (device_register(root) == 0) {
             set_pci_root_device(root);
-            pci_bus_parent[0] = root;
+            /* Root bus device will be parented to this root device. */
         } else {
             kobject_put(&root->kobj);
         }

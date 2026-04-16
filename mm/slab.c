@@ -37,6 +37,14 @@ static struct slab *slab_free_list = NULL;
 static struct slab *slab_map[SLAB_MAX_PAGES];
 static uint32_t slab_pages = 0;
 
+static void slab_free_meta(struct slab *s)
+{
+    if (!s)
+        return;
+    s->next = slab_free_list;
+    slab_free_list = s;
+}
+
 /* align_up: Implement align up. */
 static size_t align_up(size_t value, size_t align)
 {
@@ -231,6 +239,49 @@ void kheap_print_stats(void)
         }
         printf("SLAB size=%d slabs=%d total=%d free=%d\n", c->size, slabs, total_objs, free_objs);
     }
+}
+
+/*
+ * slab_reclaim_one: Attempt to reclaim one completely free slab page.
+ *
+ * Linux mapping:
+ * - Linux slab allocators can free empty slabs under memory pressure via
+ *   shrinkers / cache reaping.
+ * - Lite keeps the hook minimal: reclaim at most one fully free slab page
+ *   from the built-in size-class caches.
+ */
+int slab_reclaim_one(void)
+{
+    for (int i = 0; i < SLAB_MAX_CACHE; i++) {
+        struct kmem_cache *c = &caches[i];
+        struct slab *prev = NULL;
+        struct slab *s = c->slabs;
+        while (s) {
+            if (s->inuse == 0 && s->vaddr) {
+                if (prev)
+                    prev->next = s->next;
+                else
+                    c->slabs = s->next;
+
+                for (uint32_t j = 0; j < slab_pages; j++) {
+                    if (slab_map[j] == s) {
+                        slab_map[j] = NULL;
+                        break;
+                    }
+                }
+
+                uint32_t phys = virt_to_phys_addr(s->vaddr);
+                free_page((unsigned long)phys);
+                s->vaddr = NULL;
+                s->cache = NULL;
+                slab_free_meta(s);
+                return 1;
+            }
+            prev = s;
+            s = s->next;
+        }
+    }
+    return 0;
 }
 
 /* kmem_cache_init: Initialize kmem cache. */

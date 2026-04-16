@@ -108,6 +108,8 @@ static int vfs_mount_rootfs(const char *fs_name)
     m->path = "/";
     m->sb = sb;
     m->root = sb->s_root;
+    m->mountpoint = NULL;
+    m->parent = NULL;
     m->next = vfs_mounts;
     vfs_mounts = m;
 
@@ -133,12 +135,6 @@ int vfs_mount(const char *path, struct super_block *sb)
             panic("mount path still missing after creation.");
     }
 
-    // Link the new file system root dentry into the namespace topology.
-    // We manually set the parent to allow "cd .." to escape the mount point.
-    // We intentionally DO NOT use d_alloc(d->parent) because that would
-    // inject this new root into the parent's children list, causing duplicate ls entries!
-    mount_root->parent = d->parent;
-
     struct vfsmount *m = (struct vfsmount*)kmalloc(sizeof(struct vfsmount));
     if (!m)
         panic("mount path failed for alloc.");
@@ -147,9 +143,13 @@ int vfs_mount(const char *path, struct super_block *sb)
     m->sb = sb;
 
     m->root = mount_root;
+    m->mountpoint = d;
+    m->parent = d->mount ? d->mount : (vfs_mounts ? vfs_mounts : NULL);
     m->next = vfs_mounts;
     vfs_mounts = m;
     d->mount = m;
+    /* Mark the mounted filesystem root for ".." traversal across mounts. */
+    mount_root->mount = m;
 
     printf("mount %s success.\n", path);
     return 0;

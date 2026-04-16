@@ -50,8 +50,9 @@ static inline uint32_t memlayout_fixaddr_start(void)
 
 static inline void *memlayout_directmap_phys_to_virt(uint32_t phys)
 {
-    if (bootmem_lowmem_end() != 0 && phys >= memlayout_lowmem_phys_end())
+    if (bootmem_lowmem_end() != 0 && phys >= memlayout_lowmem_phys_end()) {
         panic("directmap_phys_to_virt: phys out of range");
+    }
     return phys_to_virt(phys);
 }
 

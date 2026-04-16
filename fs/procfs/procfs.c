@@ -58,6 +58,51 @@ static struct inode_operations proc_pid_dir_iops;
 static struct inode_operations proc_pid_fd_dir_iops;
 static struct inode_operations procfs_dir_iops;
 
+/*
+ * Minimal proc_dir_entry-style model (Linux mapping):
+ * - Linux procfs uses proc_dir_entry objects to build a dynamic tree.
+ * - Lite keeps the implementation small; use a fixed root child table and
+ *   keep per-pid entries bounded (PROC_PID_MAX).
+ */
+struct proc_dir_entry {
+    const char *name;
+    struct inode *inode;
+};
+
+static struct proc_dir_entry proc_root_children[16];
+static uint32_t proc_root_children_nr;
+
+static void proc_register_root_child(const char *name, struct inode *inode)
+{
+    if (!name || !name[0] || !inode)
+        return;
+    if (proc_root_children_nr >= (uint32_t)(sizeof(proc_root_children) / sizeof(proc_root_children[0])))
+        return;
+    proc_root_children[proc_root_children_nr].name = name;
+    proc_root_children[proc_root_children_nr].inode = inode;
+    proc_root_children_nr++;
+}
+
+static struct inode *proc_lookup_root_child(const char *name)
+{
+    for (uint32_t i = 0; i < proc_root_children_nr; i++) {
+        if (!proc_root_children[i].name)
+            continue;
+        if (!strcmp(proc_root_children[i].name, name))
+            return proc_root_children[i].inode;
+    }
+    return NULL;
+}
+
+static struct dirent *proc_fill_dirent(const char *name, uint32_t ino)
+{
+    if (!name || !name[0])
+        return NULL;
+    strcpy(proc_dirent.name, name);
+    proc_dirent.ino = ino;
+    return &proc_dirent;
+}
+
 /* parse_u32: Parse u32. */
 static int parse_u32(const char *s, uint32_t *out)
 {
@@ -108,43 +153,134 @@ static void buf_append_hex(char *buf, uint32_t *off, uint32_t cap, uint32_t v)
     buf_append(buf, off, cap, tmp);
 }
 
+struct proc_seq_state {
+    uint32_t pos;
+    uint32_t start;
+    uint32_t end;
+    uint8_t *out;
+    uint32_t out_cap;
+    uint32_t out_off;
+    int full;
+};
+
+static void proc_seq_emit_bytes(struct proc_seq_state *st, const char *s, uint32_t n)
+{
+    if (!st || !s || n == 0 || st->full)
+        return;
+
+    uint32_t seg_start = st->pos;
+    uint32_t seg_end = st->pos + n;
+    st->pos = seg_end;
+
+    if (seg_end <= st->start)
+        return;
+    if (seg_start >= st->end)
+        return;
+
+    uint32_t copy_from = 0;
+    if (st->start > seg_start)
+        copy_from = st->start - seg_start;
+    uint32_t avail = n - copy_from;
+
+    uint32_t copy_len = avail;
+    uint32_t max_to_end = st->end - (seg_start + copy_from);
+    if (copy_len > max_to_end)
+        copy_len = max_to_end;
+    if (copy_len > st->out_cap - st->out_off)
+        copy_len = st->out_cap - st->out_off;
+
+    if (copy_len == 0)
+        return;
+    memcpy(st->out + st->out_off, s + copy_from, copy_len);
+    st->out_off += copy_len;
+    if (st->out_off >= st->out_cap)
+        st->full = 1;
+}
+
+static void proc_seq_emit_str(struct proc_seq_state *st, const char *s)
+{
+    if (!s)
+        return;
+    proc_seq_emit_bytes(st, s, (uint32_t)strlen(s));
+}
+
+static void proc_seq_emit_u32(struct proc_seq_state *st, uint32_t v)
+{
+    char tmp[16];
+    itoa((int)v, 10, tmp);
+    proc_seq_emit_str(st, tmp);
+}
+
 /* proc_read_mounts: Implement proc read mounts. */
 static uint32_t proc_read_mounts(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
-    static char tmp[1024];
-    uint32_t n = 0;
+    if (!buffer || size == 0)
+        return 0;
+    struct proc_seq_state st = {
+        .pos = 0,
+        .start = offset,
+        .end = offset + size,
+        .out = buffer,
+        .out_cap = size,
+        .out_off = 0,
+        .full = 0,
+    };
 
-    for (struct vfsmount *m = vfs_get_mounts(); m; m = m->next) {
+    for (struct vfsmount *m = vfs_get_mounts(); m && !st.full; m = m->next) {
         if (!m->sb || !m->sb->name || !m->path)
             continue;
-        buf_append(tmp, &n, sizeof(tmp), m->sb->name);
-        buf_append(tmp, &n, sizeof(tmp), " ");
-        buf_append(tmp, &n, sizeof(tmp), m->path);
-        buf_append(tmp, &n, sizeof(tmp), "\n");
+        proc_seq_emit_str(&st, m->sb->name);
+        proc_seq_emit_str(&st, " ");
+        proc_seq_emit_str(&st, m->path);
+        proc_seq_emit_str(&st, "\n");
     }
-
-    if (offset >= n)
-        return 0;
-    uint32_t remain = n - offset;
-    if (size > remain)
-        size = remain;
-    memcpy(buffer, tmp + offset, size);
-    return size;
+    return st.out_off;
 }
 
 /* proc_read_tasks: Implement proc read tasks. */
 static uint32_t proc_read_tasks(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
-    static char tmp[4096];
-    uint32_t n = task_dump_tasks(tmp, sizeof(tmp));
-    if (offset >= n)
+    if (!buffer || size == 0)
         return 0;
-    uint32_t remain = n - offset;
-    if (size > remain) size = remain;
-    memcpy(buffer, tmp + offset, size);
-    return size;
+    struct proc_seq_state st = {
+        .pos = 0,
+        .start = offset,
+        .end = offset + size,
+        .out = buffer,
+        .out_cap = size,
+        .out_off = 0,
+        .full = 0,
+    };
+
+    proc_seq_emit_str(&st, "PID   STATE     WAKE    CURRENT  NAME\n");
+    if (!list_empty(&task_list_head)) {
+        struct task_struct *task;
+        list_for_each_entry(task, &task_list_head, tasks) {
+            if (st.full)
+                break;
+            const char *state = "RUNNABLE";
+            if (task->state == TASK_SLEEPING)
+                state = "SLEEPING";
+            else if (task->state == TASK_BLOCKED)
+                state = "BLOCKED";
+            else if (task->state == TASK_ZOMBIE)
+                state = "ZOMBIE";
+            const char *name = task->comm[0] ? task->comm : "-";
+            proc_seq_emit_u32(&st, task->pid);
+            proc_seq_emit_str(&st, "    ");
+            proc_seq_emit_str(&st, state);
+            proc_seq_emit_str(&st, "  ");
+            proc_seq_emit_u32(&st, task->wake_jiffies);
+            proc_seq_emit_str(&st, "    ");
+            proc_seq_emit_str(&st, task == current ? "yes" : "no");
+            proc_seq_emit_str(&st, "     ");
+            proc_seq_emit_str(&st, name);
+            proc_seq_emit_str(&st, "\n");
+        }
+    }
+    return st.out_off;
 }
 
 /* proc_read_sched: Implement proc read sched. */
@@ -376,7 +512,7 @@ static uint32_t proc_read_iomem(struct inode *node, uint32_t offset, uint32_t si
 static uint32_t proc_read_cow(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
-    static char tmp[128];
+    static char tmp[160];
     uint32_t off = 0;
     uint32_t faults = 0;
     uint32_t copies = 0;
@@ -477,14 +613,16 @@ static uint32_t proc_read_writeback(struct inode *node, uint32_t offset, uint32_
     (void)node;
     static char tmp[128];
     uint32_t off = 0;
-    uint32_t dirty = 0, cleaned = 0, discarded = 0;
-    get_writeback_stats(&dirty, &cleaned, &discarded);
+    uint32_t dirty = 0, cleaned = 0, discarded = 0, throttled = 0;
+    get_writeback_stats(&dirty, &cleaned, &discarded, &throttled);
     buf_append(tmp, &off, sizeof(tmp), "dirty=");
     buf_append_u32(tmp, &off, sizeof(tmp), dirty);
     buf_append(tmp, &off, sizeof(tmp), "\ncleaned=");
     buf_append_u32(tmp, &off, sizeof(tmp), cleaned);
     buf_append(tmp, &off, sizeof(tmp), "\ndiscarded=");
     buf_append_u32(tmp, &off, sizeof(tmp), discarded);
+    buf_append(tmp, &off, sizeof(tmp), "\nthrottled=");
+    buf_append_u32(tmp, &off, sizeof(tmp), throttled);
     buf_append(tmp, &off, sizeof(tmp), "\n");
     if (off < sizeof(tmp))
         tmp[off] = 0;
@@ -552,6 +690,7 @@ static uint32_t proc_read_diskstats(struct inode *node, uint32_t offset, uint32_
         buf_append(tmp, &off, sizeof(tmp), " bytes_written=");
         buf_append_u32(tmp, &off, sizeof(tmp), bdev->bytes_written);
         buf_append(tmp, &off, sizeof(tmp), "\n");
+        bdput(bdev);
     }
 
     if (off < sizeof(tmp))
@@ -670,6 +809,8 @@ static uint32_t proc_read_pid_cwd(struct inode *node, uint32_t offset, uint32_t 
         return 0;
     static char tmp[256];
     uint32_t pid = (uint32_t)node->impl;
+    if (pid == 0xFFFFFFFF)
+        pid = task_get_current_id();
     uint32_t n = task_dump_cwd_pid(pid, tmp, sizeof(tmp));
     if (offset >= n)
         return 0;
@@ -993,14 +1134,15 @@ struct inode *proc_get_pid_dir(uint32_t pid)
             e->status.i_mode = 0444;
 
             memset(&e->cwd, 0, sizeof(e->cwd));
-            e->cwd.flags = FS_FILE;
+            /* Linux mapping: /proc/<pid>/cwd is a symlink. */
+            e->cwd.flags = FS_SYMLINK;
             e->cwd.i_ino = 0x5100 + i;
-            e->cwd.i_size = 256;
+            e->cwd.i_size = 0;
             e->cwd.f_ops = &proc_pid_cwd_ops;
             e->cwd.impl = pid;
             e->cwd.uid = 0;
             e->cwd.gid = 0;
-            e->cwd.i_mode = 0444;
+            e->cwd.i_mode = 0777;
 
             memset(&e->fd_dir, 0, sizeof(e->fd_dir));
             e->fd_dir.flags = FS_DIRECTORY;
@@ -1035,81 +1177,25 @@ static struct dirent *proc_readdir(struct file *file, uint32_t index)
 {
     struct inode *node = file->dentry->inode;
     (void)node;
-    if (index == 0) {
-        strcpy(proc_dirent.name, "tasks");
-        proc_dirent.ino = proc_tasks.i_ino;
-        return &proc_dirent;
+    if (index < proc_root_children_nr) {
+        const char *name = proc_root_children[index].name;
+        struct inode *inode = proc_root_children[index].inode;
+        return proc_fill_dirent(name, inode ? inode->i_ino : 0);
     }
-    if (index == 1) {
-        strcpy(proc_dirent.name, "sched");
-        proc_dirent.ino = proc_sched.i_ino;
-        return &proc_dirent;
+
+    /* After fixed children, list bounded per-pid entries if present. */
+    uint32_t pid_index = index - proc_root_children_nr;
+    for (uint32_t i = 0; i < PROC_PID_MAX; i++) {
+        if (!proc_pids[i].used)
+            continue;
+        if (pid_index == 0) {
+            char name[16];
+            itoa((int)proc_pids[i].pid, 10, name);
+            return proc_fill_dirent(name, proc_pids[i].dir.i_ino);
+        }
+        pid_index--;
     }
-    if (index == 2) {
-        strcpy(proc_dirent.name, "irq");
-        proc_dirent.ino = proc_irq.i_ino;
-        return &proc_dirent;
-    }
-    if (index == 3) {
-        strcpy(proc_dirent.name, "maps");
-        proc_dirent.ino = proc_maps.i_ino;
-        return &proc_dirent;
-    }
-    if (index == 4) {
-        strcpy(proc_dirent.name, "meminfo");
-        proc_dirent.ino = proc_meminfo.i_ino;
-        return &proc_dirent;
-    }
-    if (index == 5) {
-        strcpy(proc_dirent.name, "iomem");
-        proc_dirent.ino = proc_iomem.i_ino;
-        return &proc_dirent;
-    }
-    if (index == 6) {
-        strcpy(proc_dirent.name, "cow");
-        proc_dirent.ino = proc_cow.i_ino;
-        return &proc_dirent;
-    }
-    if (index == 7) {
-        strcpy(proc_dirent.name, "pfault");
-        proc_dirent.ino = proc_pfault.i_ino;
-        return &proc_dirent;
-    }
-    if (index == 8) {
-        strcpy(proc_dirent.name, "vmscan");
-        proc_dirent.ino = proc_vmscan.i_ino;
-        return &proc_dirent;
-    }
-    if (index == 9) {
-        strcpy(proc_dirent.name, "writeback");
-        proc_dirent.ino = proc_writeback.i_ino;
-        return &proc_dirent;
-    }
-    if (index == 10) {
-        strcpy(proc_dirent.name, "pagecache");
-        proc_dirent.ino = proc_pagecache.i_ino;
-        return &proc_dirent;
-    }
-    if (index == 11) {
-        strcpy(proc_dirent.name, "blockstats");
-        proc_dirent.ino = proc_blockstats.i_ino;
-        return &proc_dirent;
-    }
-    if (index == 12) {
-        strcpy(proc_dirent.name, "diskstats");
-        proc_dirent.ino = proc_diskstats.i_ino;
-        return &proc_dirent;
-    }
-    if (index == 13) {
-        strcpy(proc_dirent.name, "mounts");
-        proc_dirent.ino = proc_mounts.i_ino;
-        return &proc_dirent;
-    }
-    if (index == 14) {
-        strcpy(proc_dirent.name, "self");
-        proc_dirent.ino = 0x1000;
-        return &proc_dirent;
-    }
+
     return NULL;
 }
 
@@ -1119,34 +1205,9 @@ static struct inode *proc_finddir(struct inode *node, const char *name)
     (void)node;
     if (!name)
         return NULL;
-    if (!strcmp(name, "tasks"))
-        return &proc_tasks;
-    if (!strcmp(name, "sched"))
-        return &proc_sched;
-    if (!strcmp(name, "irq"))
-        return &proc_irq;
-    if (!strcmp(name, "maps"))
-        return &proc_maps;
-    if (!strcmp(name, "meminfo"))
-        return &proc_meminfo;
-    if (!strcmp(name, "iomem"))
-        return &proc_iomem;
-    if (!strcmp(name, "cow"))
-        return &proc_cow;
-    if (!strcmp(name, "pfault"))
-        return &proc_pfault;
-    if (!strcmp(name, "vmscan"))
-        return &proc_vmscan;
-    if (!strcmp(name, "writeback"))
-        return &proc_writeback;
-    if (!strcmp(name, "pagecache"))
-        return &proc_pagecache;
-    if (!strcmp(name, "blockstats"))
-        return &proc_blockstats;
-    if (!strcmp(name, "diskstats"))
-        return &proc_diskstats;
-    if (!strcmp(name, "mounts"))
-        return &proc_mounts;
+    struct inode *fixed = proc_lookup_root_child(name);
+    if (fixed)
+        return fixed;
     if (!strcmp(name, "self"))
         return proc_get_pid_dir(0xFFFFFFFF);
     uint32_t pid = 0;
@@ -1312,6 +1373,7 @@ static int proc_fill_super(struct super_block *sb, void *data, int silent)
 
     memset(proc_pids, 0, sizeof(proc_pids));
     proc_get_pid_dir(0xFFFFFFFF);
+    proc_root_children_nr = 0;
 
     struct inode *proc_root = (struct inode *)kmalloc(sizeof(struct inode));
     if (!proc_root)
@@ -1451,6 +1513,23 @@ static int proc_fill_super(struct super_block *sb, void *data, int silent)
     proc_mounts.uid = 0;
     proc_mounts.gid = 0;
     proc_mounts.i_mode = 0444;
+
+    proc_register_root_child("tasks", &proc_tasks);
+    proc_register_root_child("sched", &proc_sched);
+    proc_register_root_child("irq", &proc_irq);
+    proc_register_root_child("maps", &proc_maps);
+    proc_register_root_child("meminfo", &proc_meminfo);
+    proc_register_root_child("iomem", &proc_iomem);
+    proc_register_root_child("cow", &proc_cow);
+    proc_register_root_child("pfault", &proc_pfault);
+    proc_register_root_child("vmscan", &proc_vmscan);
+    proc_register_root_child("writeback", &proc_writeback);
+    proc_register_root_child("pagecache", &proc_pagecache);
+    proc_register_root_child("blockstats", &proc_blockstats);
+    proc_register_root_child("diskstats", &proc_diskstats);
+    proc_register_root_child("mounts", &proc_mounts);
+    /* Keep self as a special dynamic entry. */
+    proc_register_root_child("self", proc_get_pid_dir(0xFFFFFFFF));
 
     sb->s_root = d_alloc(NULL, "/");
     if (!sb->s_root)

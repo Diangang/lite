@@ -12,6 +12,7 @@ enum { RAMFS_MAGIC = 0x52414D46 };
 static struct inode_operations ramfs_dir_iops;
 static struct file_operations ramfs_dir_ops;
 static struct file_operations ramfs_file_ops;
+static struct file_operations ramfs_symlink_ops;
 
 static uint32_t ramfs_apply_umask(uint32_t mode)
 {
@@ -29,6 +30,21 @@ static int ramfs_valid_name(const char *name)
             return 0;
     }
     return 1;
+}
+
+static uint32_t ramfs_symlink_read(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer)
+{
+    if (!node || !buffer || node->flags != FS_SYMLINK || !node->private_data)
+        return 0;
+    const char *target = (const char *)node->private_data;
+    uint32_t len = (uint32_t)strlen(target);
+    if (offset >= len)
+        return 0;
+    uint32_t remain = len - offset;
+    if (size > remain)
+        size = remain;
+    memcpy(buffer, target + offset, size);
+    return size;
 }
 
 /* ramfs_create_child: Implement ramfs create child. */
@@ -52,16 +68,32 @@ struct inode *ramfs_create_child(struct inode *dir, const char *name, uint32_t t
     inode->uid = task_get_uid();
     inode->gid = task_get_gid();
 
-    struct address_space *mapping = (struct address_space*)kmalloc(sizeof(struct address_space));
-    address_space_init(mapping, inode);
-    inode->i_mapping = mapping;
-
     if (type == FS_DIRECTORY) {
+        struct address_space *mapping = (struct address_space*)kmalloc(sizeof(struct address_space));
+        if (!mapping) {
+            kfree(inode);
+            return NULL;
+        }
+        address_space_init(mapping, inode);
+        inode->i_mapping = mapping;
         inode->flags = FS_DIRECTORY;
         inode->i_op = &ramfs_dir_iops;
         inode->f_ops = &ramfs_dir_ops;
         inode->i_mode = ramfs_apply_umask(0777);
+    } else if (type == FS_SYMLINK) {
+        inode->flags = FS_SYMLINK;
+        inode->i_op = NULL;
+        inode->f_ops = &ramfs_symlink_ops;
+        inode->i_mode = 0777;
+        inode->i_size = 0;
     } else {
+        struct address_space *mapping = (struct address_space*)kmalloc(sizeof(struct address_space));
+        if (!mapping) {
+            kfree(inode);
+            return NULL;
+        }
+        address_space_init(mapping, inode);
+        inode->i_mapping = mapping;
         inode->flags = FS_FILE;
         inode->i_op = NULL;
         inode->f_ops = &ramfs_file_ops;
@@ -109,6 +141,8 @@ static int ramfs_unlink(struct dentry *dir_dentry, const char *name)
     if (target->i_mapping)
         truncate_inode_pages(target->i_mapping, 0);
 
+    if (target->private_data)
+        kfree(target->private_data);
     if (target->i_mapping) {
         address_space_release(target->i_mapping);
         kfree(target->i_mapping);
@@ -183,10 +217,30 @@ static struct inode *ramfs_mkdir_inode(struct inode *dir, const char *name)
     return ramfs_create_child(dir, name, FS_DIRECTORY);
 }
 
+static struct inode *ramfs_symlink_inode(struct inode *dir, const char *name, const char *target)
+{
+    if (!target)
+        return NULL;
+    struct inode *inode = ramfs_create_child(dir, name, FS_SYMLINK);
+    if (!inode)
+        return NULL;
+    uint32_t len = (uint32_t)strlen(target);
+    char *copy = (char *)kmalloc(len + 1);
+    if (!copy) {
+        kfree(inode);
+        return NULL;
+    }
+    memcpy(copy, target, len + 1);
+    inode->private_data = copy;
+    inode->i_size = len;
+    return inode;
+}
+
 static struct inode_operations ramfs_dir_iops = {
     .lookup = ramfs_lookup,
     .create = ramfs_create_file,
     .mkdir = ramfs_mkdir_inode,
+    .symlink = ramfs_symlink_inode,
     .unlink = ramfs_unlink,
     .rmdir = ramfs_rmdir,
 };
@@ -203,6 +257,15 @@ static struct file_operations ramfs_dir_ops = {
 static struct file_operations ramfs_file_ops = {
     .read = generic_file_read,
     .write = generic_file_write,
+    .open = NULL,
+    .close = NULL,
+    .readdir = NULL,
+    .ioctl = NULL
+};
+
+static struct file_operations ramfs_symlink_ops = {
+    .read = ramfs_symlink_read,
+    .write = NULL,
     .open = NULL,
     .close = NULL,
     .readdir = NULL,

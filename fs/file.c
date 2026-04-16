@@ -11,7 +11,7 @@ struct file *vfs_open(const char *path, uint32_t flags)
     struct dentry *dentry = path_walk(path);
     struct inode *node = dentry ? dentry->inode : NULL;
 
-    if (!dentry && (flags & VFS_O_CREAT)) {
+    if ((!dentry || !node) && (flags & VFS_O_CREAT)) {
         char tmp[256];
         uint32_t len = (uint32_t)strlen(path);
         if (len >= sizeof(tmp))
@@ -42,11 +42,18 @@ struct file *vfs_open(const char *path, uint32_t flags)
         if (!created)
             return NULL;
 
-        struct dentry *new_d = d_alloc(pdentry, name);
-        if (!new_d)
-            return NULL;
-        new_d->inode = created;
-        dentry = new_d;
+        struct dentry *new_d = d_lookup(pdentry, name);
+        if (new_d) {
+            new_d->inode = created;
+            new_d->d_flags &= ~DENTRY_NEGATIVE;
+            dentry = new_d;
+        } else {
+            new_d = d_alloc(pdentry, name);
+            if (!new_d)
+                return NULL;
+            new_d->inode = created;
+            dentry = new_d;
+        }
         node = created;
     }
 

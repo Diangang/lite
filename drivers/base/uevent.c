@@ -1,9 +1,11 @@
 #include "linux/device.h"
 #include "linux/libc.h"
 #include "linux/pci.h"
+#include "linux/virtio.h"
 
 static char uevent_buf[4096];
 static uint32_t uevent_len = 0;
+static uint32_t uevent_seqnum = 0;
 
 static int buf_append(char *buf, uint32_t *off, uint32_t cap, const char *s)
 {
@@ -33,6 +35,27 @@ static int buf_append_u32_dec(char *buf, uint32_t *off, uint32_t cap, uint32_t v
 {
     char tmp[16];
     itoa((int)v, 10, tmp);
+    return buf_append(buf, off, cap, tmp);
+}
+
+static int buf_append_u32_oct(char *buf, uint32_t *off, uint32_t cap, uint32_t value)
+{
+    char tmp[16];
+    uint32_t pos = 0;
+
+    if (value == 0)
+        tmp[pos++] = '0';
+    else {
+        char rev[16];
+        uint32_t rev_pos = 0;
+        while (value && rev_pos < sizeof(rev)) {
+            rev[rev_pos++] = (char)('0' + (value & 7u));
+            value >>= 3;
+        }
+        while (rev_pos)
+            tmp[pos++] = rev[--rev_pos];
+    }
+    tmp[pos] = 0;
     return buf_append(buf, off, cap, tmp);
 }
 
@@ -143,6 +166,29 @@ int device_get_modalias(struct device *dev, char *buf, uint32_t cap)
             return -1;
         return 0;
     }
+    if (dev->bus && !strcmp(dev->bus->subsys.kset.kobj.name, "virtio")) {
+        /*
+         * Linux mapping: drivers/virtio/virtio.c exports modalias as:
+         *   "virtio:d%08Xv%08X"
+         */
+        struct virtio_device *vdev = dev_to_virtio(dev);
+        if (!vdev)
+            return -1;
+        uint32_t off = 0;
+        char hx[16];
+        buf[0] = 0;
+        if (!buf_append(buf, &off, cap, "virtio:d"))
+            return -1;
+        u32_to_hex_fixed(vdev->id.device, hx, 8);
+        if (!buf_append(buf, &off, cap, hx))
+            return -1;
+        if (!buf_append_ch(buf, &off, cap, 'v'))
+            return -1;
+        u32_to_hex_fixed(vdev->id.vendor, hx, 8);
+        if (!buf_append(buf, &off, cap, hx))
+            return -1;
+        return 0;
+    }
     if (dev->bus) {
         uint32_t off = 0;
         buf[0] = 0;
@@ -172,6 +218,9 @@ void device_uevent_emit(const char *action, struct device *dev)
     char devpath[256];
     char modalias[128];
     const char *devnode;
+    uint32_t mode = 0;
+    uint32_t uid = 0;
+    uint32_t gid = 0;
     uint32_t off = 0;
     tmp[0] = 0;
     devpath[0] = 0;
@@ -208,10 +257,22 @@ void device_uevent_emit(const char *action, struct device *dev)
             !buf_append_ch(tmp, &off, sizeof(tmp), '\n'))
             return;
     }
-    devnode = device_get_devnode(dev);
+    devnode = device_get_devnode(dev, &mode, &uid, &gid);
     if (devnode && devnode[0]) {
         if (!buf_append(tmp, &off, sizeof(tmp), "DEVNAME=") ||
             !buf_append(tmp, &off, sizeof(tmp), devnode) ||
+            !buf_append_ch(tmp, &off, sizeof(tmp), '\n'))
+            return;
+        if (!buf_append(tmp, &off, sizeof(tmp), "DEVMODE=") ||
+            !buf_append_u32_oct(tmp, &off, sizeof(tmp), mode & 0777) ||
+            !buf_append_ch(tmp, &off, sizeof(tmp), '\n'))
+            return;
+        if (!buf_append(tmp, &off, sizeof(tmp), "DEVUID=") ||
+            !buf_append_u32_dec(tmp, &off, sizeof(tmp), uid) ||
+            !buf_append_ch(tmp, &off, sizeof(tmp), '\n'))
+            return;
+        if (!buf_append(tmp, &off, sizeof(tmp), "DEVGID=") ||
+            !buf_append_u32_dec(tmp, &off, sizeof(tmp), gid) ||
             !buf_append_ch(tmp, &off, sizeof(tmp), '\n'))
             return;
     }
@@ -225,6 +286,10 @@ void device_uevent_emit(const char *action, struct device *dev)
             !buf_append_ch(tmp, &off, sizeof(tmp), '\n'))
             return;
     }
+    if (!buf_append(tmp, &off, sizeof(tmp), "SEQNUM=") ||
+        !buf_append_u32_dec(tmp, &off, sizeof(tmp), ++uevent_seqnum) ||
+        !buf_append_ch(tmp, &off, sizeof(tmp), '\n'))
+        return;
     if (!buf_append_ch(tmp, &off, sizeof(tmp), '\n'))
         return;
 

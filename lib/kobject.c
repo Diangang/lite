@@ -2,6 +2,16 @@
 #include "linux/kernel.h"
 #include "linux/libc.h"
 
+static int list_entry_linked(struct list_head *entry)
+{
+    if (!entry || !entry->next || !entry->prev)
+        return 0;
+    /* INIT_LIST_HEAD() uses self-links; treat that as "not on any list". */
+    if (entry->next == entry && entry->prev == entry)
+        return 0;
+    return 1;
+}
+
 /* kobject_release: Implement kobject release. */
 static void kobject_release(struct kref *kref)
 {
@@ -104,6 +114,9 @@ void kset_add(struct kset *kset, struct kobject *kobj)
 {
     if (!kset || !kobj)
         return;
+    if (kobj->kset == kset && list_entry_linked(&kobj->entry))
+        return;
+    kobject_get(&kset->kobj);
     kobj->kset = kset;
     if (!kobj->entry.next || !kobj->entry.prev)
         INIT_LIST_HEAD(&kobj->entry);
@@ -116,8 +129,12 @@ void kset_remove(struct kset *kset, struct kobject *kobj)
 {
     if (!kset || !kobj)
         return;
-    if (kobj->entry.next && kobj->entry.prev)
+    if (kobj->kset != kset)
+        return;
+    if (list_entry_linked(&kobj->entry))
         list_del(&kobj->entry);
+    kobj->kset = NULL;
+    kobject_put(&kset->kobj);
 }
 
 int subsystem_register(struct subsystem *subsys)
@@ -125,20 +142,32 @@ int subsystem_register(struct subsystem *subsys)
     if (!subsys)
         return -1;
     if (subsys->kset.kobj.kset) {
+        struct kset *parent = subsys->kset.kobj.kset;
         if (!subsys->kset.kobj.entry.next || !subsys->kset.kobj.entry.prev)
             INIT_LIST_HEAD(&subsys->kset.kobj.entry);
         if (!subsys->kset.kobj.entry.next || !subsys->kset.kobj.entry.prev)
             return -1;
         list_add_tail(&subsys->kset.kobj.entry, &subsys->kset.kobj.kset->list);
+        kobject_get(&parent->kobj);
     }
-    return kobject_add(&subsys->kset.kobj);
+    int rc = kobject_add(&subsys->kset.kobj);
+    if (rc != 0 && subsys->kset.kobj.kset) {
+        struct kset *parent = subsys->kset.kobj.kset;
+        if (list_entry_linked(&subsys->kset.kobj.entry))
+            list_del(&subsys->kset.kobj.entry);
+        kobject_put(&parent->kobj);
+    }
+    return rc;
 }
 
 void subsystem_unregister(struct subsystem *subsys)
 {
     if (!subsys)
         return;
-    if (subsys->kset.kobj.entry.next && subsys->kset.kobj.entry.prev)
+    struct kset *parent = subsys->kset.kobj.kset;
+    if (list_entry_linked(&subsys->kset.kobj.entry))
         list_del(&subsys->kset.kobj.entry);
     sysfs_remove_dir(&subsys->kset.kobj);
+    if (parent)
+        kobject_put(&parent->kobj);
 }

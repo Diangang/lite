@@ -125,6 +125,17 @@ struct inode *mkdir_fs(struct inode *dir, const char *name)
     return NULL;
 }
 
+struct inode *symlink_fs(struct inode *dir, const char *name, const char *target)
+{
+    if (!dir || !name || !target)
+        return NULL;
+    if ((dir->flags & 0x7) != FS_DIRECTORY)
+        return NULL;
+    if (dir->i_op && dir->i_op->symlink)
+        return dir->i_op->symlink(dir, name, target);
+    return NULL;
+}
+
 int unlink_fs(struct dentry *dir_dentry, const char *name)
 {
     if (!dir_dentry || !dir_dentry->inode || !name)

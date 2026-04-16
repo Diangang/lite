@@ -2,10 +2,13 @@
 #define LINUX_MMZONE_H
 
 #include <stdint.h>
+#include "linux/list.h"
 
 #define MAX_ORDER 11
 #define PG_BUDDY 0x1
 #define PG_RESERVED 0x2
+#define PG_LRU 0x4
+#define PG_ISOLATED 0x8
 #define NR_WMARK 3
 #define MAX_DMA_PFN (16 * 1024 * 1024 / 4096)
 
@@ -31,6 +34,7 @@ struct page {
     struct mm_struct *map_mm;
     uint32_t map_vaddr;
     struct rmap_item *rmap_list;
+    struct list_head lru;
 };
 
 struct free_area {
@@ -47,6 +51,8 @@ struct zone {
     struct page *mem_map;
     uint32_t watermark[NR_WMARK];
     struct free_area free_area[MAX_ORDER];
+    struct list_head inactive_list;
+    uint32_t nr_inactive;
 };
 
 struct pglist_data {
@@ -75,5 +81,9 @@ void refresh_zone_watermarks(void);
 struct page *pfn_to_page(uint32_t pfn);
 uint32_t page_to_pfn(struct page *page);
 struct zone *pfn_to_zone(uint32_t pfn);
+
+/* Minimal LRU primitives (Linux mapping: inactive LRU + isolation). */
+void lru_add_inactive(struct page *pg);
+void lru_del(struct page *pg);
 
 #endif

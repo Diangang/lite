@@ -3,8 +3,22 @@
 #include "linux/bio.h"
 #include "linux/blk_queue.h"
 #include "linux/blk_request.h"
+#include "linux/device.h"
+#include "linux/init.h"
 #include "linux/libc.h"
 #include "linux/slab.h"
+
+static struct class sd_disk_class;
+
+static int sd_disk_class_init(void)
+{
+    memset(&sd_disk_class, 0, sizeof(sd_disk_class));
+    sd_disk_class.name = "scsi_disk";
+    INIT_LIST_HEAD(&sd_disk_class.list);
+    INIT_LIST_HEAD(&sd_disk_class.devices);
+    return class_register(&sd_disk_class);
+}
+subsys_initcall(sd_disk_class_init);
 
 static void scsi_disk_name(uint32_t index, char *name)
 {
@@ -41,10 +55,12 @@ static void scsi_disk_request_fn(struct request_queue *q)
         }
         uint32_t offset = (uint32_t)bio->bi_sector * 512u + bio->bi_byte_offset;
         if (offset + bio->bi_size > bdev->size || sdkp->device->sector_size == 0) {
+            bdput(bdev);
             blk_complete_request(q, rq, -1);
             continue;
         }
         if ((offset % sdkp->device->sector_size) != 0 || (bio->bi_size % sdkp->device->sector_size) != 0) {
+            bdput(bdev);
             blk_complete_request(q, rq, -1);
             continue;
         }
@@ -54,10 +70,12 @@ static void scsi_disk_request_fn(struct request_queue *q)
         int ret = is_write ? scsi_write10(sdkp->device, lba, blocks, bio->bi_buf, bio->bi_size)
                            : scsi_read10(sdkp->device, lba, blocks, bio->bi_buf, bio->bi_size);
         if (ret != 0) {
+            bdput(bdev);
             blk_complete_request(q, rq, -1);
             continue;
         }
         block_account_io(bdev, is_write, bio->bi_size);
+        bdput(bdev);
         blk_complete_request(q, rq, 0);
     }
 }
@@ -105,6 +123,7 @@ int scsi_add_disk(struct scsi_disk *sdkp)
         bdev->size = sdkp->disk->capacity * 512ULL;
         bdev->block_size = sdkp->device->sector_size;
         bdev->private_data = sdkp;
+        bdput(bdev);
     }
     return 0;
 }

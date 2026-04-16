@@ -22,6 +22,7 @@
 #include "linux/binfmts.h"
 #include "linux/device.h"
 #include "linux/params.h"
+#include "linux/virtio_scsi.h"
 #include "linux/printk.h"
 #include "linux/tty.h"
 #include "linux/version.h"
@@ -41,8 +42,9 @@ struct multiboot_info boot_mbi;
 static void do_initcalls(void)
 {
     initcall_t *call;
-    for (call = __initcall_start; call < __initcall_end; call++)
+    for (call = __initcall_start; call < __initcall_end; call++) {
         (*call)();
+    }
 }
 
 /* do_basic_setup: Perform basic setup. */
@@ -72,6 +74,7 @@ static void prepare_namespace(void)
     vfs_mount_fs("/proc", "proc");
     vfs_mount_fs("/dev", "devtmpfs");
     sysfs_mount();
+    virtio_scsi_late_probe();
     /*
      * Linux-style: mount a filesystem on a block device node.
      * Prefer NVMe when present (QEMU -device nvme), otherwise fall back to ramdisk.

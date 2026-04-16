@@ -72,6 +72,8 @@ struct inode *blockdev_inode_create(struct block_device *bdev)
         bdev->inode->i_size = (uint32_t)bdev->size;
         return bdev->inode;
     }
+    /* Keep bdev alive as long as the inode exists (Linux: bd_inode lifetime). */
+    bdgrab(bdev);
     struct inode *inode = (struct inode *)kmalloc(sizeof(struct inode));
     if (!inode)
         return NULL;
@@ -94,4 +96,21 @@ struct inode *blockdev_inode_create(struct block_device *bdev)
     inode->i_mapping = mapping;
     bdev->inode = inode;
     return inode;
+}
+
+void blockdev_inode_destroy(struct block_device *bdev)
+{
+    if (!bdev || !bdev->inode)
+        return;
+    struct inode *inode = bdev->inode;
+    bdev->inode = NULL;
+    if (inode->i_mapping) {
+        /* Drop any cached pages to avoid leaking physical pages. */
+        truncate_inode_pages(inode->i_mapping, 0);
+        address_space_release(inode->i_mapping);
+        kfree(inode->i_mapping);
+        inode->i_mapping = NULL;
+    }
+    kfree(inode);
+    bdput(bdev);
 }

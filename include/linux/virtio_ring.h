@@ -6,6 +6,10 @@
 #define VRING_DESC_F_NEXT  1
 #define VRING_DESC_F_WRITE 2
 
+/* Linux mapping: include/uapi/linux/virtio_ring.h */
+#define VRING_AVAIL_F_NO_INTERRUPT 1
+#define VRING_USED_F_NO_NOTIFY     1
+
 struct vring_desc {
     uint64_t addr;
     uint32_t len;

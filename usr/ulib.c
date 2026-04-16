@@ -1,4 +1,5 @@
 #include "ulib.h"
+#include "asm/unistd.h"
 
 /* syscall0: Implement syscall0. */
 int syscall0(int sys_num) {
@@ -167,4 +168,23 @@ void print_int(int val) {
     }
     buf[i] = 0;
     print(buf);
+}
+
+void *memmove(void *dest, const void *src, int n)
+{
+    unsigned char *d = (unsigned char *)dest;
+    const unsigned char *s = (const unsigned char *)src;
+
+    if (n <= 0 || d == s)
+        return dest;
+    if (d < s) {
+        while (n--)
+            *d++ = *s++;
+        return dest;
+    }
+    d += n;
+    s += n;
+    while (n--)
+        *(--d) = *(--s);
+    return dest;
 }

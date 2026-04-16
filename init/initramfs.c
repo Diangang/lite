@@ -87,6 +87,16 @@ void populate_rootfs(void) {
 
             if ((mode & 0170000) == 0040000) { // Directory
                 vfs_mkdir(abs_path);
+            } else if ((mode & 0170000) == 0120000) { // Symlink
+                char target[256];
+                if (filesize >= sizeof(target)) {
+                    printf("Symlink target too long: %s\n", abs_path);
+                } else {
+                    memcpy(target, data, filesize);
+                    target[filesize] = 0;
+                    if (vfs_symlink(target, abs_path) != 0)
+                        printf("Failed to create symlink: %s -> %s\n", abs_path, target);
+                }
             } else if ((mode & 0170000) == 0100000) { // Regular file
                 struct file *f = vfs_open(abs_path, VFS_O_CREAT | 0x0001); // 0x0001 is VFS_O_WRONLY in file.h? Wait, let's check VFS_O_WRONLY.
                 if (f) {

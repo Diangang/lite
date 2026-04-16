@@ -1,13 +1,11 @@
 #include "linux/libc.h"
-#include "linux/types.h"
 #include "linux/init.h"
 #include "linux/page_alloc.h"
-#include "linux/pci.h"
 #include "linux/slab.h"
 #include "linux/timer.h"
 #include "linux/time.h"
+#include "linux/virtio.h"
 #include "linux/virtio_ids.h"
-#include "linux/virtio_pci.h"
 #include "linux/virtio_ring.h"
 #include "linux/virtio_scsi.h"
 #include "linux/blk_queue.h"
@@ -16,131 +14,33 @@
 #include "scsi/scsi.h"
 #include "scsi/scsi_host.h"
 
-#define PCI_VENDOR_ID_QUMRANET 0x1AF4
-#define PCI_DEVICE_ID_VIRTIO_SCSI_LEGACY 0x1004
-#define PCI_DEVICE_ID_VIRTIO_SCSI_MODERN 0x1048
-
 #define VIRTIO_SCSI_QUEUE_CTRL  0
 #define VIRTIO_SCSI_QUEUE_EVENT 1
 #define VIRTIO_SCSI_QUEUE_REQ   2
 
-struct virtio_scsi_vq {
-    uint16_t index;
-    uint16_t qnum;
-    uint16_t last_used_idx;
-    uint32_t ring_phys;
-    void *ring_virt;
-    unsigned int ring_order;
-    struct vring vr;
-    uint32_t evt_phys;
-    struct virtio_scsi_event *evt;
+struct virtio_scsi_target_state {
+    struct virtqueue *req_vq;
 };
 
 struct virtio_scsi {
-    struct pci_dev *pdev;
-    uint16_t ioaddr;
+    struct virtio_device *vdev;
     struct virtio_scsi_config cfg;
-    struct virtio_scsi_vq ctrl_vq;
-    struct virtio_scsi_vq event_vq;
-    struct virtio_scsi_vq req_vq;
+    struct virtqueue *ctrl_vq;
+    struct virtqueue *event_vq;
+    struct virtqueue *req_vq;
+    uint32_t event_phys;
+    struct virtio_scsi_event *event;
     struct Scsi_Host *host;
 };
 
-static void virtscsi_remove(struct pci_dev *pdev);
-
-static uint16_t virtio_pci_read16(struct virtio_scsi *vscsi, uint16_t off)
-{
-    return inw((uint16_t)(vscsi->ioaddr + off));
-}
-
-static uint32_t virtio_pci_read32(struct virtio_scsi *vscsi, uint16_t off)
-{
-    return inl((uint16_t)(vscsi->ioaddr + off));
-}
-
-static void virtio_pci_write8(struct virtio_scsi *vscsi, uint16_t off, uint8_t v)
-{
-    outb((uint16_t)(vscsi->ioaddr + off), v);
-}
-
-static void virtio_pci_write16(struct virtio_scsi *vscsi, uint16_t off, uint16_t v)
-{
-    outw((uint16_t)(vscsi->ioaddr + off), v);
-}
-
-static void virtio_pci_write32(struct virtio_scsi *vscsi, uint16_t off, uint32_t v)
-{
-    outl((uint16_t)(vscsi->ioaddr + off), v);
-}
-
-static unsigned int virtio_order_for_size(uint32_t size)
-{
-    unsigned int order = 0;
-    uint32_t bytes = 4096;
-    while (bytes < size) {
-        bytes <<= 1;
-        order++;
-    }
-    return order;
-}
+static void virtscsi_remove(struct virtio_device *vdev);
 
 static int virtio_scsi_read_config(struct virtio_scsi *vscsi)
 {
-    uint16_t off = VIRTIO_PCI_CONFIG_OFF(0);
-    vscsi->cfg.num_queues = virtio_pci_read32(vscsi, off + 0);
-    vscsi->cfg.seg_max = virtio_pci_read32(vscsi, off + 4);
-    vscsi->cfg.max_sectors = virtio_pci_read32(vscsi, off + 8);
-    vscsi->cfg.cmd_per_lun = virtio_pci_read32(vscsi, off + 12);
-    vscsi->cfg.event_info_size = virtio_pci_read32(vscsi, off + 16);
-    vscsi->cfg.sense_size = virtio_pci_read32(vscsi, off + 20);
-    vscsi->cfg.cdb_size = virtio_pci_read32(vscsi, off + 24);
-    vscsi->cfg.max_channel = virtio_pci_read16(vscsi, off + 28);
-    vscsi->cfg.max_target = virtio_pci_read16(vscsi, off + 30);
-    vscsi->cfg.max_lun = virtio_pci_read32(vscsi, off + 32);
-    return 0;
-}
-
-static int virtio_scsi_setup_vq(struct virtio_scsi *vscsi, struct virtio_scsi_vq *vq, uint16_t index)
-{
-    if (!vscsi || !vq)
+    if (!vscsi || !vscsi->vdev || !vscsi->vdev->config || !vscsi->vdev->config->get_config)
         return -1;
-    memset(vq, 0, sizeof(*vq));
-    vq->index = index;
-    virtio_pci_write16(vscsi, VIRTIO_PCI_QUEUE_SEL, index);
-    vq->qnum = virtio_pci_read16(vscsi, VIRTIO_PCI_QUEUE_NUM);
-    if (vq->qnum == 0)
-        return -1;
-    uint32_t ring_size = vring_size(vq->qnum, VIRTIO_PCI_VRING_ALIGN);
-    vq->ring_order = virtio_order_for_size(ring_size);
-    void *phys = alloc_pages(GFP_KERNEL, vq->ring_order);
-    if (!phys)
-        return -1;
-    vq->ring_phys = (uint32_t)phys;
-    vq->ring_virt = memlayout_directmap_phys_to_virt(vq->ring_phys);
-    memset(vq->ring_virt, 0, 4096u << vq->ring_order);
-    vring_init(&vq->vr, vq->qnum, vq->ring_virt, VIRTIO_PCI_VRING_ALIGN);
-    virtio_pci_write32(vscsi, VIRTIO_PCI_QUEUE_PFN, vq->ring_phys >> VIRTIO_PCI_QUEUE_ADDR_SHIFT);
-    return 0;
-}
-
-static int virtio_scsi_prime_eventq(struct virtio_scsi *vscsi)
-{
-    struct virtio_scsi_vq *vq = &vscsi->event_vq;
-    void *evt_phys = alloc_page(GFP_KERNEL);
-    if (!evt_phys)
-        return -1;
-    vq->evt_phys = (uint32_t)evt_phys;
-    vq->evt = (struct virtio_scsi_event *)memlayout_directmap_phys_to_virt(vq->evt_phys);
-    memset(vq->evt, 0, sizeof(*vq->evt));
-    vq->vr.desc[0].addr = vq->evt_phys;
-    vq->vr.desc[0].len = sizeof(*vq->evt);
-    vq->vr.desc[0].flags = VRING_DESC_F_WRITE;
-    vq->vr.desc[0].next = 0;
-    vq->vr.avail->ring[0] = 0;
-    __asm__ volatile ("" ::: "memory");
-    vq->vr.avail->idx = 1;
-    virtio_pci_write16(vscsi, VIRTIO_PCI_QUEUE_NOTIFY, vq->index);
-    return 0;
+    memset(&vscsi->cfg, 0, sizeof(vscsi->cfg));
+    return vscsi->vdev->config->get_config(vscsi->vdev, 0, &vscsi->cfg, sizeof(vscsi->cfg));
 }
 
 static void virtio_scsi_init_lun(struct virtio_scsi_cmd_req *req, struct scsi_device *sdev)
@@ -153,83 +53,113 @@ static void virtio_scsi_init_lun(struct virtio_scsi_cmd_req *req, struct scsi_de
     req->task_attr = VIRTIO_SCSI_S_SIMPLE;
 }
 
-static int virtio_scsi_submit(struct virtio_scsi *vscsi, struct scsi_device *sdev,
-                              const uint8_t *cdb, uint32_t cdb_len,
-                              void *data, uint32_t data_len, int dir,
-                              uint8_t *sense, uint32_t *sense_len, uint8_t *status)
+static int virtio_scsi_submit(struct virtio_scsi *vscsi, struct scsi_cmnd *sc)
 {
-    if (!vscsi || !sdev || !cdb || cdb_len > VIRTIO_SCSI_CDB_DEFAULT_SIZE)
+    if (!vscsi || !sc || !sc->device || sc->cmd_len > VIRTIO_SCSI_CDB_DEFAULT_SIZE)
         return -1;
-    struct virtio_scsi_vq *vq = &vscsi->req_vq;
-    struct virtio_scsi_cmd_req req;
-    struct virtio_scsi_cmd_resp resp;
-    memset(&resp, 0, sizeof(resp));
-    virtio_scsi_init_lun(&req, sdev);
-    memcpy(req.cdb, cdb, cdb_len);
-
-    uint16_t desc_count = 0;
-    vq->vr.desc[desc_count].addr = virt_to_phys(&req);
-    vq->vr.desc[desc_count].len = sizeof(req);
-    vq->vr.desc[desc_count].flags = VRING_DESC_F_NEXT;
-    vq->vr.desc[desc_count].next = desc_count + 1;
-    desc_count++;
-
-    if (data && data_len && dir == SCSI_DATA_WRITE) {
-        vq->vr.desc[desc_count].addr = virt_to_phys(data);
-        vq->vr.desc[desc_count].len = data_len;
-        vq->vr.desc[desc_count].flags = VRING_DESC_F_NEXT;
-        vq->vr.desc[desc_count].next = desc_count + 1;
-        desc_count++;
+    struct scsi_device *sdev = sc->device;
+    struct scsi_target *starget = scsi_target(sdev);
+    struct virtio_scsi_target_state *tgt = starget ? (struct virtio_scsi_target_state *)starget->hostdata : NULL;
+    struct virtqueue *vq = tgt && tgt->req_vq ? tgt->req_vq : vscsi->req_vq;
+    /*
+     * DMA safety: avoid placing request/response on the kernel stack.
+     * Linux allocates request structures from heap/slab and maps them for DMA.
+     * Lite uses virt_to_phys() + direct DMA, so use kmalloc-backed buffers.
+     */
+    struct virtio_scsi_cmd_req *req = (struct virtio_scsi_cmd_req *)kmalloc(sizeof(*req));
+    struct virtio_scsi_cmd_resp *resp = (struct virtio_scsi_cmd_resp *)kmalloc(sizeof(*resp));
+    if (!req || !resp) {
+        kfree(req);
+        kfree(resp);
+        return -1;
     }
+    memset(resp, 0, sizeof(*resp));
+    virtio_scsi_init_lun(req, sdev);
+    memcpy(req->cdb, sc->cmnd, sc->cmd_len);
 
-    vq->vr.desc[desc_count].addr = virt_to_phys(&resp);
-    vq->vr.desc[desc_count].len = sizeof(resp);
-    vq->vr.desc[desc_count].flags = VRING_DESC_F_WRITE | ((data && data_len && dir == SCSI_DATA_READ) ? VRING_DESC_F_NEXT : 0);
-    vq->vr.desc[desc_count].next = (data && data_len && dir == SCSI_DATA_READ) ? (desc_count + 1) : 0;
-    desc_count++;
+    struct virtqueue_buf bufs[4];
+    uint16_t nbufs = 0;
+    bufs[nbufs++] = (struct virtqueue_buf){ .addr = virt_to_phys(req), .len = sizeof(*req), .write = 0 };
+    if (sc->request_buffer && sc->request_bufflen && sc->sc_data_direction == DMA_TO_DEVICE)
+        bufs[nbufs++] = (struct virtqueue_buf){ .addr = virt_to_phys(sc->request_buffer),
+                                                .len = sc->request_bufflen, .write = 0 };
+    bufs[nbufs++] = (struct virtqueue_buf){ .addr = virt_to_phys(resp), .len = sizeof(*resp), .write = 1 };
+    if (sc->request_buffer && sc->request_bufflen && sc->sc_data_direction == DMA_FROM_DEVICE)
+        bufs[nbufs++] = (struct virtqueue_buf){ .addr = virt_to_phys(sc->request_buffer),
+                                                .len = sc->request_bufflen, .write = 1 };
 
-    if (data && data_len && dir == SCSI_DATA_READ) {
-        vq->vr.desc[desc_count].addr = virt_to_phys(data);
-        vq->vr.desc[desc_count].len = data_len;
-        vq->vr.desc[desc_count].flags = VRING_DESC_F_WRITE;
-        vq->vr.desc[desc_count].next = 0;
+    uint16_t head = 0;
+    if (virtqueue_add_buf(vq, bufs, nbufs, &head) != 0) {
+        kfree(req);
+        kfree(resp);
+        return -1;
     }
-
-    uint16_t slot = vq->vr.avail->idx % vq->qnum;
-    vq->vr.avail->ring[slot] = 0;
-    __asm__ volatile ("" ::: "memory");
-    vq->vr.avail->idx++;
-    virtio_pci_write16(vscsi, VIRTIO_PCI_QUEUE_NOTIFY, vq->index);
-
-    uint32_t start = timer_get_ticks();
-    while (vq->last_used_idx == vq->vr.used->idx) {
-        if (timer_get_ticks() - start > HZ)
-            return -1;
+    virtqueue_kick(vq);
+    uint16_t used_head = 0;
+    if (virtqueue_wait(vq, HZ, &used_head) != 0) {
+        virtqueue_free_chain(vq, head);
+        sc->result = SCSI_STATUS_CHECK_CONDITION;
+        if (sc->scsi_done)
+            sc->scsi_done(sc);
+        kfree(req);
+        kfree(resp);
+        return 0;
     }
-    vq->last_used_idx++;
+    virtqueue_free_chain(vq, used_head);
 
-    if (sense && sense_len) {
-        uint32_t n = resp.sense_len < *sense_len ? resp.sense_len : *sense_len;
-        memcpy(sense, resp.sense, n);
-        *sense_len = n;
+    sc->sense_len = 0;
+    if (resp->sense_len && resp->sense_len <= SCSI_SENSE_BUFFERSIZE) {
+        memcpy(sc->sense_buffer, resp->sense, resp->sense_len);
+        sc->sense_len = resp->sense_len;
+    } else if (resp->sense_len) {
+        memcpy(sc->sense_buffer, resp->sense, SCSI_SENSE_BUFFERSIZE);
+        sc->sense_len = SCSI_SENSE_BUFFERSIZE;
     }
-    if (status)
-        *status = resp.status;
-    return resp.response == VIRTIO_SCSI_S_OK && resp.status == 0 ? 0 : -1;
+    sc->result = resp->status;
+    if (sc->scsi_done)
+        sc->scsi_done(sc);
+    kfree(req);
+    kfree(resp);
+    return 0;
 }
 
-static int virtscsi_queuecommand(struct Scsi_Host *shost, struct scsi_device *sdev,
-                                 const uint8_t *cdb, uint32_t cdb_len,
-                                 void *data, uint32_t data_len, int dir,
-                                 uint8_t *sense, uint32_t *sense_len, uint8_t *status)
+static int virtscsi_queuecommand(struct Scsi_Host *shost, struct scsi_cmnd *sc)
 {
     struct virtio_scsi *vscsi = (struct virtio_scsi *)shost->hostdata;
-    return virtio_scsi_submit(vscsi, sdev, cdb, cdb_len, data, data_len, dir, sense, sense_len, status);
+    return virtio_scsi_submit(vscsi, sc);
+}
+
+static int virtscsi_target_alloc(struct scsi_target *starget)
+{
+    if (!starget || !starget->host)
+        return -1;
+    struct virtio_scsi *vscsi = (struct virtio_scsi *)starget->host->hostdata;
+    if (!vscsi)
+        return -1;
+
+    struct virtio_scsi_target_state *tgt =
+        (struct virtio_scsi_target_state *)kmalloc(sizeof(*tgt));
+    if (!tgt)
+        return -1;
+    memset(tgt, 0, sizeof(*tgt));
+    tgt->req_vq = vscsi->req_vq;
+    starget->hostdata = tgt;
+    return 0;
+}
+
+static void virtscsi_target_destroy(struct scsi_target *starget)
+{
+    if (!starget)
+        return;
+    kfree(starget->hostdata);
+    starget->hostdata = NULL;
 }
 
 static struct scsi_host_template virtscsi_sht = {
     .name = "virtio_scsi",
     .queuecommand = virtscsi_queuecommand,
+    .target_alloc = virtscsi_target_alloc,
+    .target_destroy = virtscsi_target_destroy,
 };
 
 static int virtscsi_scan(struct virtio_scsi *vscsi)
@@ -239,61 +169,77 @@ static int virtscsi_scan(struct virtio_scsi *vscsi)
     vscsi->host = scsi_host_alloc(&virtscsi_sht, vscsi);
     if (!vscsi->host)
         return -1;
-    vscsi->host->max_channel = vscsi->cfg.max_channel;
-    vscsi->host->max_id = (uint16_t)(vscsi->cfg.max_target + 1);
-    vscsi->host->max_lun = vscsi->cfg.max_lun + 1;
-    int ret = scsi_add_host(vscsi->host, &vscsi->pdev->dev);
+    /*
+     * Linux mapping: host->max_id/max_lun describe addressing limits, but Linux
+     * does not naively scan the full cartesian product at boot.
+     *
+     * Lite's scsi_scan_host() is a simple enumerator over [0..max_id) and can
+     * explode if max_target/max_lun are large (virtio-scsi commonly reports
+     * wide ranges). Keep a conservative scan window so boot completes within
+     * smoke timeouts; real device discovery can be expanded later.
+     */
+    vscsi->host->max_channel = 0;
+    vscsi->host->max_id = 1;   /* target 0 only */
+    vscsi->host->max_lun = 1;  /* LUN 0 only */
+    int ret = scsi_add_host(vscsi->host, &vscsi->vdev->dev);
     if (ret != 0)
         return -1;
     return scsi_scan_host(vscsi->host);
 }
 
-static int virtscsi_probe(struct pci_dev *pdev, const struct pci_device_id *id)
+static int virtscsi_probe(struct virtio_device *vdev)
 {
-    (void)id;
-    if (!pdev)
-        return -1;
-    if (!(pdev->bar[0] & 0x1))
+    if (!vdev || !vdev->config)
         return -1;
     struct virtio_scsi *vscsi = (struct virtio_scsi *)kmalloc(sizeof(*vscsi));
     if (!vscsi)
         return -1;
     memset(vscsi, 0, sizeof(*vscsi));
-    vscsi->pdev = pdev;
-    vscsi->ioaddr = (uint16_t)(pdev->bar[0] & ~0x3u);
-    pdev->dev.driver_data = vscsi;
+    vscsi->vdev = vdev;
+    vdev->priv = vscsi;
 
-    virtio_pci_write8(vscsi, VIRTIO_PCI_STATUS, 0);
-    virtio_pci_write8(vscsi, VIRTIO_PCI_STATUS, VIRTIO_CONFIG_S_ACKNOWLEDGE);
-    virtio_pci_write8(vscsi, VIRTIO_PCI_STATUS, VIRTIO_CONFIG_S_ACKNOWLEDGE | VIRTIO_CONFIG_S_DRIVER);
-    virtio_pci_write32(vscsi, VIRTIO_PCI_GUEST_FEATURES, 0);
+    virtio_add_status(vdev, VIRTIO_CONFIG_S_DRIVER);
+    vdev->features = 0;
+    if (virtio_finalize_features(vdev) != 0)
+        goto err_remove;
 
     if (virtio_scsi_read_config(vscsi) != 0)
         goto err_remove;
-    if (virtio_scsi_setup_vq(vscsi, &vscsi->ctrl_vq, VIRTIO_SCSI_QUEUE_CTRL) != 0)
+    if (!vdev->config->find_vqs || !vdev->config->del_vqs)
         goto err_remove;
-    if (virtio_scsi_setup_vq(vscsi, &vscsi->event_vq, VIRTIO_SCSI_QUEUE_EVENT) != 0)
+    struct virtqueue *vqs[3] = { 0 };
+    if (vdev->config->find_vqs(vdev, 3, vqs) != 0)
         goto err_remove;
-    if (virtio_scsi_setup_vq(vscsi, &vscsi->req_vq, VIRTIO_SCSI_QUEUE_REQ) != 0)
-        goto err_remove;
-    if (virtio_scsi_prime_eventq(vscsi) != 0)
-        goto err_remove;
+    vscsi->ctrl_vq = vqs[VIRTIO_SCSI_QUEUE_CTRL];
+    vscsi->event_vq = vqs[VIRTIO_SCSI_QUEUE_EVENT];
+    vscsi->req_vq = vqs[VIRTIO_SCSI_QUEUE_REQ];
 
-    virtio_pci_write8(vscsi, VIRTIO_PCI_STATUS,
-                      VIRTIO_CONFIG_S_ACKNOWLEDGE | VIRTIO_CONFIG_S_DRIVER | VIRTIO_CONFIG_S_DRIVER_OK);
+    void *evt_phys = alloc_page(GFP_KERNEL);
+    if (!evt_phys)
+        goto err_remove;
+    vscsi->event_phys = (uint32_t)evt_phys;
+    vscsi->event = (struct virtio_scsi_event *)memlayout_directmap_phys_to_virt(vscsi->event_phys);
+    memset(vscsi->event, 0, sizeof(*vscsi->event));
+    struct virtqueue_buf evt_buf = { .addr = vscsi->event_phys, .len = sizeof(*vscsi->event), .write = 1 };
+    uint16_t evt_head = 0;
+    if (virtqueue_add_buf(vscsi->event_vq, &evt_buf, 1, &evt_head) != 0)
+        goto err_remove;
+    virtqueue_kick(vscsi->event_vq);
+
+    virtio_device_ready(vdev);
     if (virtscsi_scan(vscsi) == 0)
         return 0;
 
 err_remove:
-    virtscsi_remove(pdev);
+    virtscsi_remove(vdev);
     return -1;
 }
 
-static void virtscsi_remove(struct pci_dev *pdev)
+static void virtscsi_remove(struct virtio_device *vdev)
 {
-    if (!pdev)
+    if (!vdev)
         return;
-    struct virtio_scsi *vscsi = (struct virtio_scsi *)pdev->dev.driver_data;
+    struct virtio_scsi *vscsi = (struct virtio_scsi *)vdev->priv;
     if (!vscsi)
         return;
     scsi_remove_host(vscsi->host);
@@ -301,33 +247,43 @@ static void virtscsi_remove(struct pci_dev *pdev)
         device_unregister(&vscsi->host->shost_gendev);
         kfree(vscsi->host);
     }
-    if (vscsi->event_vq.evt_phys)
-        free_page(vscsi->event_vq.evt_phys);
-    if (vscsi->ctrl_vq.ring_phys)
-        free_pages(vscsi->ctrl_vq.ring_phys, vscsi->ctrl_vq.ring_order);
-    if (vscsi->event_vq.ring_phys)
-        free_pages(vscsi->event_vq.ring_phys, vscsi->event_vq.ring_order);
-    if (vscsi->req_vq.ring_phys)
-        free_pages(vscsi->req_vq.ring_phys, vscsi->req_vq.ring_order);
+    if (vscsi->event_phys)
+        free_page(vscsi->event_phys);
+    if (vdev->config && vdev->config->del_vqs)
+        vdev->config->del_vqs(vdev);
     kfree(vscsi);
-    pdev->dev.driver_data = NULL;
+    vdev->priv = NULL;
 }
 
-static const struct pci_device_id virtscsi_id_table[] = {
-    { .vendor = PCI_VENDOR_ID_QUMRANET, .device = PCI_DEVICE_ID_VIRTIO_SCSI_LEGACY },
-    { .vendor = PCI_VENDOR_ID_QUMRANET, .device = PCI_DEVICE_ID_VIRTIO_SCSI_MODERN },
+static const struct virtio_device_id virtio_scsi_id_table[] = {
+    { .device = VIRTIO_ID_SCSI, .vendor = VIRTIO_DEV_ANY_ID },
     { 0 }
 };
 
-static struct pci_driver virtscsi_pci_driver = {
+static struct virtio_driver virtio_scsi_driver = {
     .name = "virtio_scsi",
-    .id_table = virtscsi_id_table,
+    .driver = { 0 },
+    .id_table = virtio_scsi_id_table,
     .probe = virtscsi_probe,
     .remove = virtscsi_remove,
 };
 
 static int virtio_scsi_init(void)
 {
-    return pci_register_driver(&virtscsi_pci_driver);
+    /*
+     * Linux mapping: transport registration and device probing are distinct.
+     * Lite driver core auto-probes during driver_register(); defer that for
+     * virtio-scsi so initcalls are not blocked by synchronous device scan.
+     */
+    int saved_autoprobe = virtio_bus_type.drivers_autoprobe;
+    virtio_bus_type.drivers_autoprobe = 0;
+    int ret = register_virtio_driver(&virtio_scsi_driver);
+    virtio_bus_type.drivers_autoprobe = saved_autoprobe;
+    return ret;
 }
 module_init(virtio_scsi_init);
+
+int virtio_scsi_late_probe(void)
+{
+    return driver_attach(&virtio_scsi_driver.driver);
+}

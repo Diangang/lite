@@ -87,6 +87,25 @@ static int bus_probe_device_name(struct bus_type *bus, const char *name)
     return -1;
 }
 
+static int bus_probe_device_modalias(struct bus_type *bus, const char *modalias)
+{
+    struct device *dev;
+    char buf[128];
+
+    if (!bus || !modalias || !modalias[0])
+        return -1;
+    list_for_each_entry(dev, &bus->devices, bus_list) {
+        if (device_get_modalias(dev, buf, sizeof(buf)) != 0)
+            continue;
+        if (strcmp(buf, modalias))
+            continue;
+        if (dev->driver)
+            return 0;
+        return device_attach(dev);
+    }
+    return -1;
+}
+
 static uint32_t bus_attr_store_drivers_probe(struct bus_type *bus, struct bus_attribute *attr,
                                              uint32_t offset, uint32_t size, const uint8_t *buffer)
 {
@@ -108,7 +127,9 @@ static uint32_t bus_attr_store_drivers_probe(struct bus_type *bus, struct bus_at
     }
     if (!tmp[0])
         return 0;
-    return (bus_probe_device_name(bus, tmp) == 0) ? size : 0;
+    if (bus_probe_device_name(bus, tmp) == 0)
+        return size;
+    return (bus_probe_device_modalias(bus, tmp) == 0) ? size : 0;
 }
 
 static struct bus_attribute bus_attr_drivers_autoprobe = {

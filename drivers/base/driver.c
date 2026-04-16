@@ -131,6 +131,8 @@ static struct kobj_type ktype_driver = {
 static struct device *deferred_devs[64];
 static uint32_t deferred_devs_count = 0;
 
+static void driver_deferred_probe_remove_index(uint32_t idx);
+
 void driver_deferred_probe_add(struct device *dev)
 {
     if (!dev)
@@ -141,6 +143,20 @@ void driver_deferred_probe_add(struct device *dev)
     }
     if (deferred_devs_count < (uint32_t)(sizeof(deferred_devs) / sizeof(deferred_devs[0])))
         deferred_devs[deferred_devs_count++] = dev;
+}
+
+void driver_deferred_probe_remove(struct device *dev)
+{
+    if (!dev)
+        return;
+    uint32_t i = 0;
+    while (i < deferred_devs_count) {
+        if (deferred_devs[i] == dev) {
+            driver_deferred_probe_remove_index(i);
+            continue;
+        }
+        i++;
+    }
 }
 
 static void driver_deferred_probe_remove_index(uint32_t idx)
@@ -176,15 +192,24 @@ int driver_probe_device(struct device_driver *drv, struct device *dev)
         return -1;
     if (dev->driver == drv)
         return 0;
+    /*
+     * Linux mapping: explicit bind should not silently steal a device from an
+     * already bound driver. Reprobe paths must detach first via
+     * device_release_driver()/device_reprobe().
+     */
     if (dev->driver)
-        device_unbind(dev);
+        return -1;
     if (drv->bus->match && !drv->bus->match(dev, drv))
         return -1;
+
+    /* Hold a driver reference for the duration of the device->driver binding. */
+    kobject_get(&drv->kobj);
     dev->driver = drv;
     int rc = drv->probe ? drv->probe(dev) : 0;
     if (rc != 0) {
         sysfs_remove_link(&dev->kobj, "driver");
         dev->driver = NULL;
+        kobject_put(&drv->kobj);
         if (rc == -EPROBE_DEFER)
             return -EPROBE_DEFER;
         return -1;
@@ -251,6 +276,8 @@ int driver_unregister(struct device_driver *drv)
     sysfs_remove_dir(&drv->kobj);
     kset_remove(&drv->bus->drivers, &drv->kobj);
     drv->kobj.kset = NULL;
+    /* Drop the registration reference (Linux mapping: driver_unregister ends the kobject lifetime). */
+    kobject_put(&drv->kobj);
     return 0;
 }
 

@@ -16,4 +16,8 @@
 #define SCSI_DATA_WRITE    1
 #define SCSI_DATA_READ     2
 
+/* Minimal SCSI status codes (Linux: include/scsi/scsi.h). */
+#define SCSI_STATUS_GOOD             0x00
+#define SCSI_STATUS_CHECK_CONDITION  0x02
+
 #endif

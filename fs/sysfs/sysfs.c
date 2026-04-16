@@ -21,6 +21,7 @@ static struct inode_operations sys_devices_dir_iops;
 static struct inode_operations sys_bus_dir_iops;
 static struct inode_operations sys_class_dir_iops;
 static struct inode_operations sys_class_root_iops;
+static struct inode_operations sys_group_dir_iops;
 
 /* Linux-like internal sysfs node cache. */
 struct sysfs_dirent {
@@ -49,10 +50,34 @@ static struct file_operations sys_devices_dir_ops;
 static struct file_operations sys_bus_dir_ops;
 static struct file_operations sys_class_dir_ops;
 static struct file_operations sys_class_root_ops;
+static struct file_operations sys_group_dir_ops;
 static struct file_operations sys_dead_ops;
 static struct sysfs_dirent *sysfs_get_kobj_sd(struct kobject *kobj);
 static struct inode *sysfs_get_kobj_dir_inode(struct kobject *kobj);
 static struct sysfs_dirent *sysfs_find_attr_dirent(struct kobject *kobj, const struct attribute *attr);
+
+static void sysfs_dentry_refresh_child(struct dentry *parent, const char *name, struct inode *inode)
+{
+    if (!parent || !name || !name[0] || !inode)
+        return;
+    struct dentry *d = d_lookup(parent, name);
+    if (!d)
+        return;
+    d->inode = inode;
+    d->d_flags &= ~DENTRY_NEGATIVE;
+}
+
+static void sysfs_dentry_detach_child(struct dentry *parent, const char *name)
+{
+    if (!parent || !name || !name[0])
+        return;
+    struct dentry *d = d_lookup(parent, name);
+    if (!d)
+        return;
+    vfs_dentry_detach(d);
+    d->inode = NULL;
+    d->d_flags |= DENTRY_NEGATIVE;
+}
 
 static void sysfs_dirent_append_child(struct sysfs_dirent *parent, struct sysfs_dirent *child)
 {
@@ -87,6 +112,8 @@ static struct inode_operations *sysfs_dir_iops_for_fops(struct file_operations *
         return &sys_class_dir_iops;
     if (f_ops == &sys_class_root_ops)
         return &sys_class_root_iops;
+    if (f_ops == &sys_group_dir_ops)
+        return &sys_group_dir_iops;
     return NULL;
 }
 
@@ -129,6 +156,51 @@ static const struct attribute_group **sysfs_device_group_set(struct device *dev,
     default:
         return NULL;
     }
+}
+
+static uint32_t sysfs_group_attr_mode(struct kobject *kobj, const struct attribute_group *grp,
+                                      const struct attribute *attr)
+{
+    if (!grp || !attr)
+        return 0;
+    return grp->is_visible ? grp->is_visible(kobj, attr) : attr->mode;
+}
+
+static int sysfs_group_attr_at(struct kobject *kobj, const struct attribute_group *grp,
+                               uint32_t index, const struct attribute **out_attr)
+{
+    uint32_t i = 0;
+    if (!kobj || !grp || !out_attr || !grp->attrs)
+        return -1;
+    const struct attribute **a = grp->attrs;
+    while (a && *a) {
+        uint32_t mode = sysfs_group_attr_mode(kobj, grp, *a);
+        if (mode) {
+            if (i == index) {
+                *out_attr = *a;
+                return 0;
+            }
+            i++;
+        }
+        a++;
+    }
+    return -1;
+}
+
+static const struct attribute *sysfs_group_find_attr(struct kobject *kobj,
+                                                     const struct attribute_group *grp,
+                                                     const char *name)
+{
+    uint32_t i = 0;
+    const struct attribute *attr;
+    if (!kobj || !grp || !name)
+        return NULL;
+    while (sysfs_group_attr_at(kobj, grp, i, &attr) == 0) {
+        if (attr && attr->name && !strcmp(attr->name, name))
+            return attr;
+        i++;
+    }
+    return NULL;
 }
 
 static uint32_t sysfs_kobj_attr_mode(struct kobject *kobj, const struct attribute *attr)
@@ -242,6 +314,7 @@ static int sysfs_materialize_named_dir(struct sysfs_dirent *parent_sd, struct sy
     if (!child)
         return -1;
     child->inode = &child_sd->inode;
+    child->d_flags &= ~DENTRY_NEGATIVE;
     child_sd->dentry = child;
     return 0;
 }
@@ -380,6 +453,79 @@ static struct inode *sysfs_get_kobj_attr_inode(struct kobject *kobj, const struc
     return &nd->inode;
 }
 
+static int sysfs_create_named_dir(struct kobject *kobj, const char *name, uint32_t mode,
+                                  struct file_operations *f_ops, void *private_data)
+{
+    struct sysfs_dirent *sd = sysfs_get_kobj_sd(kobj);
+    if (!sd || !name || !name[0] || !f_ops)
+        return -1;
+
+    struct sysfs_dirent *cur = sysfs_find_named_dirent(kobj, name);
+    if (cur) {
+        cur->inode.flags = FS_DIRECTORY;
+        cur->inode.i_size = 0;
+        cur->inode.i_op = sysfs_dir_iops_for_fops(f_ops);
+        cur->inode.f_ops = f_ops;
+        cur->inode.impl = (uintptr_t)kobj;
+        cur->inode.i_mode = mode;
+        cur->inode.private_data = private_data;
+        /*
+         * If the parent dir is not materialized yet, just update/create the
+         * dirent and let sysfs_create_dir()->sysfs_materialize_kobj_subdirs()
+         * materialize it later.
+         */
+        if (sd->dentry && sysfs_materialize_named_dir(sd, cur) != 0)
+            return -1;
+        return 0;
+    }
+
+    struct sysfs_dirent *nd = (struct sysfs_dirent *)kmalloc(sizeof(*nd));
+    if (!nd)
+        return -1;
+    memset(nd, 0, sizeof(*nd));
+    nd->kobj = kobj;
+    {
+        uint32_t n = (uint32_t)strlen(name);
+        if (n >= sizeof(nd->name))
+            n = sizeof(nd->name) - 1;
+        memcpy(nd->name, name, n);
+        nd->name[n] = 0;
+    }
+    sysfs_init_inode(&nd->inode, FS_DIRECTORY, sysfs_alloc_ino(), 0, f_ops, (uintptr_t)kobj, mode);
+    nd->inode.private_data = private_data;
+    sysfs_dirent_append_child(sd, nd);
+    if (sd->dentry && sysfs_materialize_named_dir(sd, nd) != 0)
+        return -1;
+    return 0;
+}
+
+static void sysfs_ensure_named_group_dirs(struct kobject *kobj)
+{
+    if (!kobj)
+        return;
+
+    if (kobj->ktype && kobj->ktype->default_groups) {
+        const struct attribute_group **g = kobj->ktype->default_groups;
+        while (g && *g) {
+            const struct attribute_group *grp = *g;
+            if (grp && grp->name && grp->name[0] && grp->attrs)
+                (void)sysfs_create_named_dir(kobj, grp->name, 0555, &sys_group_dir_ops, (void *)grp);
+            g++;
+        }
+    }
+
+    struct device *dev = sysfs_kobj_device(kobj);
+    for (uint32_t set = 0; set < 4; set++) {
+        const struct attribute_group **dg = sysfs_device_group_set(dev, set);
+        while (dg && *dg) {
+            const struct attribute_group *grp = *dg;
+            if (grp && grp->name && grp->name[0] && grp->attrs)
+                (void)sysfs_create_named_dir(kobj, grp->name, 0555, &sys_group_dir_ops, (void *)grp);
+            dg++;
+        }
+    }
+}
+
 static struct file_operations *sysfs_subdir_fops(struct kobject *kobj, const char *name)
 {
     struct kobject *cur;
@@ -400,42 +546,7 @@ static struct file_operations *sysfs_subdir_fops(struct kobject *kobj, const cha
 int sysfs_create_subdir(struct kobject *kobj, const char *name, uint32_t mode)
 {
     struct file_operations *f_ops = sysfs_subdir_fops(kobj, name);
-    struct sysfs_dirent *sd = sysfs_get_kobj_sd(kobj);
-    if (!sd || !name || !name[0] || !f_ops)
-        return -1;
-
-    struct sysfs_dirent *cur = sysfs_find_named_dirent(kobj, name);
-    if (cur) {
-        cur->inode.flags = FS_DIRECTORY;
-        cur->inode.i_size = 0;
-        cur->inode.i_op = sysfs_dir_iops_for_fops(f_ops);
-        cur->inode.f_ops = f_ops;
-        cur->inode.impl = (uintptr_t)kobj;
-        cur->inode.i_mode = mode;
-        cur->inode.private_data = NULL;
-        if (sysfs_materialize_named_dir(sd, cur) != 0)
-            return -1;
-        return 0;
-    }
-
-    struct sysfs_dirent *nd = (struct sysfs_dirent *)kmalloc(sizeof(*nd));
-    if (!nd)
-        return -1;
-    memset(nd, 0, sizeof(*nd));
-    nd->kobj = kobj;
-    nd->attr = NULL;
-    {
-        uint32_t n = (uint32_t)strlen(name);
-        if (n >= sizeof(nd->name))
-            n = sizeof(nd->name) - 1;
-        memcpy(nd->name, name, n);
-        nd->name[n] = 0;
-    }
-    sysfs_init_inode(&nd->inode, FS_DIRECTORY, sysfs_alloc_ino(), 0, f_ops, (uintptr_t)kobj, mode);
-    sysfs_dirent_append_child(sd, nd);
-    if (sysfs_materialize_named_dir(sd, nd) != 0)
-        return -1;
-    return 0;
+    return sysfs_create_named_dir(kobj, name, mode, f_ops, NULL);
 }
 
 void sysfs_remove_subdir(struct kobject *kobj, const char *name)
@@ -678,12 +789,20 @@ static struct inode *sysfs_find_kobj_link_inode(struct kobject *kobj, const char
 
 int sysfs_create_link(struct kobject *kobj, struct kobject *target, const char *name)
 {
-    char path[256];
+    char to_abs[256];
     if (!kobj || !target || !name || !name[0])
         return -1;
-    if (sysfs_kobject_path(target, path, sizeof(path)) != 0)
+    if (sysfs_kobject_path(target, to_abs, sizeof(to_abs)) != 0)
         return -1;
-    return sysfs_set_kobj_link_inode(kobj, name, path) ? 0 : -1;
+
+    /* Keep sysfs link targets absolute to preserve existing reachability. */
+    struct inode *inode = sysfs_set_kobj_link_inode(kobj, name, to_abs);
+    if (!inode)
+        return -1;
+    struct sysfs_dirent *sd = sysfs_get_kobj_sd(kobj);
+    if (sd && sd->dentry)
+        sysfs_dentry_refresh_child(sd->dentry, name, inode);
+    return 0;
 }
 
 int sysfs_create_file(struct kobject *kobj, const struct attribute *attr)
@@ -704,6 +823,9 @@ int sysfs_create_file(struct kobject *kobj, const struct attribute *attr)
     inode->private_data = (void *)attr;
     inode->f_ops = &sys_kobj_attr_ops;
     inode->i_mode = attr->mode;
+    struct sysfs_dirent *sd = sysfs_get_kobj_sd(kobj);
+    if (sd && sd->dentry)
+        sysfs_dentry_refresh_child(sd->dentry, attr->name, inode);
     return 0;
 }
 
@@ -721,6 +843,9 @@ void sysfs_remove_file(struct kobject *kobj, const struct attribute *attr)
         vfs_dentry_detach(ad->dentry);
         ad->dentry = NULL;
     }
+    struct sysfs_dirent *sd = sysfs_get_kobj_sd(kobj);
+    if (sd && sd->dentry && attr->name)
+        sysfs_dentry_detach_child(sd->dentry, attr->name);
     ad->inode.impl = (uintptr_t)0;
     ad->inode.private_data = NULL;
     ad->inode.f_ops = &sys_dead_ops;
@@ -729,6 +854,9 @@ void sysfs_remove_file(struct kobject *kobj, const struct attribute *attr)
 void sysfs_remove_link(struct kobject *kobj, const char *name)
 {
     (void)sysfs_set_kobj_link_inode(kobj, name, NULL);
+    struct sysfs_dirent *sd = sysfs_get_kobj_sd(kobj);
+    if (sd && sd->dentry)
+        sysfs_dentry_detach_child(sd->dentry, name);
 }
 
 int sysfs_create_dir(struct kobject *kobj)
@@ -736,6 +864,7 @@ int sysfs_create_dir(struct kobject *kobj)
     struct sysfs_dirent *sd = sysfs_get_kobj_sd(kobj);
     if (!sd)
         return -1;
+    sysfs_ensure_named_group_dirs(kobj);
     if (sd->dentry)
         return sysfs_materialize_kobj_subdirs(kobj);
 
@@ -760,6 +889,7 @@ int sysfs_create_dir(struct kobject *kobj)
     if (!child)
         return -1;
     child->inode = &sd->inode;
+    child->d_flags &= ~DENTRY_NEGATIVE;
     sd->dentry = child;
     return sysfs_materialize_kobj_subdirs(kobj);
 }
@@ -825,11 +955,35 @@ static uint32_t sys_write_kobj_attr(struct inode *node, uint32_t offset, uint32_
 {
     if (!node || !node->private_data)
         return 0;
+    if (!(node->i_mode & 0222))
+        return 0;
+    /*
+     * Linux mapping: sysfs attribute store is not a pwrite() interface; writes
+     * are treated as full-buffer updates starting at offset 0.
+     */
+    if (offset != 0)
+        return 0;
     struct kobject *kobj = (struct kobject *)(uintptr_t)node->impl;
     const struct attribute *attr = (const struct attribute *)node->private_data;
     if (!kobj || !kobj->ktype || !kobj->ktype->sysfs_ops || !kobj->ktype->sysfs_ops->store)
         return 0;
-    return kobj->ktype->sysfs_ops->store(kobj, attr, offset, size, buffer);
+
+    if (size > 4096)
+        size = 4096;
+    char *tmp = (char *)kmalloc(size + 1);
+    if (!tmp)
+        return 0;
+    memcpy(tmp, buffer, size);
+    tmp[size] = 0;
+
+    while (size > 0 && (tmp[size - 1] == '\n' || tmp[size - 1] == '\r')) {
+        tmp[size - 1] = 0;
+        size--;
+    }
+
+    uint32_t ret = kobj->ktype->sysfs_ops->store(kobj, attr, 0, size, (const uint8_t *)tmp);
+    kfree(tmp);
+    return ret;
 }
 
 static struct file_operations sys_kobj_attr_ops = {
@@ -852,6 +1006,10 @@ static int sysfs_kobj_attr_at(struct kobject *kobj, uint32_t index, const struct
         while (g && *g) {
             const struct attribute_group *grp = *g;
             if (grp && grp->attrs) {
+                if (grp->name && grp->name[0]) {
+                    g++;
+                    continue;
+                }
                 const struct attribute **a = grp->attrs;
                 while (a && *a) {
                     uint32_t mode = grp->is_visible ? grp->is_visible(kobj, *a) : (*a)->mode;
@@ -906,6 +1064,10 @@ static int sysfs_kobj_attr_at(struct kobject *kobj, uint32_t index, const struct
         while (dg && *dg) {
             const struct attribute_group *grp = *dg;
             if (grp && grp->attrs) {
+                if (grp->name && grp->name[0]) {
+                    dg++;
+                    continue;
+                }
                 const struct attribute **a = grp->attrs;
                 while (a && *a) {
                     uint32_t mode = grp->is_visible ? grp->is_visible(kobj, *a) : (*a)->mode;
@@ -947,6 +1109,34 @@ static const struct attribute *sysfs_kobj_find_attr(struct kobject *kobj, const 
         i++;
     }
     return NULL;
+}
+
+static struct dirent *sys_group_dir_readdir(struct file *file, uint32_t index)
+{
+    struct inode *node = file->dentry->inode;
+    struct kobject *kobj = node ? (struct kobject *)(uintptr_t)node->impl : NULL;
+    const struct attribute_group *grp = node ? (const struct attribute_group *)node->private_data : NULL;
+    if (!kobj || !grp)
+        return NULL;
+    const struct attribute *attr = NULL;
+    if (sysfs_group_attr_at(kobj, grp, index, &attr) != 0 || !attr || !attr->name)
+        return NULL;
+    struct inode *ino = sysfs_get_kobj_attr_inode(kobj, attr);
+    if (!ino)
+        return NULL;
+    strcpy(sys_dirent.name, attr->name);
+    sys_dirent.ino = ino->i_ino;
+    return &sys_dirent;
+}
+
+static struct inode *sys_group_dir_finddir(struct inode *node, const char *name)
+{
+    struct kobject *kobj = node ? (struct kobject *)(uintptr_t)node->impl : NULL;
+    const struct attribute_group *grp = node ? (const struct attribute_group *)node->private_data : NULL;
+    if (!kobj || !grp || !name)
+        return NULL;
+    const struct attribute *attr = sysfs_group_find_attr(kobj, grp, name);
+    return attr ? sysfs_get_kobj_attr_inode(kobj, attr) : NULL;
 }
 
 static struct dirent *sys_kobj_dir_readdir(struct file *file, uint32_t index)
@@ -1074,6 +1264,23 @@ static struct file_operations sys_kobj_dir_ops = {
 
 static struct inode_operations sys_kobj_dir_iops = {
     .lookup = sys_kobj_dir_finddir,
+    .create = NULL,
+    .mkdir = NULL,
+    .unlink = NULL,
+    .rmdir = NULL
+};
+
+static struct file_operations sys_group_dir_ops = {
+    .read = NULL,
+    .write = NULL,
+    .open = NULL,
+    .close = NULL,
+    .readdir = sys_group_dir_readdir,
+    .ioctl = NULL
+};
+
+static struct inode_operations sys_group_dir_iops = {
+    .lookup = sys_group_dir_finddir,
     .create = NULL,
     .mkdir = NULL,
     .unlink = NULL,

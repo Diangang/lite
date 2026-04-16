@@ -15,6 +15,9 @@ struct request_queue {
     struct request *tail;
     void *queuedata;
     int running; /* prevent recursive request_fn entry */
+    unsigned int nr_requests; /* Linux mapping: queue depth limit */
+    unsigned int queued;      /* pending requests linked on q->head */
+    unsigned int in_flight;   /* requests fetched by driver, not yet completed */
 };
 
 /* Linux-aligned helpers (single-queue, non-blk-mq). */

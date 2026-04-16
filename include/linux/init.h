@@ -1,6 +1,8 @@
 #ifndef LINUX_INIT_H
 #define LINUX_INIT_H
 
+#include <stdint.h>
+
 typedef int (*initcall_t)(void);
 
 #define __stringify_1(x) #x

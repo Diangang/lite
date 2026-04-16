@@ -33,6 +33,7 @@ struct inode_operations {
     struct inode *(*lookup)(struct inode *dir, const char *name);
     struct inode *(*create)(struct inode *dir, const char *name);
     struct inode *(*mkdir)(struct inode *dir, const char *name);
+    struct inode *(*symlink)(struct inode *dir, const char *name, const char *target);
     int (*unlink)(struct dentry *dir_dentry, const char *name);
     int (*rmdir)(struct dentry *dir_dentry, const char *name);
 };
@@ -65,11 +66,16 @@ struct dentry {
     struct dentry *parent;
     struct dentry *children;
     struct dentry *sibling;
+    struct dentry *hash_next;
     struct inode *inode;
     struct vfsmount *mount;
     uint32_t refcount;
+    uint32_t d_flags;
     void *cache;
 };
+
+/* Minimal dentry flags (Linux mapping: DCACHE_* flags). */
+#define DENTRY_NEGATIVE 0x00000001u
 
 struct file_system_type {
     const char *name;
@@ -90,6 +96,13 @@ struct vfsmount {
     const char *path;
     struct super_block *sb;
     struct dentry *root;
+    /*
+     * Linux mapping:
+     * - vfsmount is linked into a mount topology (mountpoint + parent mount).
+     * - Lite keeps a minimal subset to support correct ".." traversal across mounts.
+     */
+    struct dentry *mountpoint;
+    struct vfsmount *parent;
     struct vfsmount *next;
 };
 
@@ -117,6 +130,7 @@ int vfs_mount_fs(const char *path, const char *fs_name);
 int vfs_mount_fs_dev(const char *path, const char *fs_name, const char *dev_name);
 int vfs_chdir(const char *path);
 int vfs_mkdir(const char *path);
+int vfs_symlink(const char *target, const char *linkpath);
 int vfs_unlink(const char *path);
 int vfs_rmdir(const char *path);
 struct inode *vfs_resolve(const char *path);
@@ -138,6 +152,7 @@ struct dirent *readdir_fs(struct file *file, uint32_t index);
 struct inode *finddir_fs(struct inode *node, const char *name);
 struct inode *create_fs(struct inode *dir, const char *name);
 struct inode *mkdir_fs(struct inode *dir, const char *name);
+struct inode *symlink_fs(struct inode *dir, const char *name, const char *target);
 int unlink_fs(struct dentry *dir_dentry, const char *name);
 int rmdir_fs(struct dentry *dir_dentry, const char *name);
 int ioctl_fs(struct inode *node, uint32_t request, uint32_t arg);

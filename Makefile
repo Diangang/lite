@@ -10,19 +10,20 @@ CFLAGS += -Iinclude -Ikernel -Iinit -Ilib -Iarch/x86 -Imm -Ifs -Idrivers -Idrive
 LDFLAGS = -m elf_i386 -T arch/x86/kernel/linker.ld -nostdlib
 
 SOURCES_S = arch/x86/boot/boot.s arch/x86/kernel/interrupt.s
-SOURCES_C = init/main.c init/version.c kernel/syscall.c kernel/fork.c kernel/pid.c kernel/cred.c kernel/sched.c kernel/exit.c kernel/ksysfs.c kernel/panic.c kernel/printk.c kernel/params.c kernel/time.c kernel/signal.c kernel/wait.c
+SOURCES_C = init/main.c init/version.c kernel/syscall.c kernel/fork.c kernel/pid.c kernel/cred.c kernel/sched.c kernel/exit.c kernel/ksysfs.c kernel/panic.c kernel/printk.c kernel/params.c kernel/time.c kernel/clockevents.c kernel/signal.c kernel/wait.c
 SOURCES_C += arch/x86/kernel/gdt.c arch/x86/kernel/idt.c arch/x86/kernel/isr.c arch/x86/kernel/setup.c
 SOURCES_C += arch/x86/kernel/irq.c
-SOURCES_C += mm/bootmem.c mm/mmzone.c mm/mmap.c mm/page_alloc.c mm/vmscan.c mm/memory.c mm/vmalloc.c mm/slab.c mm/filemap.c mm/rmap.c mm/swap.c lib/libc.c lib/kref.c lib/kobject.c lib/bitmap.c lib/rbtree.c lib/idr.c lib/parser.c
+SOURCES_C += mm/bootmem.c mm/mmzone.c mm/mmap.c mm/page_alloc.c mm/vmscan.c mm/memory.c mm/vmalloc.c mm/slab.c mm/filemap.c mm/rmap.c mm/swap.c lib/libc.c lib/vsprintf.c lib/kref.c lib/kobject.c lib/bitmap.c lib/rbtree.c lib/idr.c lib/parser.c
 SOURCES_C += fs/file.c fs/fdtable.c fs/exec.c fs/inode.c fs/dentry.c fs/namei.c fs/read_write.c fs/open.c fs/readdir.c fs/ioctl.c fs/namespace.c fs/ramfs/ramfs.c fs/procfs/procfs.c fs/procfs/base.c fs/procfs/array.c fs/procfs/task_mmu.c fs/devtmpfs/devtmpfs.c fs/block_dev.c fs/minixfs/minixfs.c
 SOURCES_C += fs/buffer.c
 SOURCES_C += block/blk-core.c
 SOURCES_C += block/blkdev.c
 SOURCES_C += fs/sysfs/sysfs.c init/initramfs.c
-SOURCES_C += drivers/base/core.c drivers/base/virtual.c drivers/base/uevent.c drivers/base/bus.c drivers/base/class.c drivers/base/driver.c drivers/base/platform.c drivers/base/init.c drivers/pci/pci.c drivers/pci/pcie/pcie.c drivers/nvme/nvme.c drivers/input/keyboard.c drivers/block/ramdisk.c
+SOURCES_C += drivers/base/core.c drivers/base/virtual.c drivers/base/uevent.c drivers/base/bus.c drivers/base/class.c drivers/base/driver.c drivers/base/platform.c drivers/base/init.c drivers/pci/pci.c drivers/pci/pcie/pcie.c drivers/nvme/nvme-core.c drivers/nvme/nvme.c drivers/input/keyboard.c drivers/block/ramdisk.c
 SOURCES_C += drivers/clocksource/timer.c drivers/tty/tty.c drivers/tty/serial/serial.c
 SOURCES_C += drivers/video/console/console.c drivers/video/console/console_driver.c
-SOURCES_C += drivers/scsi/scsi.c drivers/scsi/sd.c drivers/scsi/virtio_scsi.c
+SOURCES_C += drivers/virtio/virtio.c drivers/virtio/virtio_pci.c drivers/virtio/virtqueue.c
+SOURCES_C += drivers/scsi/scsi_sysfs.c drivers/scsi/hosts.c drivers/scsi/scsi.c drivers/scsi/sd.c drivers/scsi/virtio_scsi.c
 OBJECTS = $(SOURCES_S:.s=.o) $(SOURCES_C:.c=.o)
 DEPS = $(OBJECTS:.o=.d) $(USH_OBJS:.o=.d) $(INIT_OBJS:.o=.d) $(SMOKE_OBJS:.o=.d)
 
@@ -76,6 +77,10 @@ $(INITRAMFS): $(USER_ELFS)
 	cp $(USH_ELF) rootfs/sbin/sh
 	# Copy other tools to /bin (dropping .elf extension for aesthetics)
 	cp $(SMOKE_ELF) rootfs/bin/smoke
+	ln -snf ../sbin/sh rootfs/bin/sh-rel
+	ln -snf smoke rootfs/bin/smoke-link
+	ln -snf loop-b rootfs/bin/loop-a
+	ln -snf loop-a rootfs/bin/loop-b
 	cd rootfs && find . | cpio -o -H newc > ../$(INITRAMFS)
 	rm -rf rootfs
 
@@ -101,10 +106,10 @@ SMOKE_TIMEOUT ?= 30
 smoke: smoke-512
 
 smoke-512: $(KERNEL) $(INITRAMFS) $(SCSI_IMG)
-	sh -c 'tmp=$$(mktemp); timeout $(SMOKE_TIMEOUT)s sh -c "{ sleep 2; printf \"run /bin/smoke\\nexit\\n\"; } | qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -display none -monitor none -serial stdio $(VIRTIO_SCSI_ARGS)" >$$tmp 2>&1; cat $$tmp; grep -q "All tests completed (OK)." $$tmp'
+	sh -c 'tmp=$$(mktemp); img=$$(mktemp); cp $(SCSI_IMG) $$img; timeout $(SMOKE_TIMEOUT)s sh -c "{ sleep 2; printf \"run /bin/smoke\\nexit\\n\"; } | qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -display none -monitor none -serial stdio -drive file=$$img,format=raw,if=none,id=scsidisk0 -device virtio-scsi-pci,id=scsi0 -device scsi-hd,drive=scsidisk0,bus=scsi0.0" >$$tmp 2>&1; cat $$tmp; rm -f $$img; grep -q "All tests completed (OK)." $$tmp'
 
 smoke-128: $(KERNEL) $(INITRAMFS) $(SCSI_IMG)
-	sh -c 'tmp=$$(mktemp); timeout $(SMOKE_TIMEOUT)s sh -c "{ sleep 2; printf \"run /bin/smoke\\nexit\\n\"; } | qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 128M -display none -monitor none -serial stdio $(VIRTIO_SCSI_ARGS)" >$$tmp 2>&1; cat $$tmp; grep -q "All tests completed (OK)." $$tmp'
+	sh -c 'tmp=$$(mktemp); img=$$(mktemp); cp $(SCSI_IMG) $$img; timeout $(SMOKE_TIMEOUT)s sh -c "{ sleep 2; printf \"run /bin/smoke\\nexit\\n\"; } | qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 128M -display none -monitor none -serial stdio -drive file=$$img,format=raw,if=none,id=scsidisk0 -device virtio-scsi-pci,id=scsi0 -device scsi-hd,drive=scsidisk0,bus=scsi0.0" >$$tmp 2>&1; cat $$tmp; rm -f $$img; grep -q "All tests completed (OK)." $$tmp'
 
 check-vocab:
 	sh scripts/check-vocab.sh

@@ -37,6 +37,12 @@ struct block_device {
     uint32_t writes;
     uint32_t bytes_read;
     uint32_t bytes_written;
+    /*
+     * Linux mapping:
+     * - bdget/bdput provide lifetime references independent of openers.
+     * - blkdev_get/blkdev_put manage openers (open file handles).
+     */
+    uint32_t refcnt;
     uint32_t openers;
     struct gendisk *disk;
     struct inode *inode;
@@ -53,9 +59,13 @@ int add_disk(struct gendisk *disk);
 struct device *block_register_disk(struct gendisk *disk, struct device *parent);
 struct gendisk *gendisk_from_dev(struct device *dev);
 struct inode *blockdev_inode_create(struct block_device *bdev);
+void blockdev_inode_destroy(struct block_device *bdev);
 struct block_device *bdget(uint32_t devt);
 struct block_device *bdget_disk(struct gendisk *disk, int index);
+struct block_device *bdgrab(struct block_device *bdev);
+void bdput(struct block_device *bdev);
 int blkdev_get(struct block_device *bdev);
 void blkdev_put(struct block_device *bdev);
+int del_gendisk(struct gendisk *disk);
 
 #endif

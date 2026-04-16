@@ -5,6 +5,7 @@
 #include "linux/rmap.h"
 #include "linux/slab.h"
 #include "linux/libc.h"
+#include "linux/memlayout.h"
 #include "linux/page_alloc.h"
 #include "asm/pgtable.h"
 #include "asm/page.h"
@@ -44,9 +45,6 @@ int swap_out_page(struct page *page)
         return -1;
     if (page->rmap_list)
         return -1;
-    if (!current || current->mm != page->map_mm)
-        return -1;
-
     int slot = -1;
     for (int i = 0; i < SWAP_SLOTS; i++) {
         if (!swap_slots[i].used) {
@@ -65,11 +63,12 @@ int swap_out_page(struct page *page)
     uint8_t *buf = (uint8_t*)kmalloc(PAGE_SIZE);
     if (!buf)
         return -1;
-    memcpy(buf, (void*)page->map_vaddr, PAGE_SIZE);
+    memcpy(buf, memlayout_directmap_phys_to_virt(phys), PAGE_SIZE);
 
     unmap_page_pgd(page->map_mm->pgd, (void*)page->map_vaddr);
     rmap_remove(page->map_mm, page->map_vaddr, phys);
     free_page((unsigned long)phys);
+    page->flags &= ~PG_ISOLATED;
 
     swap_slots[slot].used = 1;
     swap_slots[slot].mm = page->map_mm;

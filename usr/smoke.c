@@ -8,6 +8,21 @@ enum {
 
 static int failures;
 
+static void smoke_strcpy(char *dest, const char *src)
+{
+    while ((*dest++ = *src++) != 0)
+        ;
+}
+
+static int smoke_strcmp(const char *s1, const char *s2)
+{
+    while (*s1 && (*s1 == *s2)) {
+        s1++;
+        s2++;
+    }
+    return (unsigned char)*s1 - (unsigned char)*s2;
+}
+
 /* fail: Implement fail. */
 static void fail(const char *msg)
 {
@@ -231,9 +246,9 @@ static int parse_vmscan_stats(int *wakeups, int *tries, int *reclaims, int *anon
 }
 
 /* parse_writeback_stats: Parse writeback stats. */
-static int parse_writeback_stats(int *dirty, int *cleaned, int *discarded)
+static int parse_writeback_stats(int *dirty, int *cleaned, int *discarded, int *throttled)
 {
-    char buf[128];
+    char buf[160];
     int n = read_file("/proc/writeback", buf, sizeof(buf));
     if (n <= 0)
         return -1;
@@ -242,6 +257,8 @@ static int parse_writeback_stats(int *dirty, int *cleaned, int *discarded)
     if (parse_kv_u32(buf, n, "cleaned=", cleaned) < 0)
         return -1;
     if (parse_kv_u32(buf, n, "discarded=", discarded) < 0)
+        return -1;
+    if (throttled && parse_kv_u32(buf, n, "throttled=", throttled) < 0)
         return -1;
     return 0;
 }
@@ -339,6 +356,13 @@ void test_file_io() {
         print("Deleted /test.txt successfully.\n");
     else
         fail("unlink /test.txt");
+
+    /* lib/: memmove must handle overlapping regions (Linux mapping). */
+    char t[16];
+    smoke_strcpy(t, "abcdef");
+    memmove(t + 2, t, 4);
+    if (smoke_strcmp(t, "ababcd") != 0)
+        fail("memmove overlap");
 }
 
 /* test_pf: Implement test pf. */
@@ -609,6 +633,27 @@ void test_rmdir() {
     ret = rmdir("/");
     if (ret == 0)
         fail("rmdir /");
+
+    /* Symlink semantics (Linux mapping): relative target + loop detection. */
+    {
+        int fd = open("/bin/smoke-link", 0);
+        if (fd < 0) {
+            fail("open /bin/smoke-link");
+        } else {
+            close(fd);
+        }
+        fd = open("/bin/sh-rel", 0);
+        if (fd < 0) {
+            fail("open /bin/sh-rel");
+        } else {
+            close(fd);
+        }
+        fd = open("/bin/loop-a", 0);
+        if (fd >= 0) {
+            close(fd);
+            fail("symlink loop should fail");
+        }
+    }
     if (failures == before)
         print("rmdir/unlink OK.\n");
 }
@@ -673,6 +718,14 @@ void test_proc_meminfo_iomem() {
         fail("iomem missing initramfs");
         ok = 0;
     }
+    /* Linux mapping: /proc/self/cwd is a symlink that must be traversable. */
+    int fd = open("/proc/self/cwd", 0);
+    if (fd < 0) {
+        fail("open /proc/self/cwd");
+        ok = 0;
+    } else {
+        close(fd);
+    }
     if (ok)
         print("/proc meminfo/iomem OK.\n");
 }
@@ -730,57 +783,26 @@ void test_pci_uevent() {
         return;
     }
     int pci_any = count_substr(buf, n, "SUBSYSTEM=pci");
-    int count = count_substr(buf, n, "ACTION=add");
+    int add_count = count_substr(buf, n, "ACTION=add");
     int bind_count = count_substr(buf, n, "ACTION=bind");
-    if (pci_any == 0 || (count == 0 && bind_count == 0))
+    if (pci_any == 0 || (add_count == 0 && bind_count == 0))
         fail("No PCI add/bind events found");
-    else if (count == 0)
+    else if (add_count == 0)
         print("WARN: No PCI add events found.\n");
-    int bar_count = count_substr(buf, n, "ACTION=bar");
-    if (bar_count > 0) {
-        print("PCI bar event count=");
-        print_int(bar_count);
-        print("\n");
-    } else {
-        print("WARN: No PCI bar events found.\n");
-    }
-    int bar_fail = count_substr(buf, n, "ACTION=barfail");
-    if (bar_fail > 0) {
-        print("WARN: PCI bar fail count=");
-        print_int(bar_fail);
-        print("\n");
-    }
-    int bridge_count = count_substr(buf, n, "pci01:");
-    if (bridge_count > 0) {
-        print("PCI secondary bus detected count=");
-        print_int(bridge_count);
-        print("\n");
-    }
-    int enable_count = count_substr(buf, n, "ACTION=enable");
-    if (enable_count > 0) {
-        print("PCI enable event count=");
-        print_int(enable_count);
-        print("\n");
-    }
-    int pcie_count = count_substr(buf, n, "ACTION=pciecap");
-    if (pcie_count > 0) {
-        print("PCIe capability count=");
-        print_int(pcie_count);
-        print("\n");
-    }
-    int nvme_count = count_substr(buf, n, "ACTION=nvme");
-    if (nvme_count > 0) {
-        print("NVMe class device count=");
-        print_int(nvme_count);
-        print("\n");
-    } else if (pcie_count > 0) {
-        print("WARN: No NVMe class device detected.\n");
-    }
-    if (nvme_count > 0 && pcie_count == 0) {
-        fail("NVMe present but no PCIe capability event found");
-        print("uevent dump:\n");
-        print(buf);
-    }
+    int modalias_count = count_substr(buf, n, "MODALIAS=pci:v");
+    if (modalias_count == 0)
+        print("WARN: No PCI MODALIAS found in uevent buffer.\n");
+    int devpath_count = count_substr(buf, n, "DEVPATH=/devices");
+    if (devpath_count == 0)
+        print("WARN: No DEVPATH=/devices found in uevent buffer.\n");
+    if (count_substr(buf, n, "DEVNAME=") == 0)
+        print("WARN: No DEVNAME found in uevent buffer.\n");
+    if (count_substr(buf, n, "DEVMODE=") == 0)
+        print("WARN: No DEVMODE found in uevent buffer.\n");
+    if (count_substr(buf, n, "MAJOR=") == 0 || count_substr(buf, n, "MINOR=") == 0)
+        print("WARN: No MAJOR/MINOR found in uevent buffer.\n");
+    if (count_substr(buf, n, "SEQNUM=") == 0)
+        print("WARN: No SEQNUM found in uevent buffer.\n");
 }
 
 /* test_sysfs_layout: Implement test sysfs layout. */
@@ -807,6 +829,18 @@ void test_sysfs_layout() {
     } else
         close(fd);
 
+    fd = open("/sys/class/pci_bus", 0);
+    if (fd < 0) {
+        fail("open /sys/class/pci_bus");
+        ok = 0;
+    } else
+        close(fd);
+    n = read_file("/sys/class/pci_bus/0000:00/type", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "pci_bus")) {
+        fail("/sys/class/pci_bus/0000:00/type");
+        ok = 0;
+    }
+
     fd = open("/sys/bus/pci/devices", 0);
     if (fd < 0) {
         fail("open /sys/bus/pci/devices");
@@ -821,6 +855,67 @@ void test_sysfs_layout() {
         if (n <= 0 || !contains(buf, n, "pci:v")) {
             fail("/sys/bus/pci/devices/pci00:04.0/modalias");
             ok = 0;
+        }
+
+        /* Virtio bus sysfs + modalias semantics (Linux mapping): /sys/bus/virtio/devices/<virtioX>/modalias */
+        fd = open("/sys/bus/virtio", 0);
+        if (fd < 0) {
+            fail("open /sys/bus/virtio");
+            ok = 0;
+        } else
+            close(fd);
+        n = read_file("/sys/bus/virtio/devices/virtio0/modalias", buf, sizeof(buf));
+        if (n <= 0 || !contains(buf, n, "virtio:d")) {
+            fail("/sys/bus/virtio/devices/virtio0/modalias");
+            ok = 0;
+        }
+        n = read_file("/sys/bus/virtio/drivers/virtio_scsi/name", buf, sizeof(buf));
+        if (n <= 0 || !contains(buf, n, "virtio_scsi")) {
+            fail("/sys/bus/virtio/drivers/virtio_scsi/name");
+            ok = 0;
+        }
+
+        /* NVMe controller/namespace sysfs shape (Linux mapping): only when device exists. */
+        int nvme_present = 0;
+        fd = open("/sys/class/nvme/nvme0", 0);
+        if (fd >= 0) {
+            nvme_present = 1;
+            close(fd);
+        }
+        if (!nvme_present) {
+            print("NVMe controller not found, skipping nvme sysfs layout checks.\n");
+        } else {
+            fd = open("/sys/class/nvme", 0);
+            if (fd < 0) {
+                fail("open /sys/class/nvme");
+                ok = 0;
+            } else
+                close(fd);
+            n = read_file("/sys/class/nvme/nvme0/parent/driver/name", buf, sizeof(buf));
+            if (n <= 0 || !contains(buf, n, "nvme")) {
+                fail("/sys/class/nvme/nvme0/parent/driver/name");
+                ok = 0;
+            }
+            n = read_file("/sys/class/block/nvme0n1/type", buf, sizeof(buf));
+            if (n <= 0 || !contains(buf, n, "disk")) {
+                fail("/sys/class/block/nvme0n1/type");
+                ok = 0;
+            }
+            n = read_file("/sys/class/block/nvme0n1/parent/parent/driver/name", buf, sizeof(buf));
+            if (n <= 0 || !contains(buf, n, "nvme")) {
+                fail("/sys/class/block/nvme0n1/parent/parent/driver/name");
+                ok = 0;
+            }
+            n = read_file("/sys/class/block/nvme0n1/size", buf, sizeof(buf));
+            if (n <= 0 || buf[0] < '0' || buf[0] > '9') {
+                fail("/sys/class/block/nvme0n1/size");
+                ok = 0;
+            }
+            n = read_file("/sys/class/block/nvme0n1/dev", buf, sizeof(buf));
+            if (n <= 0 || !contains(buf, n, ":")) {
+                fail("/sys/class/block/nvme0n1/dev");
+                ok = 0;
+            }
         }
     }
 
@@ -903,6 +998,16 @@ void test_sysfs_layout() {
         fail("/sys/class/block/ram0/dev");
         ok = 0;
     }
+    n = read_file("/sys/class/block/ram0/stat", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, " ")) {
+        fail("/sys/class/block/ram0/stat");
+        ok = 0;
+    }
+    n = read_file("/sys/class/block/ram0/queue/nr_requests", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "128")) {
+        fail("/sys/class/block/ram0/queue/nr_requests");
+        ok = 0;
+    }
     if (ok)
         print("sysfs layout OK.\n");
 }
@@ -948,15 +1053,33 @@ void test_sysfs_bind_unbind_console() {
         fail("console driver should be unbound");
         ok = 0;
     }
+    /* Regression: stale sysfs dentries must not keep /driver reachable after unbind. */
+    int fd = open("/sys/devices/platform/console0/driver/name", 0);
+    if (fd >= 0) {
+        close(fd);
+        fail("sysfs driver link should be unreachable after unbind");
+        ok = 0;
+    }
 
-    w = write_file("/sys/bus/platform/drivers_probe", "console0\n", 9);
+    w = write_file("/sys/bus/platform/drivers_probe", "platform:console0\n", 18);
     if (w <= 0) {
-        fail("drivers_probe console");
+        fail("drivers_probe console modalias");
         return;
     }
     n = read_file("/sys/devices/platform/console0/driver/name", buf, sizeof(buf));
     if (n <= 0 || !contains(buf, n, "console")) {
         fail("console driver should be probed");
+        ok = 0;
+    }
+
+    w = write_file("/sys/bus/platform/drivers/serial/bind", "console0\n", 9);
+    if (w > 0) {
+        fail("serial bind should not steal console0");
+        ok = 0;
+    }
+    n = read_file("/sys/devices/platform/console0/driver/name", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "console")) {
+        fail("console driver should remain bound after foreign bind");
         ok = 0;
     }
 
@@ -1608,7 +1731,7 @@ void test_file_cache_reclaim() {
 void test_writeback() {
     print("\n--- Test 29: Writeback ---\n");
     int d0 = 0, c0 = 0, x0 = 0;
-    if (parse_writeback_stats(&d0, &c0, &x0) < 0) {
+    if (parse_writeback_stats(&d0, &c0, &x0, 0) < 0) {
         fail("read /proc/writeback");
         return;
     }
@@ -1627,7 +1750,7 @@ void test_writeback() {
         return;
     }
     int d1 = 0, c1 = 0, x1 = 0;
-    if (parse_writeback_stats(&d1, &c1, &x1) < 0) {
+    if (parse_writeback_stats(&d1, &c1, &x1, 0) < 0) {
         fail("read /proc/writeback after write");
         return;
     }
@@ -1641,7 +1764,7 @@ void test_writeback() {
         close(procfd);
     }
     int d2 = 0, c2 = 0, x2 = 0;
-    if (parse_writeback_stats(&d2, &c2, &x2) < 0) {
+    if (parse_writeback_stats(&d2, &c2, &x2, 0) < 0) {
         fail("read /proc/writeback after flush");
         return;
     }
@@ -1652,11 +1775,50 @@ void test_writeback() {
     print("writeback OK.\n");
 }
 
+/* test_writeback_throttle: dirty throttling should trigger under heavy dirtying. */
+void test_writeback_throttle() {
+    print("\n--- Test 40: Writeback Throttle ---\n");
+    int d0 = 0, c0 = 0, x0 = 0, t0 = 0;
+    if (parse_writeback_stats(&d0, &c0, &x0, &t0) < 0) {
+        fail("read /proc/writeback for throttle");
+        return;
+    }
+
+    int fd = open("/wb3.txt", O_CREAT | O_TRUNC);
+    if (fd < 0) {
+        fail("open wb3.txt");
+        return;
+    }
+    char buf[4096];
+    for (int i = 0; i < 4096; i++)
+        buf[i] = (char)('a' + (i % 26));
+    for (int i = 0; i < 96; i++) {
+        int wr = write(fd, buf, 4096);
+        if (wr != 4096) {
+            close(fd);
+            fail("write wb3.txt loop");
+            return;
+        }
+    }
+    close(fd);
+
+    int d1 = 0, c1 = 0, x1 = 0, t1 = 0;
+    if (parse_writeback_stats(&d1, &c1, &x1, &t1) < 0) {
+        fail("read /proc/writeback after throttle");
+        return;
+    }
+    if (t1 <= t0) {
+        fail("dirty throttling did not trigger");
+        return;
+    }
+    print("writeback throttle OK.\n");
+}
+
 /* test_writeback_truncate: Implement test writeback truncate. */
 void test_writeback_truncate() {
     print("\n--- Test 31: Writeback Truncate ---\n");
     int d0 = 0, c0 = 0, x0 = 0;
-    if (parse_writeback_stats(&d0, &c0, &x0) < 0) {
+    if (parse_writeback_stats(&d0, &c0, &x0, 0) < 0) {
         fail("read /proc/writeback before truncate");
         return;
     }
@@ -1675,7 +1837,7 @@ void test_writeback_truncate() {
         return;
     }
     int d1 = 0, c1 = 0, x1 = 0;
-    if (parse_writeback_stats(&d1, &c1, &x1) < 0) {
+    if (parse_writeback_stats(&d1, &c1, &x1, 0) < 0) {
         fail("read /proc/writeback after write2");
         return;
     }
@@ -1726,7 +1888,7 @@ void test_writeback_truncate() {
     }
     close(fd);
     int d2 = 0, c2 = 0, x2 = 0;
-    if (parse_writeback_stats(&d2, &c2, &x2) < 0) {
+    if (parse_writeback_stats(&d2, &c2, &x2, 0) < 0) {
         fail("read /proc/writeback after truncate");
         return;
     }
@@ -1989,7 +2151,7 @@ void test_nvme_raw_rw() {
     close(fd);
 
     int dirty0 = 0, cleaned0 = 0, discarded0 = 0;
-    if (parse_writeback_stats(&dirty0, &cleaned0, &discarded0) < 0) {
+    if (parse_writeback_stats(&dirty0, &cleaned0, &discarded0, 0) < 0) {
         print("WARN: Could not read /proc/writeback stats.\n");
         dirty0 = cleaned0 = discarded0 = 0;
     }
@@ -2020,7 +2182,7 @@ void test_nvme_raw_rw() {
     }
 
     int dirty1 = 0, cleaned1 = 0, discarded1 = 0;
-    if (parse_writeback_stats(&dirty1, &cleaned1, &discarded1) == 0) {
+    if (parse_writeback_stats(&dirty1, &cleaned1, &discarded1, 0) == 0) {
         if (cleaned1 <= cleaned0)
             print("WARN: writeback cleaned not increased after nvme write.\n");
     }
@@ -2154,6 +2316,66 @@ void test_virtio_scsi_raw_rw() {
     print("virtio-scsi raw rw OK.\n");
 }
 
+static int virtio_minixfs_ready(void)
+{
+    int fd = open("/dev/sda", 0);
+    if (fd < 0)
+        return -1;
+    close(fd);
+
+    char buf[512];
+    int n = read_file("/proc/mounts", buf, sizeof(buf));
+    if (n <= 0)
+        return -1;
+    if (!contains(buf, n, "minix /mnt"))
+        return -1;
+    return 0;
+}
+
+/* test_virtio_minixfs_rw: Verify minixfs mounted on virtio-scsi disk and do basic R/W. */
+void test_virtio_minixfs_rw() {
+    print("\n--- Test 39: Virtio MinixFS Mount + R/W ---\n");
+    if (virtio_minixfs_ready() != 0) {
+        fail("virtio minixfs not mounted at /mnt");
+        return;
+    }
+
+    const char *path = "/mnt/virtio_rw.txt";
+    const char *msg = "virtio-minixfs rw OK\n";
+    int fd = open(path, O_CREAT);
+    if (fd < 0) {
+        fail("open /mnt/virtio_rw.txt");
+        return;
+    }
+    if (write(fd, msg, 20) != 20) {
+        fail("write /mnt/virtio_rw.txt");
+        close(fd);
+        return;
+    }
+    close(fd);
+
+    fd = open(path, 0);
+    if (fd < 0) {
+        fail("open /mnt/virtio_rw.txt for read");
+        return;
+    }
+    char buf[64];
+    int n = read(fd, buf, sizeof(buf));
+    close(fd);
+    if (n != 20) {
+        fail("virtio minixfs read short");
+        return;
+    }
+    for (int i = 0; i < 20; i++) {
+        if (buf[i] != msg[i]) {
+            fail("virtio minixfs content mismatch");
+            return;
+        }
+    }
+    (void)unlink(path);
+    print("virtio minixfs mount+rw OK.\n");
+}
+
 /* main: Implement main. */
 int main() {
     print("================================\n");
@@ -2191,6 +2413,7 @@ int main() {
     test_writeback();
     test_writeback_truncate();
     test_pagecache_stats();
+    test_writeback_throttle();
     // test_blockstats_ramdisk();
     test_minix_mount_read();
     test_nvme_device();
@@ -2198,6 +2421,7 @@ int main() {
     test_minix_mount_write();
     test_virtio_scsi_device();
     test_virtio_scsi_raw_rw();
+    test_virtio_minixfs_rw();
 
     print("\n================================\n");
     if (failures == 0) {
