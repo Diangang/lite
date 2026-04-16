@@ -523,33 +523,6 @@ static int contains(const char *hay, int hay_len, const char *needle)
     return 0;
 }
 
-/* count_substr: Implement count substr. */
-static int count_substr(const char *hay, int hay_len, const char *needle)
-{
-    if (!hay || !needle)
-        return 0;
-    int nlen = 0;
-    while (needle[nlen])
-        nlen++;
-    if (nlen == 0)
-        return 0;
-    int count = 0;
-    for (int i = 0; i + nlen <= hay_len; i++) {
-        int ok = 1;
-        for (int j = 0; j < nlen; j++) {
-            if (hay[i + j] != needle[j]) {
-                ok = 0;
-                break;
-            }
-        }
-        if (ok) {
-            count++;
-            i += nlen - 1;
-        }
-    }
-    return count;
-}
-
 /* write_file: Write file. */
 static int write_file(const char *path, const char *data, int len)
 {
@@ -777,32 +750,27 @@ void test_large_mmap_touch() {
 void test_pci_uevent() {
     print("\n--- Test 12: PCI uevent ---\n");
     char buf[2048];
-    int n = read_file("/sys/kernel/uevent", buf, sizeof(buf));
+    int n = read_file("/sys/kernel/uevent_seqnum", buf, sizeof(buf));
     if (n <= 0) {
-        fail("Could not read /sys/kernel/uevent");
+        fail("Could not read /sys/kernel/uevent_seqnum");
         return;
     }
-    int pci_any = count_substr(buf, n, "SUBSYSTEM=pci");
-    int add_count = count_substr(buf, n, "ACTION=add");
-    int bind_count = count_substr(buf, n, "ACTION=bind");
-    if (pci_any == 0 || (add_count == 0 && bind_count == 0))
-        fail("No PCI add/bind events found");
-    else if (add_count == 0)
-        print("WARN: No PCI add events found.\n");
-    int modalias_count = count_substr(buf, n, "MODALIAS=pci:v");
-    if (modalias_count == 0)
-        print("WARN: No PCI MODALIAS found in uevent buffer.\n");
-    int devpath_count = count_substr(buf, n, "DEVPATH=/devices");
-    if (devpath_count == 0)
-        print("WARN: No DEVPATH=/devices found in uevent buffer.\n");
-    if (count_substr(buf, n, "DEVNAME=") == 0)
-        print("WARN: No DEVNAME found in uevent buffer.\n");
-    if (count_substr(buf, n, "DEVMODE=") == 0)
-        print("WARN: No DEVMODE found in uevent buffer.\n");
-    if (count_substr(buf, n, "MAJOR=") == 0 || count_substr(buf, n, "MINOR=") == 0)
-        print("WARN: No MAJOR/MINOR found in uevent buffer.\n");
-    if (count_substr(buf, n, "SEQNUM=") == 0)
-        print("WARN: No SEQNUM found in uevent buffer.\n");
+
+    /* Linux mapping: /sys/kernel/uevent_seqnum is a monotonic counter. */
+    int seq = 0;
+    int i = 0;
+    while (i < n && (buf[i] == ' ' || buf[i] == '\t' || buf[i] == '\n'))
+        i++;
+    while (i < n && buf[i] >= '0' && buf[i] <= '9') {
+        seq = seq * 10 + (buf[i] - '0');
+        i++;
+    }
+    if (seq <= 0)
+        fail("uevent_seqnum not advanced");
+
+    n = read_file("/sys/kernel/uevent_helper", buf, sizeof(buf));
+    if (n <= 0)
+        fail("Could not read /sys/kernel/uevent_helper");
 }
 
 /* test_sysfs_layout: Implement test sysfs layout. */
@@ -2254,6 +2222,58 @@ void test_minix_mount_write() {
     print("minixfs write-read OK.\n");
 }
 
+void test_nvme_minixfs_rw() {
+    print("\n--- Test 35B: NVMe MinixFS Mount + R/W ---\n");
+    int fd = open("/dev/nvme0n1", 0);
+    if (fd < 0) {
+        print("NVMe minixfs device not found, skipping test.\n");
+        return;
+    }
+    close(fd);
+
+    fd = open("/mnt_nvme", 0);
+    if (fd < 0) {
+        fail("open /mnt_nvme");
+        return;
+    }
+    close(fd);
+
+    const char *path = "/mnt_nvme/nvme_rw.txt";
+    const char *msg = "nvme-minixfs rw OK\n";
+    fd = open(path, O_CREAT);
+    if (fd < 0) {
+        fail("open /mnt_nvme/nvme_rw.txt");
+        return;
+    }
+    if (write(fd, msg, 19) != 19) {
+        fail("write /mnt_nvme/nvme_rw.txt");
+        close(fd);
+        return;
+    }
+    close(fd);
+
+    fd = open(path, 0);
+    if (fd < 0) {
+        fail("open /mnt_nvme/nvme_rw.txt for read");
+        return;
+    }
+    char buf[64];
+    int n = read(fd, buf, sizeof(buf));
+    close(fd);
+    if (n != 19) {
+        fail("nvme minixfs read short");
+        return;
+    }
+    for (int i = 0; i < 19; i++) {
+        if (buf[i] != msg[i]) {
+            fail("nvme minixfs content mismatch");
+            return;
+        }
+    }
+    (void)unlink(path);
+    print("nvme minixfs mount+rw OK.\n");
+}
+
 /* test_virtio_scsi_device: Detect a virtio-scsi disk exposed as /dev/sda. */
 void test_virtio_scsi_device() {
     print("\n--- Test 37: Virtio-SCSI Device --\n");
@@ -2419,6 +2439,7 @@ int main() {
     test_nvme_device();
     test_nvme_raw_rw();
     test_minix_mount_write();
+    test_nvme_minixfs_rw();
     test_virtio_scsi_device();
     test_virtio_scsi_raw_rw();
     test_virtio_minixfs_rw();

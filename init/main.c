@@ -66,6 +66,9 @@ static int run_init_process(const char *path)
 /* prepare_namespace: Mount the early filesystems and launch init. */
 static void prepare_namespace(void)
 {
+    struct inode *inode;
+    struct block_device *bdev;
+
     vfs_init();
     populate_rootfs();
 
@@ -76,23 +79,45 @@ static void prepare_namespace(void)
     sysfs_mount();
     virtio_scsi_late_probe();
     /*
-     * Linux-style: mount a filesystem on a block device node.
-     * Prefer NVMe when present (QEMU -device nvme), otherwise fall back to ramdisk.
+     * Linux mapping: mount explicit filesystems on explicit block devices.
+     * Keep the legacy /mnt mount on the virtio-scsi disk when present so SCSI
+     * and NVMe paths can be validated independently in one boot.
      */
-    const char *minix_dev = "/dev/ram1";
-    if (vfs_resolve("/dev/nvme0n1"))
-        minix_dev = "/dev/nvme0n1";
-    if (!strcmp(minix_dev, "/dev/ram1")) {
-        struct inode *ram1 = vfs_resolve(minix_dev);
-        if (ram1 && (ram1->flags & 0x7) == FS_BLOCKDEVICE) {
-            struct block_device *bdev = (struct block_device *)ram1->private_data;
+    const char *scsi_minix_dev = "/dev/sda";
+    const char *fallback_minix_dev = "/dev/ram1";
+    if (vfs_resolve(scsi_minix_dev)) {
+        inode = vfs_resolve(scsi_minix_dev);
+        if (inode && (inode->flags & 0x7) == FS_BLOCKDEVICE) {
+            bdev = (struct block_device *)inode->private_data;
             if (bdev && blkdev_get(bdev) == 0) {
-                minix_seed_example_image(bdev);
+                minix_prepare_example_image(bdev);
                 blkdev_put(bdev);
             }
         }
+        vfs_mount_fs_dev("/mnt", "minix", scsi_minix_dev);
+    } else {
+        inode = vfs_resolve(fallback_minix_dev);
+        if (inode && (inode->flags & 0x7) == FS_BLOCKDEVICE) {
+            bdev = (struct block_device *)inode->private_data;
+            if (bdev && blkdev_get(bdev) == 0) {
+                minix_prepare_example_image(bdev);
+                blkdev_put(bdev);
+            }
+        }
+        vfs_mount_fs_dev("/mnt", "minix", fallback_minix_dev);
     }
-    vfs_mount_fs_dev("/mnt", "minix", minix_dev);
+
+    if (vfs_resolve("/dev/nvme0n1")) {
+        inode = vfs_resolve("/dev/nvme0n1");
+        if (inode && (inode->flags & 0x7) == FS_BLOCKDEVICE) {
+            bdev = (struct block_device *)inode->private_data;
+            if (bdev && blkdev_get(bdev) == 0) {
+                minix_prepare_example_image(bdev);
+                blkdev_put(bdev);
+            }
+        }
+        vfs_mount_fs_dev("/mnt_nvme", "minix", "/dev/nvme0n1");
+    }
 
     const char *init = get_init_process();
     if (run_init_process(init) != 0) {

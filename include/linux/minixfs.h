@@ -8,5 +8,6 @@ struct block_device;
  * This is used only for the in-memory ramdisk fallback path.
  */
 int minix_seed_example_image(struct block_device *bdev);
+int minix_prepare_example_image(struct block_device *bdev);
 
 #endif

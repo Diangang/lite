@@ -670,6 +670,16 @@ int minix_seed_example_image(struct block_device *bdev)
     return 0;
 }
 
+int minix_prepare_example_image(struct block_device *bdev)
+{
+    struct minix_super_block sb;
+    if (!bdev)
+        return -1;
+    if (minix_read_super(bdev, &sb) == 0)
+        return 0;
+    return minix_seed_example_image(bdev);
+}
+
 /* minix_fill_super: Implement minix fill super. */
 static int minix_fill_super(struct super_block *sb, void *data, int silent)
 {
@@ -679,7 +689,16 @@ static int minix_fill_super(struct super_block *sb, void *data, int silent)
     struct minix_mount_data *md = (struct minix_mount_data *)data;
     if (!md->dev_name)
         return -1;
+
+    /* #region debug-point scsi-nvme-smoke.minix-fill-super */
+    printf("debug(scsi-nvme-smoke): minix_fill_super dev=%s\n", md->dev_name);
+    /* #endregion */
+
     struct inode *dev_inode = vfs_resolve(md->dev_name);
+    /* #region debug-point scsi-nvme-smoke.minix-dev-inode */
+    printf("debug(scsi-nvme-smoke): vfs_resolve(%s) => %s\n",
+           md->dev_name, dev_inode ? "OK" : "NULL");
+    /* #endregion */
     if (!dev_inode || (dev_inode->flags & 0x7) != FS_BLOCKDEVICE)
         return -1;
     struct block_device *bdev = (struct block_device *)dev_inode->private_data;
@@ -688,8 +707,12 @@ static int minix_fill_super(struct super_block *sb, void *data, int silent)
 
     struct minix_inode_disk root_dinode;
     struct minix_super_block msb;
-    if (minix_read_super(bdev, &msb) != 0)
+    if (minix_read_super(bdev, &msb) != 0) {
+        /* #region debug-point scsi-nvme-smoke.minix-read-super-fail */
+        printf("debug(scsi-nvme-smoke): minix_read_super failed dev=%s\n", md->dev_name);
+        /* #endregion */
         return -1;
+    }
     if (minix_read_inode(bdev, &msb, 1, &root_dinode) != 0)
         return -1;
 

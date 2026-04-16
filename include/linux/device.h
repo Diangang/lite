@@ -124,6 +124,7 @@ void class_remove_file(struct class *cls, const struct class_attribute *attr);
 struct class *class_find(const char *name);
 void device_uevent_emit(const char *action, struct device *dev);
 uint32_t device_uevent_read(uint32_t offset, uint32_t size, uint8_t *buffer);
+uint32_t device_uevent_seqnum(void);
 void driver_deferred_probe_add(struct device *dev);
 void driver_deferred_probe_remove(struct device *dev);
 void driver_deferred_probe_trigger(void);

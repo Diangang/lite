@@ -3,18 +3,22 @@
 #include "linux/sysfs.h"
 #include "linux/timer.h"
 #include "linux/libc.h"
+#include "linux/printk.h"
 #include "linux/device.h"
 
 struct subsystem kernel_subsys;
 
 static struct attribute kernel_attr_version = { .name = "version", .mode = 0444 };
 static struct attribute kernel_attr_uptime = { .name = "uptime", .mode = 0444 };
-static struct attribute kernel_attr_uevent = { .name = "uevent", .mode = 0444 };
+static struct attribute kernel_attr_uevent_helper = { .name = "uevent_helper", .mode = 0644 };
+static struct attribute kernel_attr_uevent_seqnum = { .name = "uevent_seqnum", .mode = 0444 };
+static char kernel_uevent_helper[128] = "";
 
 static const struct attribute *kernel_default_attrs[] = {
     &kernel_attr_version,
     &kernel_attr_uptime,
-    &kernel_attr_uevent,
+    &kernel_attr_uevent_helper,
+    &kernel_attr_uevent_seqnum,
     NULL,
 };
 
@@ -62,14 +66,15 @@ static uint32_t kernel_sysfs_show(struct kobject *kobj, const struct attribute *
         return sysfs_emit_text_line(buffer, cap, tmp);
     }
 
-    if (!strcmp(attr->name, "uevent")) {
-        if (cap == 0)
+    if (!strcmp(attr->name, "uevent_helper"))
+        return sysfs_emit_text_line(buffer, cap, kernel_uevent_helper);
+
+    if (!strcmp(attr->name, "uevent_seqnum")) {
+        if (cap < 2)
             return 0;
-        /* Keep legacy semantics: dump current uevent buffer from offset 0. */
-        uint32_t n = device_uevent_read(0, cap - 1, (uint8_t *)buffer);
-        if (n < cap)
-            buffer[n] = 0;
-        return n;
+        static char tmp[64];
+        itoa((int)device_uevent_seqnum(), 10, tmp);
+        return sysfs_emit_text_line(buffer, cap, tmp);
     }
 
     return 0;
@@ -78,10 +83,26 @@ static uint32_t kernel_sysfs_show(struct kobject *kobj, const struct attribute *
 static uint32_t kernel_sysfs_store(struct kobject *kobj, const struct attribute *attr, uint32_t offset, uint32_t size, const uint8_t *buffer)
 {
     (void)kobj;
-    (void)attr;
-    (void)offset;
-    (void)size;
-    (void)buffer;
+    if (!attr || !attr->name || !buffer)
+        return 0;
+
+    /* sysfs store convention: only accept offset=0 and one-shot buffers. */
+    if (offset != 0)
+        return 0;
+
+    if (!strcmp(attr->name, "uevent_helper")) {
+        /* Linux mapping: /sys/kernel/uevent_helper is a configurable helper path. */
+        uint32_t n = size;
+        if (n >= sizeof(kernel_uevent_helper))
+            n = sizeof(kernel_uevent_helper) - 1;
+        /* Trim a single trailing newline (typical sysfs write). */
+        if (n > 0 && buffer[n - 1] == '\n')
+            n--;
+        memcpy(kernel_uevent_helper, buffer, n);
+        kernel_uevent_helper[n] = 0;
+        return size;
+    }
+
     return 0;
 }
 
@@ -101,6 +122,12 @@ static int ksysfs_init(void)
 {
     kset_init(&kernel_subsys.kset, "kernel");
     kernel_subsys.kset.kobj.ktype = &kernel_ktype;
+    /* Selftest: printk returns printed byte count (Linux-like). */
+    const char *s = "printk selftest";
+    int n = printk(s);
+    printk("\n");
+    if (n != (int)strlen(s))
+        panic("printk return semantics");
     return subsystem_register(&kernel_subsys);
 }
 core_initcall(ksysfs_init);

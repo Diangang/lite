@@ -434,10 +434,7 @@ static struct inode *sysfs_get_kobj_attr_inode(struct kobject *kobj, const struc
     if (!mode)
         return NULL;
 
-    /* Keep legacy-compatible sizing for long sysfs text files (e.g. /sys/kernel/uevent). */
     uint32_t size = 256;
-    if (!strcmp(attr->name, "uevent"))
-        size = 4096;
 
     struct sysfs_dirent *nd = (struct sysfs_dirent *)kmalloc(sizeof(*nd));
     if (!nd)

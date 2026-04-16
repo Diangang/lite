@@ -201,10 +201,18 @@ struct dirent *generic_readdir(struct file *file, uint32_t index)
     index -= 2;
     struct dentry *child = d->children;
     while (child) {
-        if (child->inode && child->inode->flags != 0) {
+        struct inode *visible_inode = child->inode;
+        /*
+         * Linux mapping: a mounted-over dentry remains visible in the parent
+         * directory even if Lite cached it as a negative placeholder before the
+         * mount was attached.
+         */
+        if (!visible_inode && child->mount && child->mount->root)
+            visible_inode = child->mount->root->inode;
+        if (visible_inode && visible_inode->flags != 0) {
             if (index == 0) {
                 strcpy(generic_dirent.name, child->name);
-                generic_dirent.ino = child->inode ? child->inode->i_ino : 0;
+                generic_dirent.ino = visible_inode->i_ino;
                 return &generic_dirent;
             }
             index--;
@@ -225,5 +233,9 @@ struct inode *generic_finddir(struct inode *node, const char *name)
     struct dentry *child = d_lookup(host, name);
     if (!child)
         return NULL;
-    return child->inode;
+    if (child->inode)
+        return child->inode;
+    if (child->mount && child->mount->root)
+        return child->mount->root->inode;
+    return NULL;
 }

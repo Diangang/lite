@@ -262,7 +262,6 @@ static const struct virtio_device_id virtio_scsi_id_table[] = {
 
 static struct virtio_driver virtio_scsi_driver = {
     .name = "virtio_scsi",
-    .driver = { 0 },
     .id_table = virtio_scsi_id_table,
     .probe = virtscsi_probe,
     .remove = virtscsi_remove,

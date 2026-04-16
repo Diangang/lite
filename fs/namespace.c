@@ -176,6 +176,13 @@ int vfs_mount_fs_dev(const char *path, const char *fs_name, const char *dev_name
     if (!fs)
         panic("filesystem type not found.");
 
+    /* #region debug-point scsi-nvme-smoke.mount-fs-dev */
+    printf("debug(scsi-nvme-smoke): vfs_mount_fs_dev path=%s fs=%s dev=%s\n",
+           path ? path : "(null)",
+           fs_name ? fs_name : "(null)",
+           dev_name ? dev_name : "(null)");
+    /* #endregion */
+
     struct super_block *sb = fs->get_sb(fs, 0, dev_name, NULL);
     if (!sb)
         panic("get_sb failed.");

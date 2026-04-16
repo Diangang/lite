@@ -320,3 +320,12 @@ uint32_t device_uevent_read(uint32_t offset, uint32_t size, uint8_t *buffer)
     memcpy(buffer, uevent_buf + offset, size);
     return size;
 }
+
+/*
+ * Linux mapping: uevent sequence number is a global monotonic counter used by
+ * the uevent layer. Lite exposes it for sysfs (/sys/kernel/uevent_seqnum).
+ */
+uint32_t device_uevent_seqnum(void)
+{
+    return uevent_seqnum;
+}
