@@ -20,7 +20,6 @@ struct kset *devices_kset_get(void)
 static void device_release_kobj(struct kobject *kobj)
 {
     struct device *dev = container_of(kobj, struct device, kobj);
-    sysfs_remove_dir(&dev->kobj);
     if (dev->release)
         dev->release(dev);
     else
@@ -419,11 +418,9 @@ int device_unregister(struct device *dev)
     if (dev->class && dev->class_list.next && dev->class_list.prev)
         list_del(&dev->class_list);
     device_sysfs_remove_links(dev);
-    struct kobject *parent = device_kobj_parent(dev);
-    if (parent)
-        kobject_child_del(parent, &dev->kobj);
     devtmpfs_unregister_device(dev);
     device_uevent_emit("remove", dev);
+    kobject_del(&dev->kobj);
     kset_remove(&devices_subsys.kset, &dev->kobj);
     kobject_put(&dev->kobj);
     return 0;

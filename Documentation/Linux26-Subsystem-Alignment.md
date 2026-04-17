@@ -13,9 +13,9 @@ Principles:
 Progress Snapshot
 
 Kernel / arch / driver core:
-- kernel core (sched/fork/exit/wait/signal): `IN PROGRESS` (Stage 0 DONE; Stage 1 DONE; Stage 2 DONE; Stage 3 DONE; Stage 4 DONE; Stage 5 DONE; Stage 6 DONE; Stage 7 DONE; Stage 8 DONE; Stage 9+ pending)
-- lib/: `IN PROGRESS` (Stage 0 DONE; Stage 1 DONE; Stage 2 DONE; Stage 3 DONE; Stage 4+ pending)
-- arch/x86: `IN PROGRESS` (Stage 0 DONE; Stage 1 DONE; Stage 2 DONE; Stage 3 DONE; Stage 4 DONE; Stage 5 DONE; Stage 6 DONE; Stage 7 DONE; Stage 8 DONE; Stage 9+ pending)
+- kernel core (sched/fork/exit/wait/signal): `IN PROGRESS` (Stage 0 DONE; Stage 1 DONE; Stage 2 DONE; Stage 3 DONE; Stage 4 DONE; Stage 5 DONE; Stage 6 DONE; Stage 7 DONE; Stage 8 DONE; Stage 9 DONE; Stage 10 DONE; Stage 11 DONE; Stage 12 DONE; Stage 13 DONE; Stage 14 DONE; Stage 15+ pending)
+- lib/: `IN PROGRESS` (Stage 0 DONE; Stage 1 DONE; Stage 2 DONE; Stage 3 DONE; Stage 4 DONE; Stage 5+ pending)
+- arch/x86: `IN PROGRESS` (Stage 0 DONE; Stage 1 DONE; Stage 2 DONE; Stage 3 DONE; Stage 4 DONE; Stage 5 DONE; Stage 6 DONE; Stage 7 DONE; Stage 8 DONE; Stage 9 DONE; Stage 10 DONE; Stage 11 DONE; Stage 12 DONE; Stage 13 DONE; Stage 14+ pending)
 
 arch/x86 Stage 3 DIFFs kept explicit:
 - legacy PIC path: `DONE`
@@ -122,6 +122,114 @@ arch/x86 Stage 8 progress:
   - no call-function/reschedule IPI send path
   - no IOAPIC routing
 
+arch/x86 Stage 9 progress:
+- APIC/IPI handler layering is now explicitly arch-owned:
+  - `isr.c` still installs the IDT entries for APIC-shaped vectors
+  - actual vector handler registration now happens via `apic_install_interrupts()`
+  - `arch/x86/kernel/apic.c` owns the C-level handlers for:
+    - `LOCAL_TIMER_VECTOR`
+    - `RESCHEDULE_VECTOR`
+    - `CALL_FUNCTION_VECTOR`
+    - `ERROR_APIC_VECTOR`
+    - `SPURIOUS_APIC_VECTOR`
+- Linux mapping:
+  - `linux2.6/arch/x86/include/asm/entry_arch.h`
+  - `linux2.6/arch/x86/kernel/apic/apic.c`
+- current Lite semantics:
+  - PIC mode remains the only active runtime mode
+  - if any APIC/IPI vector fires, control reaches an arch-owned handler path first
+  - those handlers still fail fast because real LAPIC/IPI runtime semantics are not implemented
+- impact:
+  - vector ownership is no longer split between arch entry stubs and a generic placeholder in `isr.c`
+  - future LAPIC timer / reschedule IPI / call-function IPI work now has a Linux-shaped arch landing point at both asm and C layers
+- remaining DIFF after Stage 9:
+  - no active LAPIC timer programming
+  - no IPI send path
+  - no IOAPIC routing
+
+arch/x86 Stage 10 progress:
+- APIC semantic boundaries are now encoded more explicitly in arch code:
+  - `LOCAL_TIMER_VECTOR` uses a dedicated local-timer handler path
+  - `RESCHEDULE_VECTOR` and `CALL_FUNCTION_VECTOR` use an IPI-specific handler path
+  - `ERROR_APIC_VECTOR` and `SPURIOUS_APIC_VECTOR` use a local-APIC-event handler path
+- Linux mapping:
+  - `linux2.6/arch/x86/kernel/apic/apic.c` for local APIC timer / local APIC events
+  - `linux2.6/arch/x86/kernel/smp.c` for reschedule and call-function IPI semantics
+- current Lite semantics:
+  - PIC mode remains the only active runtime mode
+  - if one of these vectors fires unexpectedly, Lite now fails through a semantically distinct arch-owned path instead of a generic APIC placeholder
+  - per-vector counters are also split along Linux-shaped semantic lines (`apic_timer_irqs`, `irq_resched_count`, `irq_call_count`, etc.)
+- impact:
+  - future LAPIC timer work can evolve independently from future IPI work
+  - generic ISR code remains free of APIC policy
+- remaining DIFF after Stage 10:
+  - no active LAPIC timer programming
+  - no IPI send path
+  - no IOAPIC routing
+
+arch/x86 Stage 11 progress:
+- APIC-local event semantics are now split more precisely inside arch code:
+  - `ERROR_APIC_VECTOR` uses a dedicated APIC error-event handler path
+  - `SPURIOUS_APIC_VECTOR` uses a dedicated spurious-interrupt handler path
+  - Lite records separate last-seen vectors for these two classes
+- Linux mapping:
+  - `linux2.6/arch/x86/kernel/apic/apic.c`
+    - `__smp_error_interrupt()`
+    - `__smp_spurious_interrupt()`
+- current Lite semantics:
+  - PIC mode remains the only active runtime mode
+  - error vs spurious APIC events no longer share the same helper path
+  - unexpected firing still fails fast, but now through a more Linux-shaped semantic split
+- impact:
+  - future APIC error handling can evolve independently from future spurious-vector handling
+  - APIC-local event policy remains contained inside `arch/x86/kernel/apic.c`
+- remaining DIFF after Stage 11:
+  - no active LAPIC timer programming
+  - no IPI send path
+  - no IOAPIC routing
+
+arch/x86 Stage 12 progress:
+- IPI semantics are now split more precisely inside arch code:
+  - `RESCHEDULE_VECTOR` uses a dedicated reschedule-IPI handler path
+  - `CALL_FUNCTION_VECTOR` uses a dedicated call-function-IPI handler path
+  - Lite records separate last-seen vectors for these two IPI classes
+- Linux mapping:
+  - `linux2.6/arch/x86/kernel/smp.c`
+    - `__smp_reschedule_interrupt()`
+    - `__smp_call_function_interrupt()`
+- current Lite semantics:
+  - PIC mode remains the only active runtime mode
+  - reschedule vs call-function IPIs no longer share the same helper path
+  - unexpected firing still fails fast, but now through a more Linux-shaped IPI split
+- impact:
+  - future scheduler-IPI work can evolve independently from future remote call-function work
+  - APIC-local IPI policy remains contained inside `arch/x86/kernel/apic.c`
+- remaining DIFF after Stage 12:
+  - no active LAPIC timer programming
+  - no IPI send path
+  - no IOAPIC routing
+
+arch/x86 Stage 13 progress:
+- APIC install-time ownership is now split along the same semantic boundaries as handler-time ownership:
+  - local timer vectors are installed through a dedicated local-timer install helper
+  - IPI vectors are installed through a dedicated IPI install helper
+  - APIC-local event vectors are installed through a dedicated local-event install helper
+- Linux mapping:
+  - `linux2.6/arch/x86/kernel/irqinit.c` for vector installation ownership
+  - `linux2.6/arch/x86/kernel/apic/apic.c`
+  - `linux2.6/arch/x86/kernel/smp.c`
+- current Lite semantics:
+  - PIC mode remains the only active runtime mode
+  - install-time grouping now matches the semantic split already present in the handlers
+  - generic ISR code still remains free of APIC policy
+- impact:
+  - future APIC/LAPIC work can extend install-time policy without reopening generic ISR code
+  - arch-owned vector lifecycle is now clearer at both registration and handler layers
+- remaining DIFF after Stage 13:
+  - no active LAPIC timer programming
+  - no IPI send path
+  - no IOAPIC routing
+
 kernel/sched + fork/exit/wait/signal Stage 3 DIFFs kept explicit:
 - `tasklist_lock`: `PARTIAL DIFF`
   - Linux mapping: `tasklist_lock` / tasklist serialization in `linux2.6/kernel/fork.c`, `linux2.6/kernel/exit.c`, `linux2.6/kernel/signal.c`
@@ -224,6 +332,101 @@ kernel/sched + fork/exit/wait/signal Stage 8 progress:
   - many call sites still read `current` directly outside the core scope (fs/drivers)
   - `current` remains exported as a compatibility mirror for churn control
 
+kernel/sched + fork/exit/wait/signal Stage 9 progress:
+- additional non-hot core lifecycle paths now avoid direct reads of the exported `current` mirror:
+  - `task_create_internal()` derives parent ownership through `task_current()`
+  - `fork_init()` validates scheduler bootstrap through `task_current()`
+- intent:
+  - keep shrinking compatibility-surface usage in core paths without touching the user `fork/exec` hot path
+  - preserve a Linux-shaped current-task accessor in kernel-thread/bootstrap code
+- remaining DIFF after Stage 9:
+  - `sys_fork()` still reads `current` directly and remains an explicit stability exception for now
+  - many non-core call sites still read `current` directly across fs/drivers
+
+kernel/sched + fork/exit/wait/signal Stage 10 progress:
+- the user `fork()` hot path now also derives current-task ownership through `task_current()`:
+  - `sys_fork()` obtains `parent = task_current()`
+  - child mm/fs/cred/parent/children linkage is then derived from `parent`
+- impact:
+  - kernel core no longer relies on direct `current` reads in `fork/exit/wait/signal/cred` paths outside of scheduler compatibility storage itself
+  - the exported `current` symbol is now more clearly a compatibility mirror than a core API dependency
+- remaining DIFF after Stage 10:
+  - many non-core call sites still read `current` directly across fs/drivers
+  - scheduler compatibility storage (`current` mirror in `sched.c`) remains exported for churn control
+
+kernel/sched + fork/exit/wait/signal Stage 11 progress:
+- remaining exported compatibility mirrors are now explicitly constrained as legacy scheduler surface:
+  - `current` and `need_resched` are owned by `boot_cpu_sched.*`
+  - `sched.c` keeps the exported mirrors synchronized for legacy callers
+  - new core code is expected to use:
+    - `task_current()`
+    - `task_need_resched()`
+    - `task_set_need_resched()`
+    - `task_clear_need_resched()`
+- direct-core exception set is now explicit:
+  - `kernel/sched.c`
+    - exported compatibility mirror storage (`current`, `need_resched`)
+    - compatibility sync (`sched_sync_compat_globals()`)
+- remaining DIFF after Stage 11:
+  - non-core paths in fs/drivers may still read `current` directly
+  - compatibility mirrors remain exported until a larger tree-wide cleanup becomes worthwhile
+
+kernel/sched + fork/exit/wait/signal Stage 12 progress:
+- legacy-surface constraints are now visible at the public scheduler interface:
+  - `include/linux/sched.h` explicitly documents `current` and `need_resched` as compatibility mirrors
+  - helper-based access remains the stated rule for new core code
+- impact:
+  - future core edits now hit the constraint at the declaration site, not only in `sched.c` internals or alignment notes
+  - this reduces the chance of reintroducing direct core dependencies on exported compatibility mirrors
+- remaining DIFF after Stage 12:
+  - non-core paths in fs/drivers may still read `current` directly
+  - compatibility mirrors remain exported for churn control and tree-wide compatibility
+
+kernel/sched + fork/exit/wait/signal Stage 13 progress:
+- helper-based scheduler ownership is now declared as the supported core access surface:
+  - `include/linux/sched.h` explicitly marks:
+    - `task_current()`
+    - `task_set_need_resched()`
+    - `task_clear_need_resched()`
+    - `task_need_resched()`
+  - these helpers are documented as the Linux-shaped core interface for current-task and resched ownership
+- impact:
+  - maintenance-mode guidance now exists at both declaration layers:
+    - compatibility mirrors are marked as legacy
+    - helper entry points are marked as the supported path
+  - this further reduces the chance of future core code drifting back to direct mirror reads
+- remaining DIFF after Stage 13:
+  - non-core paths in fs/drivers may still read `current` directly
+  - compatibility mirrors remain exported for compatibility and churn control
+
+kernel/sched + fork/exit/wait/signal Stage 14 progress:
+- current-task ownership writes are now funneled through a single scheduler helper:
+  - `sched_set_current()` updates owner state in `boot_cpu_sched.current`
+  - compatibility mirror sync then derives from that owner state
+- current Lite effect:
+  - task-switch and boot-task install paths no longer open-code separate current-owner assignment + mirror refresh sequences
+  - owner-state writes stay visibly upstream of compatibility sync
+- impact:
+  - maintenance-mode ownership rules are now encoded not only in comments, but also in the write path shape inside `sched.c`
+  - this further reduces drift back toward mirror-first scheduler state updates
+- remaining DIFF after Stage 14:
+  - non-core paths in fs/drivers may still read `current` directly
+  - compatibility mirrors remain exported for compatibility and churn control
+
+kernel/sched + fork/exit/wait/signal Stage 15 progress:
+- boot-time resched initialization now also follows the helper-based owner path:
+  - boot task install no longer open-codes `boot_cpu_sched.need_resched = 0`
+  - it now uses `task_clear_need_resched()`
+- current Lite effect:
+  - boot initialization matches the same resched-owner update path used elsewhere in scheduler core
+  - helper-based resched ownership now covers both runtime requests and boot-state initialization
+- impact:
+  - maintenance-mode scheduler convergence is now slightly tighter at the last obvious init-time write site
+  - this further reduces drift back toward direct owner-field writes in core setup code
+- remaining DIFF after Stage 15:
+  - non-core paths in fs/drivers may still read `current` directly
+  - compatibility mirrors remain exported for compatibility and churn control
+
 lib/ Stage 1 DIFFs kept explicit:
 - libc convenience helpers:
   - `strdup`: `DIFF`, kept as Lite convenience wrapper; kernel-facing call sites now use Linux-shaped `kstrdup`.
@@ -269,27 +472,43 @@ lib/ Stage 3 progress:
   - keep the current flat slot-array implementation for now as a deliberate simplified backend
   - preserve Linux-shaped API surface; only converge the backend if scale/features require radix-like semantics
 
+lib/ Stage 4 progress:
+- kobject lifecycle teardown is now more Linux-shaped instead of being open-coded in scattered driver-core paths:
+  - `lib/kobject.c` now provides `kobject_del()`
+  - `device_unregister()`, `driver_unregister()`, and `subsystem_unregister()` now route root sysfs teardown through `kobject_del()`
+  - `device_release_kobj()` no longer open-codes `sysfs_remove_dir()` in the final release callback
+- parent/child lifetime shape improved:
+  - `kobject_del()` now unlinks the object from the parent's child chain before clearing parent state
+  - the device unregister path no longer needs a separate open-coded parent-child unlink just to tear down the kobject
+- bus sysfs teardown is now grouped more explicitly:
+  - bus subdir cleanup is funneled through a dedicated `bus_sysfs_unregister_subdirs()` helper
+  - the bus root kobject itself is still removed through the generic kobject lifecycle path
+- Linux mapping:
+  - `linux2.6/lib/kobject.c`
+  - Linux `kobject_del()` as the driver-core teardown boundary before the final `kobject_put()`
+- remaining DIFF after Stage 4:
+  - Lite still keeps a simplified child list and kset model; it does not implement Linux kernfs state/lifetime flags
+  - `idr` backend remains a flat slot array, and `kref` remains UP-only
+
 
 Acceptance Queue
 
 Use this queue as the execution order. Each step is considered complete only when its acceptance criteria are all satisfied.
-Step 1. `kernel/sched + fork/exit/wait/signal` Stage 9
+Step 1. `lib/` Stage 5
 - Scope:
-  - continue the compatibility-mirror shrink in core only:
-    - migrate a small set of remaining core `current` reads to `task_current()`
-    - keep semantics stable; focus on ownership clarity and per-CPU landing points
+  - continue library lifecycle convergence around Linux-shaped driver-core helpers:
+    - remove at least one additional open-coded teardown pattern around kobject/sysfs lifetime
+    - keep semantics stable for current driver-core users
 - Acceptance:
-  - at least one additional core call site stops reading `current` directly
+  - one additional driver-core teardown path stops open-coding kobject/sysfs removal
   - `make clean && make -j4 && make smoke-512` passes
 
-Step 2. `arch/x86` Stage 9
+Step 2. `arch/x86` Stage 14
 - Scope:
-  - start turning one APIC-shaped vector into a minimal, still-PIC-safe active code path:
-    - keep PIC mode as the only active mode
-    - make vector ownership and handler layering ready for future APIC enablement
+  - continue APIC-shaped convergence without enabling APIC mode:
+    - prepare the next arch-owned local APIC/IPI distinction that does not leak into generic ISR
 - Acceptance:
-  - vector/handler ownership remains arch-owned and documented
-  - PIC mode remains smoke-stable
+  - one additional APIC-local semantic boundary is encoded in arch code
   - `make clean && make -j4 && make smoke-512` passes
 
 Reference Mapping (vendored linux2.6/)

@@ -20,6 +20,14 @@ static inline struct kobject *bus_drivers_kobj(struct bus_type *bus)
     return bus ? &bus->drivers.kobj : NULL;
 }
 
+static void bus_sysfs_unregister_subdirs(struct bus_type *bus)
+{
+    if (!bus)
+        return;
+    kobject_del(bus_drivers_kobj(bus));
+    sysfs_remove_subdir(bus_kobj(bus), "devices");
+}
+
 static uint32_t bus_emit_text_line(char *buffer, uint32_t cap, const char *text)
 {
     uint32_t n;
@@ -40,9 +48,7 @@ static uint32_t bus_emit_text_line(char *buffer, uint32_t cap, const char *text)
 static void bus_release_kobj(struct kobject *kobj)
 {
     struct bus_type *bus = container_of(kobj, struct bus_type, subsys.kset.kobj);
-    sysfs_remove_dir(bus_drivers_kobj(bus));
-    sysfs_remove_subdir(bus_kobj(bus), "devices");
-    sysfs_remove_dir(bus_kobj(bus));
+    bus_sysfs_unregister_subdirs(bus);
     kfree(bus);
 }
 

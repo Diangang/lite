@@ -48,6 +48,7 @@ void kobject_init(struct kobject *kobj, const char *name, void (*release)(struct
 void kobject_init_with_ktype(struct kobject *kobj, const char *name, struct kobj_type *ktype,
                              void (*release)(struct kobject *));
 int kobject_add(struct kobject *kobj);
+void kobject_del(struct kobject *kobj);
 struct kobject *kobject_get(struct kobject *kobj);
 void kobject_put(struct kobject *kobj);
 void kset_init(struct kset *kset, const char *name);

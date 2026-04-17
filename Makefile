@@ -111,14 +111,15 @@ run: $(KERNEL) $(INITRAMFS) $(SCSI_IMG)
 	qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -serial stdio $(VIRTIO_SCSI_ARGS)
 
 SMOKE_TIMEOUT ?= 30
+SMOKE_INPUT_DELAY ?= 5
 
 smoke: smoke-512
 
 smoke-512: $(KERNEL) $(INITRAMFS) $(SCSI_IMG) $(NVME_IMG0) $(NVME_IMG1)
-	sh -c 'tmp=$$(mktemp); scsi=$$(mktemp); nv0=$$(mktemp); nv1=$$(mktemp); cp $(SCSI_IMG) $$scsi; cp $(NVME_IMG0) $$nv0; cp $(NVME_IMG1) $$nv1; timeout $(SMOKE_TIMEOUT)s sh -c "{ sleep 2; printf \"run /bin/smoke\\nexit\\n\"; } | qemu-system-i386 -machine q35 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -display none -monitor none -serial stdio -drive file=$$scsi,format=raw,if=none,id=scsidisk0 -device virtio-scsi-pci,id=scsi0,disable-modern=on -device scsi-hd,drive=scsidisk0,bus=scsi0.0 -drive file=$$nv0,format=raw,if=none,id=nvme0 -device nvme,drive=nvme0,serial=NVME0001 -drive file=$$nv1,format=raw,if=none,id=nvme1 -device nvme,drive=nvme1,serial=NVME0002" >$$tmp 2>&1; cat $$tmp; rm -f $$scsi $$nv0 $$nv1; grep -q "All tests completed (OK)." $$tmp'
+	sh -c 'tmp=$$(mktemp); scsi=$$(mktemp); nv0=$$(mktemp); nv1=$$(mktemp); cp $(SCSI_IMG) $$scsi; cp $(NVME_IMG0) $$nv0; cp $(NVME_IMG1) $$nv1; timeout $(SMOKE_TIMEOUT)s sh -c "{ sleep $(SMOKE_INPUT_DELAY); printf \"run /bin/smoke\\nexit\\n\"; } | qemu-system-i386 -machine q35 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -display none -monitor none -serial stdio -drive file=$$scsi,format=raw,if=none,id=scsidisk0 -device virtio-scsi-pci,id=scsi0,disable-modern=on -device scsi-hd,drive=scsidisk0,bus=scsi0.0 -drive file=$$nv0,format=raw,if=none,id=nvme0 -device nvme,drive=nvme0,serial=NVME0001 -drive file=$$nv1,format=raw,if=none,id=nvme1 -device nvme,drive=nvme1,serial=NVME0002" >$$tmp 2>&1; cat $$tmp; rm -f $$scsi $$nv0 $$nv1; grep -q "All tests completed (OK)." $$tmp'
 
 smoke-128: $(KERNEL) $(INITRAMFS) $(SCSI_IMG) $(NVME_IMG0) $(NVME_IMG1)
-	sh -c 'tmp=$$(mktemp); scsi=$$(mktemp); nv0=$$(mktemp); nv1=$$(mktemp); cp $(SCSI_IMG) $$scsi; cp $(NVME_IMG0) $$nv0; cp $(NVME_IMG1) $$nv1; timeout $(SMOKE_TIMEOUT)s sh -c "{ sleep 2; printf \"run /bin/smoke\\nexit\\n\"; } | qemu-system-i386 -machine q35 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 128M -display none -monitor none -serial stdio -drive file=$$scsi,format=raw,if=none,id=scsidisk0 -device virtio-scsi-pci,id=scsi0,disable-modern=on -device scsi-hd,drive=scsidisk0,bus=scsi0.0 -drive file=$$nv0,format=raw,if=none,id=nvme0 -device nvme,drive=nvme0,serial=NVME0001 -drive file=$$nv1,format=raw,if=none,id=nvme1 -device nvme,drive=nvme1,serial=NVME0002" >$$tmp 2>&1; cat $$tmp; rm -f $$scsi $$nv0 $$nv1; grep -q "All tests completed (OK)." $$tmp'
+	sh -c 'tmp=$$(mktemp); scsi=$$(mktemp); nv0=$$(mktemp); nv1=$$(mktemp); cp $(SCSI_IMG) $$scsi; cp $(NVME_IMG0) $$nv0; cp $(NVME_IMG1) $$nv1; timeout $(SMOKE_TIMEOUT)s sh -c "{ sleep $(SMOKE_INPUT_DELAY); printf \"run /bin/smoke\\nexit\\n\"; } | qemu-system-i386 -machine q35 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 128M -display none -monitor none -serial stdio -drive file=$$scsi,format=raw,if=none,id=scsidisk0 -device virtio-scsi-pci,id=scsi0,disable-modern=on -device scsi-hd,drive=scsidisk0,bus=scsi0.0 -drive file=$$nv0,format=raw,if=none,id=nvme0 -device nvme,drive=nvme0,serial=NVME0001 -drive file=$$nv1,format=raw,if=none,id=nvme1 -device nvme,drive=nvme1,serial=NVME0002" >$$tmp 2>&1; cat $$tmp; rm -f $$scsi $$nv0 $$nv1; grep -q "All tests completed (OK)." $$tmp'
 
 check-vocab:
 	sh scripts/check-vocab.sh

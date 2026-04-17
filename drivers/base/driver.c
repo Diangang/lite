@@ -274,7 +274,7 @@ int driver_unregister(struct device_driver *drv)
         if (dev->driver == drv)
             device_unbind(dev);
     }
-    sysfs_remove_dir(&drv->kobj);
+    kobject_del(&drv->kobj);
     kset_remove(&drv->bus->drivers, &drv->kobj);
     drv->kobj.kset = NULL;
     /* Drop the registration reference (Linux mapping: driver_unregister ends the kobject lifetime). */

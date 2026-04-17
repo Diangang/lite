@@ -75,6 +75,12 @@ static inline int task_release_invariant_holds(struct task_struct *task)
 }
 
 extern struct list_head task_list_head;
+/*
+ * Linux mapping: Lite still exports `current` and `need_resched` as
+ * compatibility mirrors for existing call sites, but scheduler ownership lives
+ * in `boot_cpu_sched.*` inside `kernel/sched.c`. New core code should prefer
+ * helper accessors below instead of consuming these globals directly.
+ */
 extern struct task_struct *current;
 extern uint32_t next_task_id;
 extern int need_resched;
@@ -92,6 +98,11 @@ void task_sleep(uint32_t ticks);
 void task_yield(void);
 void task_list(void);
 void wake_up_process(struct task_struct *task);
+/*
+ * Linux mapping: core code should treat these helpers as the supported current
+ * task / resched access surface, analogous to Linux current-task and
+ * TIF_NEED_RESCHED ownership conventions.
+ */
 struct task_struct *task_current(void);
 void task_set_need_resched(void);
 void task_clear_need_resched(void);

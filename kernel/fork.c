@@ -56,7 +56,8 @@ void set_task_comm(struct task_struct *task, const char *program)
 /* sys_fork: Implement sys fork. */
 int sys_fork(struct pt_regs *regs)
 {
-    if (!current || !current->mm || !regs)
+    struct task_struct *parent = task_current();
+    if (!parent || !parent->mm || !regs)
         return -1;
     struct task_struct *task = (struct task_struct*)kmalloc(sizeof(struct task_struct));
     uint32_t *stack = (uint32_t*)kmalloc(THREAD_SIZE);
@@ -66,7 +67,7 @@ int sys_fork(struct pt_regs *regs)
         return -1;
     }
 
-    struct mm_struct *child_mm = dup_mm(current->mm);
+    struct mm_struct *child_mm = dup_mm(parent->mm);
     if (!child_mm) {
         kfree(stack);
         kfree(task);
@@ -74,7 +75,7 @@ int sys_fork(struct pt_regs *regs)
     }
 
     task->pid = next_task_id++;
-    task->parent = current;
+    task->parent = parent;
     task->thread.regs = copy_thread(stack, NULL, regs);
     if (!task->thread.regs) {
         mm_destroy(child_mm);
@@ -91,26 +92,20 @@ int sys_fork(struct pt_regs *regs)
     task->exit_state = 0;
     task->exit_info0 = 0;
     task->exit_info1 = 0;
-    set_task_comm(task, current->comm);
-    task->fs.pwd = current->fs.pwd;
+    set_task_comm(task, parent->comm);
+    task->fs.pwd = parent->fs.pwd;
     if (task->fs.pwd) task->fs.pwd->refcount++;
-    task->fs.root = current->fs.root;
+    task->fs.root = parent->fs.root;
     if (task->fs.root) task->fs.root->refcount++;
 
-    if (current) {
-        task->uid = current->uid;
-        task->gid = current->gid;
-        task->umask = current->umask;
-    } else {
-        task->uid = 0;
-        task->gid = 0;
-        task->umask = 022;
-    }
+    task->uid = parent->uid;
+    task->gid = parent->gid;
+    task->umask = parent->umask;
     files_init(task);
-    files_clone(task, current);
-    task->uid = current->uid;
-    task->gid = current->gid;
-    task->umask = current->umask;
+    files_clone(task, parent);
+    task->uid = parent->uid;
+    task->gid = parent->gid;
+    task->umask = parent->umask;
     task->waitq = NULL;
     init_waitqueue_entry(&task->wait_entry, task);
     INIT_LIST_HEAD(&task->tasks);
@@ -119,8 +114,7 @@ int sys_fork(struct pt_regs *regs)
     init_waitqueue_head(&task->child_exit_wait);
 
     uint32_t flags = tasklist_lock();
-    if (current)
-        list_add_tail(&task->sibling, &current->children);
+    list_add_tail(&task->sibling, &parent->children);
     list_add_tail(&task->tasks, &task_list_head);
     tasklist_unlock(flags);
 
@@ -130,6 +124,7 @@ int sys_fork(struct pt_regs *regs)
 /* task_create_internal: Implement task create internal. */
 static int task_create_internal(void (*entry)(void), const char *program)
 {
+    struct task_struct *parent = task_current();
     struct task_struct *task = (struct task_struct*)kmalloc(sizeof(struct task_struct));
     uint32_t *stack = (uint32_t*)kmalloc(THREAD_SIZE);
 
@@ -139,7 +134,7 @@ static int task_create_internal(void (*entry)(void), const char *program)
     }
 
     task->pid = next_task_id++;
-    task->parent = current;
+    task->parent = parent;
     task->thread.regs = copy_thread(stack, entry, NULL);
     task->thread.sp0 = (uint32_t*)((uint32_t)stack + THREAD_SIZE);
     task->wake_jiffies = 0;
@@ -158,13 +153,13 @@ static int task_create_internal(void (*entry)(void), const char *program)
     task->exit_state = 0;
     task->exit_info0 = 0;
     task->exit_info1 = 0;
-    task->uid = current ? current->uid : 0;
-    task->gid = current ? current->gid : 0;
-    task->umask = current ? current->umask : 022;
+    task->uid = parent ? parent->uid : 0;
+    task->gid = parent ? parent->gid : 0;
+    task->umask = parent ? parent->umask : 022;
     set_task_comm(task, program);
-    if (current) {
-        task->fs.pwd = current->fs.pwd;
-        task->fs.root = current->fs.root;
+    if (parent) {
+        task->fs.pwd = parent->fs.pwd;
+        task->fs.root = parent->fs.root;
         if (task->fs.pwd)
             task->fs.pwd->refcount++;
         if (task->fs.root)
@@ -186,8 +181,8 @@ static int task_create_internal(void (*entry)(void), const char *program)
     init_waitqueue_head(&task->child_exit_wait);
 
     uint32_t flags = tasklist_lock();
-    if (current)
-        list_add_tail(&task->sibling, &current->children);
+    if (parent)
+        list_add_tail(&task->sibling, &parent->children);
     list_add_tail(&task->tasks, &task_list_head);
     tasklist_unlock(flags);
 
@@ -209,6 +204,6 @@ int kernel_create_user(const char *program)
 /* fork_init: Fork init. */
 void fork_init(void)
 {
-    if (!current || list_empty(&task_list_head))
+    if (!task_current() || list_empty(&task_list_head))
         panic("fork_init before sched_init.");
 }

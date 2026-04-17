@@ -8,6 +8,11 @@
 #include "linux/irqflags.h"
 
 struct list_head task_list_head = LIST_HEAD_INIT(task_list_head);
+/*
+ * Linux mapping: these globals emulate the historical direct current-task /
+ * need-resched surface for existing Lite call sites. Ownership lives in the
+ * boot CPU scheduler state below; new core code should use helpers instead.
+ */
 struct task_struct *current = NULL;
 uint32_t next_task_id = 1;
 int need_resched = 0;
@@ -37,8 +42,15 @@ static struct sched_cpu_state boot_cpu_sched = {0};
 
 static void sched_sync_compat_globals(void)
 {
+    /* Keep exported mirrors readable for legacy callers while owner state stays per-CPU-shaped. */
     current = boot_cpu_sched.current;
     need_resched = boot_cpu_sched.need_resched;
+}
+
+static void sched_set_current(struct task_struct *task)
+{
+    boot_cpu_sched.current = task;
+    sched_sync_compat_globals();
 }
 
 static struct sched_cpu_state *sched_boot_cpu(void)
@@ -157,8 +169,7 @@ struct pt_regs *task_schedule(struct pt_regs *regs)
     struct task_struct *next = runqueue_pick_next(&cpu->rq, cpu->current);
     if (next != cpu->current)
         sched_switch_count++;
-    cpu->current = next;
-    sched_sync_compat_globals();
+    sched_set_current(next);
     if (cpu->current->mm && cpu->current->mm->pgd) {
         if (cpu->current->mm->pgd != get_pgd_current())
             switch_pgd(cpu->current->mm->pgd);
@@ -323,9 +334,8 @@ static void init_task(void)
 
     runqueue_init(&boot_cpu_sched.rq, &task_list_head);
     list_add(&task->tasks, &task_list_head);
-    boot_cpu_sched.current = task;
-    boot_cpu_sched.need_resched = 0;
-    sched_sync_compat_globals();
+    sched_set_current(task);
+    task_clear_need_resched();
     tss_set_kernel_stack((uint32_t)boot_cpu_sched.current->thread.sp0);
 }
 

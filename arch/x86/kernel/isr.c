@@ -114,14 +114,6 @@ char *exception_messages[] = {
     "Reserved"
 };
 
-static struct pt_regs *apic_placeholder_interrupt(struct pt_regs *regs)
-{
-    if (pic_mode)
-        panic("APIC/IPI vector fired while PIC mode is active.");
-    panic("APIC/IPI interrupt path not implemented.");
-    return regs;
-}
-
 /* Common handler for all ISRs */
 struct pt_regs *isr_handler(struct pt_regs *regs)
 {
@@ -221,11 +213,7 @@ void isr_install(void)
     idt_set_gate(ERROR_APIC_VECTOR, (uint32_t)error_interrupt, 0x08, 0x8E);
     idt_set_gate(SPURIOUS_APIC_VECTOR, (uint32_t)spurious_interrupt, 0x08, 0x8E);
 
-    register_interrupt_handler(LOCAL_TIMER_VECTOR, apic_placeholder_interrupt);
-    register_interrupt_handler(CALL_FUNCTION_VECTOR, apic_placeholder_interrupt);
-    register_interrupt_handler(RESCHEDULE_VECTOR, apic_placeholder_interrupt);
-    register_interrupt_handler(ERROR_APIC_VECTOR, apic_placeholder_interrupt);
-    register_interrupt_handler(SPURIOUS_APIC_VECTOR, apic_placeholder_interrupt);
+    apic_install_interrupts();
 }
 
 /* irq_install: Implement IRQ install. */

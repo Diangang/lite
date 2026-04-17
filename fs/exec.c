@@ -456,7 +456,6 @@ int sys_execve(const char *program, struct pt_regs *regs)
     regs->eflags = 0x202;
     regs->eip = entry;
     regs->useresp = user_stack;
-
     switch_pgd(user_dir);
     mm_destroy(old_mm);
     return 0;

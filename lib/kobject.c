@@ -71,6 +71,21 @@ static int kobject_child_linked(struct kobject *parent, struct kobject *child)
     return 0;
 }
 
+static void kobject_child_unlink(struct kobject *parent, struct kobject *child)
+{
+    if (!parent || !child)
+        return;
+    struct kobject **link = &parent->children;
+    while (*link) {
+        if (*link == child) {
+            *link = child->next;
+            child->next = NULL;
+            return;
+        }
+        link = &(*link)->next;
+    }
+}
+
 int kobject_add(struct kobject *kobj)
 {
     if (!kobj)
@@ -81,6 +96,16 @@ int kobject_add(struct kobject *kobj)
         parent->children = kobj;
     }
     return sysfs_create_dir(kobj);
+}
+
+void kobject_del(struct kobject *kobj)
+{
+    if (!kobj)
+        return;
+    kobject_child_unlink(kobject_parent(kobj), kobj);
+    sysfs_remove_dir(kobj);
+    kobj->parent = NULL;
+    kobj->next = NULL;
 }
 
 /* kobject_get: Implement kobject get. */
@@ -165,9 +190,9 @@ void subsystem_unregister(struct subsystem *subsys)
     if (!subsys)
         return;
     struct kset *parent = subsys->kset.kobj.kset;
+    kobject_del(&subsys->kset.kobj);
     if (list_entry_linked(&subsys->kset.kobj.entry))
         list_del(&subsys->kset.kobj.entry);
-    sysfs_remove_dir(&subsys->kset.kobj);
     if (parent)
         kobject_put(&parent->kobj);
 }
