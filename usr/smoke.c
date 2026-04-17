@@ -757,16 +757,43 @@ void test_pci_uevent() {
     }
 
     /* Linux mapping: /sys/kernel/uevent_seqnum is a monotonic counter. */
-    int seq = 0;
+    int seq0 = 0;
     int i = 0;
     while (i < n && (buf[i] == ' ' || buf[i] == '\t' || buf[i] == '\n'))
         i++;
     while (i < n && buf[i] >= '0' && buf[i] <= '9') {
-        seq = seq * 10 + (buf[i] - '0');
+        seq0 = seq0 * 10 + (buf[i] - '0');
         i++;
     }
-    if (seq <= 0)
+    if (seq0 <= 0)
         fail("uevent_seqnum not advanced");
+
+    /*
+     * Validate uevent path is live by triggering a bind/unbind via driver sysfs.
+     * Linux mapping: /sys/bus/<bus>/drivers/<driver>/{bind,unbind} + /sys/kernel/uevent_seqnum.
+     */
+    int w = write_file("/sys/bus/platform/drivers/console/unbind", "console0\n", 9);
+    if (w <= 0)
+        fail("console unbind");
+    w = write_file("/sys/bus/platform/drivers_probe", "platform:console0\n", 18);
+    if (w <= 0)
+        fail("drivers_probe console");
+
+    n = read_file("/sys/kernel/uevent_seqnum", buf, sizeof(buf));
+    if (n <= 0) {
+        fail("Could not re-read /sys/kernel/uevent_seqnum");
+        return;
+    }
+    int seq1 = 0;
+    i = 0;
+    while (i < n && (buf[i] == ' ' || buf[i] == '\t' || buf[i] == '\n'))
+        i++;
+    while (i < n && buf[i] >= '0' && buf[i] <= '9') {
+        seq1 = seq1 * 10 + (buf[i] - '0');
+        i++;
+    }
+    if (seq1 <= seq0)
+        fail("uevent_seqnum did not increase after bind/unbind");
 
     n = read_file("/sys/kernel/uevent_helper", buf, sizeof(buf));
     if (n <= 0)
@@ -1037,6 +1064,12 @@ void test_sysfs_bind_unbind_console() {
     n = read_file("/sys/devices/platform/console0/driver/name", buf, sizeof(buf));
     if (n <= 0 || !contains(buf, n, "console")) {
         fail("console driver should be probed");
+        ok = 0;
+    }
+
+    w = write_file("/sys/bus/platform/drivers_probe", "platform:console0\n", 18);
+    if (w > 0) {
+        fail("drivers_probe should reject already-bound console0");
         ok = 0;
     }
 

@@ -60,29 +60,46 @@ irq_common_stub:
     add $8, %esp
     iret
 
-/* IRQ 0 - Timer */
-.global irq0
-/* irq0: Implement irq0. */
-irq0:
-    push $0         /* Dummy error code */
-    push $32        /* Interrupt number 32 */
+/* IRQ stubs for the full legacy PIC range (IRQ0-IRQ15). */
+.macro IRQ_STUB irq, vector
+  .global irq\irq
+irq\irq:
+    push $0
+    push $\vector
     jmp irq_common_stub
+.endm
 
-/* IRQ 1 - Keyboard */
-.global irq1
-/* irq1: Implement irq1. */
-irq1:
-    push $0         /* Dummy error code */
-    push $33        /* Interrupt number 33 */
-    jmp irq_common_stub
+IRQ_STUB 0, 32
+IRQ_STUB 1, 33
+IRQ_STUB 2, 34
+IRQ_STUB 3, 35
+IRQ_STUB 4, 36
+IRQ_STUB 5, 37
+IRQ_STUB 6, 38
+IRQ_STUB 7, 39
+IRQ_STUB 8, 40
+IRQ_STUB 9, 41
+IRQ_STUB 10, 42
+IRQ_STUB 11, 43
+IRQ_STUB 12, 44
+IRQ_STUB 13, 45
+IRQ_STUB 14, 46
+IRQ_STUB 15, 47
 
-/* IRQ 4 - Serial COM1 */
-.global irq4
-/* irq4: Implement irq4. */
-irq4:
-    push $0         /* Dummy error code */
-    push $36        /* Interrupt number 36 */
-    jmp irq_common_stub
+/* Linux-shaped APIC/IPI placeholder vectors. */
+.macro VECTOR_STUB label, vector
+  .global \label
+\label:
+    push $0
+    push $\vector
+    jmp isr_common_stub
+.endm
+
+VECTOR_STUB apic_timer_interrupt, 0xef
+VECTOR_STUB call_function_interrupt, 0xfc
+VECTOR_STUB reschedule_interrupt, 0xfd
+VECTOR_STUB error_interrupt, 0xfe
+VECTOR_STUB spurious_interrupt, 0xff
 
 /* ISRs (Exceptions) */
 .macro ISR_NOERRCODE num

@@ -13,381 +13,294 @@ Principles:
 Progress Snapshot
 
 Kernel / arch / driver core:
-- kernel core (sched/fork/exit/wait/signal): `STAGE0 ONLY` (needs Stage 1+)
-- kernel core (syscalls): `IN PROGRESS` (Stage 0 DONE; Stage 1 partial)
-- kernel core (printk): `IN PROGRESS` (Stage 0 DONE; Stage 1 partial)
-- lib/: `IN PROGRESS` (Stage 1 partial; Stage 0 report pending)
-- arch/x86: `STAGE0 ONLY` (needs Stage 1+)
-- drivers/base: `IN PROGRESS` (Stage 0 DONE; Stage 1 partial; Stage 2 partial)
-- timekeeping/clocksource: `IN PROGRESS` (Stage 0 DONE; Stage 1 partial)
-- input/tty/console: `STAGE0 ONLY` (needs Stage 1+)
+- kernel core (sched/fork/exit/wait/signal): `IN PROGRESS` (Stage 0 DONE; Stage 1 DONE; Stage 2 DONE; Stage 3 DONE; Stage 4 DONE; Stage 5 DONE; Stage 6 DONE; Stage 7 DONE; Stage 8 DONE; Stage 9+ pending)
+- lib/: `IN PROGRESS` (Stage 0 DONE; Stage 1 DONE; Stage 2 DONE; Stage 3 DONE; Stage 4+ pending)
+- arch/x86: `IN PROGRESS` (Stage 0 DONE; Stage 1 DONE; Stage 2 DONE; Stage 3 DONE; Stage 4 DONE; Stage 5 DONE; Stage 6 DONE; Stage 7 DONE; Stage 8 DONE; Stage 9+ pending)
 
-Filesystems:
-- ramfs: `STAGE0 ONLY` (needs Stage 1)
-- minixfs: `STAGE0 ONLY` (needs Stages 1-2)
-- sysfs: `IN PROGRESS` (Stage 0 DONE; Stage 1 DONE; Stage 2 partial)
+arch/x86 Stage 3 DIFFs kept explicit:
+- legacy PIC path: `DONE`
+  - Linux mapping: `linux2.6/arch/x86/kernel/irq.c`, `linux2.6/arch/x86/kernel/i8259.c`
+  - Status: Lite now has a minimal `irq_desc`/`irq_chip` boundary and a dedicated `i8259` layer; generic IRQ dispatch no longer embeds PIC remap/EOI logic.
+- IRQ/vector coverage: `PARTIAL DIFF`
+  - Linux mapping: x86 vector space and full legacy/APIC routing
+  - Why: Lite now installs all legacy PIC `IRQ0-IRQ15` stubs and maps them through the existing `irq_desc`/`i8259` path, but still does not model Linux APIC/IOAPIC routing.
+  - Impact: the 16-line legacy IRQ model is now internally consistent, but x86 vector management is still far simpler than Linux.
+  - Plan: keep legacy PIC coverage complete; future expansion should target APIC/IOAPIC rather than adding new ad-hoc legacy paths.
+- entry/interrupt low-level path: `PARTIAL DIFF`
+  - Linux mapping: `linux2.6/arch/x86/entry/entry_32.S`
+  - Why: Lite keeps a minimal `isr_common_stub` / `irq_common_stub` assembly path and a direct `int $0x20` yield path, without Linux's richer entry bookkeeping.
+  - Impact: current entry code is adequate for UP smoke coverage, but does not model Linux's full entry layering, tracing hooks, or return-to-user/kernel distinctions.
+  - Plan: keep the minimal stub model until broader entry/SMP work justifies a more Linux-shaped split.
+- APIC / IOAPIC / SMP IRQ model: `DIFF`
+  - Linux mapping: local APIC, IOAPIC, per-CPU irq stats, IPIs, `irq_enter()` / `irq_exit()`
+  - Why: Lite currently targets a uniprocessor, legacy-PIC execution model.
+  - Impact: no LAPIC timer, no reschedule/call-function IPIs, no APIC vector management, and no SMP irq accounting.
+  - Plan: converge together with future SMP enablement rather than piecemeal in the legacy PIC path.
+- irq core semantics: `PARTIAL DIFF`
+  - Linux mapping: descriptor state machines, irq flow handlers, irqdomain/vector management
+  - Why: Lite uses a deliberately small `irq_desc`/`irq_chip` subset with direct handler binding.
+  - Impact: naming is Linux-shaped, but semantics are still far simpler than Linux's generic irq subsystem.
+  - Plan: preserve naming and grow semantics only when additional controllers or SMP/vector management need them.
+- regression note:
+  - `make smoke-512` passed after one retry during this documentation-only stage, indicating an occasional early-boot/non-deterministic run rather than a deterministic regression from the arch/x86 Stage 3 documentation closure itself.
 
-Memory management (mm/):
-- VMA management: `IN PROGRESS` (Stage 0 DONE; Stage 1 DONE; Stage 2 partial)
-- reclaim/swap: `IN PROGRESS` (Stages 0-2 DONE; Stage 3 pending decision)
+arch/x86 Stage 5 progress:
+- legacy IRQ line -> vector mapping is now owned by `arch/x86/kernel/irq.c` instead of being hardcoded as a generic header formula.
+- Linux mapping:
+  - `linux2.6/arch/x86/kernel/irq.c`
+  - `linux2.6/arch/x86/kernel/apic/apic.c`
+  - `linux2.6/arch/x86/kernel/apic/io_apic.c`
+- why this matters:
+  - Linux does not treat vector assignment as a generic `IRQ_VECTOR_BASE + irq` contract.
+  - keeping the mapping in arch code makes the current legacy PIC path explicit while leaving a Linux-shaped place for future APIC/IOAPIC vector allocation.
+- current Lite semantics:
+  - legacy PIC still uses the same vectors (`32..47`)
+  - behavior is unchanged for current hardware paths
+  - only the ownership boundary moved from header inline logic to arch-managed state
+- remaining DIFF after Stage 5:
+  - vector allocation is still static legacy-PIC mapping, not Linux APIC/vector management
+  - there is still no LAPIC timer, IPI, or IOAPIC routing model
+
+arch/x86 Stage 6 progress:
+- explicit arch-owned LAPIC / IOAPIC placeholders now exist:
+  - `arch/x86/kernel/apic.c`
+  - `arch/x86/kernel/io_apic.c`
+  - `include/asm/apic.h`
+  - `include/asm/io_apic.h`
+- Linux mapping:
+  - `linux2.6/arch/x86/kernel/apic/apic.c`
+  - `linux2.6/arch/x86/kernel/apic/io_apic.c`
+- current Lite semantics:
+  - `irq_install()` now passes through explicit LAPIC/IOAPIC placeholder init points before enabling the legacy `i8259` path
+  - placeholders are no-op and keep APIC/IOAPIC disabled
+  - generic IRQ helpers remain free of APIC/IOAPIC-specific assumptions
+- impact:
+  - user-visible interrupt behavior is unchanged
+  - future APIC/IOAPIC bringup now has Linux-shaped arch-owned files instead of requiring new ad-hoc hooks in `irq.c` or `i8259.c`
+- remaining DIFF after Stage 6:
+  - no LAPIC timer
+  - no IOAPIC routing
+  - no IMCR/APIC mode switch
+  - no IPI/SMP interrupt model
+
+arch/x86 Stage 7 progress:
+- interrupt controller mode ownership is now explicit:
+  - `pic_mode` is arch-owned in `arch/x86/kernel/apic.c`
+  - `irq_install()` explicitly requires PIC mode before entering the legacy `i8259` setup path
+  - future APIC mode enablement now has a clear handoff point instead of being an implicit "not yet" assumption
+- Linux mapping:
+  - `pic_mode` in `linux2.6/arch/x86/kernel/apic/apic.c`
+  - APIC-vs-PIC controller split owned by x86 arch code rather than generic IRQ helpers
+- current Lite semantics:
+  - boot always stays in PIC mode
+  - if future code tries to leave PIC mode without implementing APIC routing, boot will fail loudly instead of silently mixing models
+  - generic IRQ code still does not know APIC/IOAPIC details
+- remaining DIFF after Stage 7:
+  - PIC mode is explicit, but APIC mode is still unimplemented
+  - no LAPIC timer, no IOAPIC routing, no IMCR switch, no IPI vectors
+
+arch/x86 Stage 8 progress:
+- Linux-shaped APIC/IPI vectors are now reserved explicitly in Lite arch code:
+  - `LOCAL_TIMER_VECTOR`
+  - `CALL_FUNCTION_VECTOR`
+  - `RESCHEDULE_VECTOR`
+  - `ERROR_APIC_VECTOR`
+  - `SPURIOUS_APIC_VECTOR`
+- Linux mapping:
+  - `linux2.6/arch/x86/include/asm/irq_vectors.h`
+  - `linux2.6/arch/x86/include/asm/entry_arch.h`
+- current Lite semantics:
+  - IDT entries exist for these vectors
+  - assembly entry stubs exist for these vectors
+  - all of them route to a placeholder handler that panics if triggered
+  - PIC mode remains the only active runtime mode, so these entries stay dormant in normal boot/smoke execution
+- impact:
+  - future LAPIC timer and IPI work now has Linux-shaped vector ownership and entry points
+  - generic IRQ helpers still do not need APIC-specific policy
+- remaining DIFF after Stage 8:
+  - vectors exist, but there is still no active LAPIC timer programming
+  - no call-function/reschedule IPI send path
+  - no IOAPIC routing
+
+kernel/sched + fork/exit/wait/signal Stage 3 DIFFs kept explicit:
+- `tasklist_lock`: `PARTIAL DIFF`
+  - Linux mapping: `tasklist_lock` / tasklist serialization in `linux2.6/kernel/fork.c`, `linux2.6/kernel/exit.c`, `linux2.6/kernel/signal.c`
+  - Why: Lite currently maps this to `irq_save/irq_restore`, which is only a UP critical section, not Linux-style rwlock/spinlock serialization.
+  - Impact: parent/child linkage, reparenting, reap, and pid lookup are only safe under single-CPU execution; SMP would need real lock ordering and remote visibility rules.
+  - Plan: converge to a real SMP-safe tasklist lock once per-CPU scheduling/irq infrastructure exists.
+- scheduler core globals: `PARTIAL DIFF`
+  - Linux mapping: per-CPU `rq`, `current`, `TIF_NEED_RESCHED`, reschedule IPIs in `linux2.6/kernel/sched.c`
+  - Why: Lite keeps a single global `current`, single global runqueue, and global `need_resched`.
+  - Impact: scheduling state is globally serialized and cannot scale to SMP or preserve Linux per-CPU invariants.
+  - Plan: split `current`/runqueue/resched state per CPU together with future SMP work.
+- task lifetime / refs: `PARTIAL DIFF`
+  - Linux mapping: `release_task()`, refcounted task lifetime, delayed final release paths
+  - Why: Lite still frees `task_struct` directly after reap, without Linux-style task refs, RCU, or delayed put semantics.
+  - Impact: current design is adequate for UP smoke coverage but would be fragile under parallel wait/kill/exit observers.
+  - Plan: introduce explicit task refs/lifetime ownership together with SMP-safe wait/signal convergence.
+- wait queues and wakeups: `PARTIAL DIFF`
+  - Linux mapping: waitqueue head locking and wakeup discipline in Linux waitqueue core
+  - Why: Lite wait queues are singly linked and protected only by local irq exclusion.
+  - Impact: semantics are sufficient for current blocking/wakeup paths, but not for SMP-safe concurrent waiter/waker manipulation.
+  - Plan: move waitqueue head protection to real spinlocks after SMP primitives land.
+- signal model: `PARTIAL DIFF`
+  - Linux mapping: `sigpending`, `signal_struct`, `sighand`, `siglock`, full kill/notify semantics
+  - Why: Lite intentionally keeps a reduced signal model centered on exit reasons plus a minimal `kill()` subset.
+  - Impact: Linux naming is roughly preserved, but semantics are intentionally much narrower than Linux 2.6.
+  - Plan: keep minimal semantics for now; only expand when broader process model work requires it.
+
+kernel/sched + fork/exit/wait/signal Stage 4 progress:
+- target Linux mapping made explicit:
+  - tasklist locking: `linux2.6/kernel/fork.c`, `linux2.6/kernel/exit.c`, `linux2.6/kernel/signal.c`
+  - current/runqueue shape: `linux2.6/kernel/sched.c`
+  - waitqueue discipline: Linux waitqueue core and `wait_chldexit` usage
+  - task lifetime: `release_task()` and delayed final put semantics in Linux exit/reap paths
+- lock ordering note kept explicit:
+  - tasklist serialization must dominate parent/child linkage changes and zombie reaping decisions
+  - waitqueue attachment/removal must not outlive the task visibility guaranteed by tasklist-linked ownership
+  - mm/vfs teardown happens during exit/zombify before final task release, while final free is delayed until the task is no longer reachable
+- concrete lifetime invariant:
+  - a `task_struct` must not be freed while still reachable from `task_list_head`, any parent `children` list, or any waitqueue attachment
+  - Lite now encodes this as a code-level release check via `task_release_invariant_holds()` before final free
+- remaining DIFF after Stage 4:
+  - the invariant is Linux-shaped, but enforcement still relies on UP-only exclusion instead of SMP-safe task refs/RCU/spinlocks
+  - per-CPU runqueue/current shape is documented as the next convergence step, not fully implemented yet
+
+kernel/sched + fork/exit/wait/signal Stage 5 progress:
+- per-CPU shape introduced for the current UP scheduler state:
+  - `boot_cpu_sched.current`
+  - `boot_cpu_sched.rq`
+  - `boot_cpu_sched.need_resched`
+- compatibility with existing Lite call sites is preserved via:
+  - `current` as a compatibility mirror of the boot CPU current task
+  - `need_resched` as a compatibility mirror of the boot CPU resched bit
+  - helper APIs: `task_current()`, `task_set_need_resched()`, `task_clear_need_resched()`, `task_need_resched()`
+- Linux mapping:
+  - per-CPU `current`
+  - per-CPU runqueue `rq`
+  - per-CPU resched ownership in Linux scheduler core
+- impact:
+  - user-visible UP behavior is unchanged
+  - scheduler ownership is no longer modeled purely as one set of anonymous globals
+  - future SMP/per-CPU work now has a Linux-shaped landing point
+- remaining DIFF after Stage 5:
+  - only CPU0 exists; there is no actual SMP scheduling
+  - `current` and `need_resched` still remain exported as compatibility mirrors for existing code
+  - runqueue locking/ownership is still UP-only
+
+kernel/sched + fork/exit/wait/signal Stage 6 progress:
+- compatibility mirrors are now explicitly treated as legacy surface:
+  - owner state lives in `boot_cpu_sched.*`
+  - `current` / `need_resched` remain as mirrors for existing call sites, but should not be treated as owner state
+- enforcement by code structure:
+  - scheduling decisions consult `task_current()` and `task_need_resched()`
+  - resched requests use `task_set_need_resched()` / `task_clear_need_resched()`
+  - direct writes to `need_resched` are eliminated outside of scheduler mirror sync
+- Linux mapping:
+  - per-CPU `current` / per-CPU resched ownership in `linux2.6/kernel/sched.c`
+  - future reschedule IPI path remains the long-term convergence target
+- remaining DIFF after Stage 6:
+  - many existing call sites still read `current` directly; this is kept for churn control
+  - the mirrors remain exported, so this is a convention + code-review rule until deeper refactoring
+
+kernel/sched + fork/exit/wait/signal Stage 7 progress:
+- one additional scheduler-adjacent path now avoids direct `current` usage:
+  - waitqueue and `waitpid` paths consult `task_current()` to obtain the current task pointer, rather than relying on the exported compatibility mirror
+- intent:
+  - continue shrinking the "compatibility mirror is the API" surface area
+  - keep ownership and lookup Linux-shaped for future per-CPU expansion
+- remaining DIFF after Stage 7:
+  - many call sites still read `current` directly across fs and driver code; those are out of scope for this core stage
+
+kernel/sched + fork/exit/wait/signal Stage 8 progress:
+- additional core paths now avoid direct reads of the exported `current` mirror:
+  - `do_exit()` / `do_exit_reason()` consult `task_current()`
+  - cred getters/setters consult `task_current()`
+  - `sys_kill()` self-target logic consults `task_current()`
+- intent:
+  - reduce reliance on compatibility mirrors in core task/exit/signal/cred logic
+  - keep "current task" ownership Linux-shaped for future per-CPU expansion
+- remaining DIFF after Stage 8:
+  - many call sites still read `current` directly outside the core scope (fs/drivers)
+  - `current` remains exported as a compatibility mirror for churn control
+
+lib/ Stage 1 DIFFs kept explicit:
+- libc convenience helpers:
+  - `strdup`: `DIFF`, kept as Lite convenience wrapper; kernel-facing call sites now use Linux-shaped `kstrdup`.
+  - `itoa`: `DIFF`, kept only as a small internal helper; Linux mapping prefers `snprintf`-style formatting.
+  - `printf`: `DIFF`, kept as a convenience wrapper over `vprintk`; Linux kernel-facing interface remains `printk`.
+- `kref`: `PARTIAL DIFF`, naming/release-callback shape matches Linux, but refcounting is non-atomic and only valid under Lite's UP locking assumptions.
+- `idr`: `PARTIAL DIFF`, API naming aligns, but implementation is still a flat growable slot array rather than Linux's radix-layered allocator.
+
+lib/ Stage 2 progress:
+- converted several kernel-facing text emitters from `itoa` to `snprintf`:
+  - uevent text assembly
+  - `/sys/kernel/*` text emitters
+  - block sysfs numeric emitters
+  - SCSI host/device/disk names
+  - virtio/platform instance naming
+  - procfs generic integer/hex append helpers
+- `itoa` is now retained only as a Lite-local helper implementation in `lib/libc.c`; kernel call sites no longer depend on it.
+- retained `printf` users are kept as an explicit long-term DIFF for:
+  - early boot / bringup messages before broader `printk` cleanup
+  - debug / diagnostic dumps in mm, nvme, pci, fs
+  - a few convenience error/reporting paths that still wrap `vprintk`
+- Linux mapping: retained `printf` is a Lite wrapper over `vprintk`, but Linux-facing interfaces should continue converging toward `printk` family calls.
+
+lib/ Stage 3 progress:
+- converted more kernel-facing error/reporting paths from `printf` to `printk`:
+  - x86 exception / IRQ error reporting
+  - `panic()` output
+  - `fork()` allocation failure reporting
+  - ELF/exec validation and allocation failure reporting
+- retained `printf` categories are now explicit:
+  - early boot / bringup / registration banners in init and core subsystem bringup
+  - storage/mm/fs diagnostic dumps where multi-line ad-hoc tracing is still convenient during smoke bringup
+  - smoke-oriented mount/filesystem debug traces
+  - a few interactive or developer-facing convenience outputs such as scheduler/task listing and tty `^C` echo
+- plan for retained `printf` users:
+  - new kernel-facing error/reporting paths should prefer `printk`
+  - early boot banners may stay Lite-local until a broader logging cleanup
+  - diagnostic dump style call sites can be migrated module-by-module once `pr_*` style wrappers exist
+- `kref` decision:
+  - keep Linux-shaped API naming now
+  - defer atomic/refcount semantic convergence to later SMP-focused work; current implementation remains an explicit UP-only DIFF
+- `idr` decision:
+  - keep the current flat slot-array implementation for now as a deliberate simplified backend
+  - preserve Linux-shaped API surface; only converge the backend if scale/features require radix-like semantics
 
 
 Acceptance Queue
 
 Use this queue as the execution order. Each step is considered complete only when its acceptance criteria are all satisfied.
-
-Step 4. `drivers/base` Stage 1 complete
+Step 1. `kernel/sched + fork/exit/wait/signal` Stage 9
 - Scope:
-  - `drivers/base/core.c`, `drivers/base/driver.c`, `drivers/base/uevent.c`.
-- Goal:
-  - Finish Linux-like device/driver public surface (attributes + uevent environment).
+  - continue the compatibility-mirror shrink in core only:
+    - migrate a small set of remaining core `current` reads to `task_current()`
+    - keep semantics stable; focus on ownership clarity and per-CPU landing points
 - Acceptance:
-  - Uevent field set is stable and documented.
-  - `modalias` attribute and `DEVNAME/MAJOR/MINOR/SEQNUM` behavior are covered by smoke or focused checks.
-  - Any missing module autoload behavior is explicitly marked as out-of-scope DIFF.
-  - `make -j4 && make smoke-512` passes.
+  - at least one additional core call site stops reading `current` directly
+  - `make clean && make -j4 && make smoke-512` passes
 
-Step 5. `drivers/base` Stage 2 complete
+Step 2. `arch/x86` Stage 9
 - Scope:
-  - bind/unbind/reprobe, deferred probe, driver/device kobject lifetime.
-- Goal:
-  - Close lifetime and reprobe corner cases so Lite behavior matches Linux driver-core boundaries.
+  - start turning one APIC-shaped vector into a minimal, still-PIC-safe active code path:
+    - keep PIC mode as the only active mode
+    - make vector ownership and handler layering ready for future APIC enablement
 - Acceptance:
-  - Reprobe path requires explicit unbind before rebinding.
-  - Driver/device unregister paths drop all refs symmetrically.
-  - Deferred-probe queue cannot retain removed devices.
-  - Smoke covers bind/unbind/reprobe on at least one bus.
-
-Step 6. `timekeeping/clocksource` Stage 2
-- Scope:
-  - `kernel/time.c`, `kernel/clockevents.c`, timer/PIT users.
-- Goal:
-  - Stop direct PIT-driven time assumptions from leaking into generic code.
-- Acceptance:
-  - Generic delay/timeout/time conversion helpers no longer require drivers to read PIT state directly.
-  - Tick rate remains fixed at `HZ` and that rule is documented.
-  - `make -j4 && make smoke-512` passes.
-
-Step 7. `arch/x86` Stage 1
-- Scope:
-  - entry/irq/register-save ABI, `pt_regs` contract.
-- Goal:
-  - Make x86 entry ABI Linux-shaped enough that syscall/irq/fault code rely on one consistent saved-register contract.
-- Acceptance:
-  - `pt_regs` save/restore contract is documented in code or doc.
-  - Syscall, IRQ, and fault handlers consume the same stable register layout.
-  - No ad-hoc per-handler register assumptions remain.
-
-Step 8. `kernel/sched + wait/signal` Stage 1
-- Scope:
-  - `kernel/sched.c`, `kernel/wait.c`, `kernel/signal.c`, related task wakeup paths.
-- Goal:
-  - Replace scattered wakeups with Linux-shaped wait/wakeup boundaries.
-- Acceptance:
-  - At least one waitqueue-like primitive is the canonical wakeup path.
-  - `waitpid` and signal wakeups stop depending on open-coded task-list scans where avoidable.
-  - Document remaining unsupported signal semantics explicitly.
-  - `make -j4 && make smoke-512` passes.
-
-Step 9. `input/tty/console` Stage 1
-- Scope:
-  - keyboard/input path, tty registration, console input flow.
-- Goal:
-  - Introduce minimal Linux shapes: serio/i8042/atkbd split and tty_driver registration basics.
-- Acceptance:
-  - Keyboard hardware logic is no longer the policy owner for line discipline behavior.
-  - A tty-driver-like registration boundary exists.
-  - Console input still works in smoke/manual boot verification.
-
-Step 10. `ramfs` Stage 1
-- Scope:
-  - `fs/ramfs/ramfs.c`
-- Goal:
-  - Align inode creation/lifetime shape to Linux ramfs idioms.
-- Acceptance:
-  - Ramfs inode creation follows the same conceptual boundary for regular files/dirs/symlinks.
-  - Rootfs boot and file I/O smoke continue to pass.
-
-Step 11. `minixfs` Stage 1
-- Scope:
-  - `fs/minixfs/minixfs.c`
-- Goal:
-  - Replace mount-time directory prepopulation with Linux-like on-demand lookup.
-- Acceptance:
-  - Mount no longer eagerly scans and instantiates full directory children.
-  - Lookup/readdir still works for existing minixfs smoke/use cases.
-
-Step 12. `minixfs` Stage 2
-- Scope:
-  - super/inode lifecycle hooks.
-- Goal:
-  - Add Linux-shaped lifecycle boundaries even if writeback stays simplified.
-- Acceptance:
-  - `put_super`/`evict_inode`-style ownership boundaries exist or exact Lite equivalent is documented.
-  - Unmount/remount does not rely on leaked inode state.
-
-Step 13. `sysfs` Stage 2 complete
-- Scope:
-  - `fs/sysfs/sysfs.c`, VFS symlink semantics.
-- Goal:
-  - Finish Linux-like symlink behavior without breaking reachability.
-- Acceptance:
-  - Relative sysfs links work where Linux expects them.
-  - `readlink`/symlink traversal semantics match VFS plan.
-  - `/sys/class`, `/sys/bus/*/devices`, and bind/unbind smoke remain green.
-
-Step 14. `mm/VMA` Stage 2 complete
-- Scope:
-  - `mm/mmap.c`, `mm/rmap.c`
-- Goal:
-  - Decide and implement the minimal anon_vma lineage boundary.
-- Acceptance:
-  - Merge/split/clone preserve anon lineage consistently.
-  - Remaining lack of full Linux anon_vma objects/locking is either removed or explicitly frozen as DIFF.
-  - `make -j4 && make smoke-512` passes.
-
-Step 15. `mm/reclaim/swap` Stage 3 decision
-- Scope:
-  - `mm/vmscan.c`, `mm/swap.c`, `mm/rmap.c`
-- Goal:
-  - Either converge further toward Linux swap entry model or explicitly stop and document the limitation.
-- Acceptance:
-  - One of the following is true:
-  - A minimal Linux-like swap entry encoding + swap map exists.
-  - Or the doc explicitly marks swap device/global swap as out-of-scope with supported/unsupported cases listed.
-  - The chosen direction is reflected in smoke or targeted regression checks.
-
-
-Kernel Core (kernel/)
-
-Linux mapping (vendored):
-- Scheduler: `linux2.6/kernel/sched.c`
-- Fork/exit/wait: `linux2.6/kernel/fork.c`, `linux2.6/kernel/exit.c`
-- Signals: `linux2.6/kernel/signal.c`
-- Syscalls/entry: `linux2.6/arch/x86/kernel/entry_32.S` + `linux2.6/arch/x86/kernel/syscall_table_32.S` (concept mapping), `linux2.6/kernel/sys.c` (syscall bodies)
-- printk/panic: `linux2.6/kernel/printk.c`, `linux2.6/kernel/panic.c`
-
-Status:
-- sched/fork/exit/wait/signal: Stage 0 only (documented mapping + DIFFs; implementation convergence pending)
-- syscalls: Stage 1 DONE (Linux-like `sys_call_table[]` dispatch; `NR_syscalls` is the only bounds source; smoke passes)
-- printk: Stage 1 DONE (return semantics selftested; `/sys/kernel/uevent_helper` + `/sys/kernel/uevent_seqnum` are Linux-like; smoke passes)
-
-Next steps (plan):
-- Scheduler/tasking:
-  - Stage 1: make wakeup a structured primitive (waitqueue-driven), reduce ad-hoc state flips.
-  - Stage 2: introduce a minimal rq abstraction boundary (even if single CPU).
-- Fork/exit/wait/signal:
-  - Stage 1: introduce Linux-like `do_wait`/pending-signal boundaries (subset OK, shape must be Linux-like).
-  - Stage 2: tighten lifetime rules (task refs, reparenting invariants, locking discipline).
-- Syscalls/entry:
-  - Stage 1: finish syscall table shape: audit full SYS_* coverage, unify bounds via `NR_syscalls`.
-  - Stage 2: clarify entry/exit invariants (from_user accounting, restartability out-of-scope explicitly).
-- printk:
-  - Stage 1: define what is in-scope (kmsg/loglevel/locking); stop overloading sysfs nodes with non-Linux meaning.
-
-
-Kernel Libraries (lib/)
-
-Linux mapping (vendored):
-- `linux2.6/lib/string.c`, `linux2.6/lib/vsprintf.c`
-- `linux2.6/lib/kref.c`, `linux2.6/lib/kobject.c`
-- `linux2.6/lib/idr.c`
-
-Status:
-- Stage 0: DONE (exported API audit completed for libc/vsprintf/kref/kobject/idr; each symbol is tagged OK or DIFF)
-- Stage 1: PARTIAL (memmove semantics, minimal vsnprintf return semantics, printk return semantics)
-
-Stage 0 audit (exported APIs)
-- Covered files:
-  - `include/linux/libc.h`
-  - `include/linux/vsprintf.h`
-  - `lib/kref.c`
-  - `lib/kobject.c`
-  - `lib/idr.c`
-- `include/linux/libc.h`
-  - `memset/memcpy/memmove/strcpy/strlen/strcmp/strncmp/strcat`: `OK`
-    - Linux mapping: `linux2.6/lib/string.c`
-    - Notes: core semantics align; `memmove` now provides overlap-safe behavior.
-  - `strdup`: `DIFF`
-    - Linux mapping: kernel typically uses `kstrdup()` rather than exposing libc-style `strdup`.
-    - Why: Lite keeps a small libc-style helper for convenience.
-    - Impact: naming/API surface is less Linux-kernel-like.
-    - Plan: either rename call sites toward `kstrdup`-style helper or explicitly keep as Lite-only helper outside kernel-facing alignment claims.
-  - `itoa`: `DIFF`
-    - Linux mapping: Linux uses formatting helpers (`snprintf`/`scnprintf`) rather than a generic exported `itoa`.
-    - Why: small helper kept for simple users.
-    - Impact: non-Linux helper remains in exported surface.
-    - Plan: reduce internal callers and prefer `snprintf`-style formatting.
-  - `printf`: `DIFF`
-    - Linux mapping: kernel-facing interface is `printk`, not libc `printf`.
-    - Why: Lite keeps a convenience wrapper.
-    - Impact: kernel/user helper naming diverges from Linux.
-    - Plan: keep explicit as Lite convenience; do not treat as Linux-kernel API.
-  - `inb/outb/inw/outw/inl/outl`: `OK`
-    - Linux mapping: x86 port I/O helpers/macros (`asm/io.h` conceptually).
-- `include/linux/vsprintf.h`
-  - `vsnprintf/snprintf`: `OK`
-    - Linux mapping: `linux2.6/lib/vsprintf.c`
-    - Notes: return semantics align; format coverage is still a documented subset.
-- `lib/kref.c`
-  - `kref_init/kref_get/kref_put`: `PARTIAL DIFF`
-    - Linux mapping: `linux2.6/lib/kref.c`
-    - Why: naming and release-callback shape align, but implementation is non-atomic and lacks Linux memory-order/concurrency guarantees.
-    - Impact: acceptable in single-core teaching kernel; not Linux-safe under SMP/preempt concurrency.
-    - Plan: Stage 2 clarifies/refines refcounting semantics and locking assumptions.
-- `lib/kobject.c`
-  - `kobject_init/kobject_init_with_ktype/kobject_add/kobject_get/kobject_put`: `PARTIAL DIFF`
-    - Linux mapping: `linux2.6/lib/kobject.c`
-    - Why: naming/object model align, but lifetime/list/sysfs coupling is simplified.
-    - Impact: behavior is Linux-shaped, not Linux-complete.
-    - Plan: keep tightening lifetime rules through driver-core/sysfs work.
-  - `kset_init/kset_add/kset_remove/subsystem_register/subsystem_unregister`: `PARTIAL DIFF`
-    - Linux mapping: Linux kset/subsystem registration path.
-    - Why: conceptual boundaries align, but locking/refcount discipline is simplified.
-    - Impact: ordering/corner cases may still diverge from Linux.
-    - Plan: continue Stage 2 lifetime tightening with driver-core work.
-- `lib/idr.c`
-  - `idr_init/idr_pre_get/idr_get_new_above/idr_get_new/idr_find/idr_remove`: `PARTIAL DIFF`
-    - Linux mapping: `linux2.6/lib/idr.c`
-    - Why: API naming aligns, but implementation is a flat growable slot array, not Linux radix-layered idr.
-    - Impact: allocation/reuse/scaling semantics differ.
-    - Plan: Stage 3 decides whether to converge further or freeze as documented long-term DIFF.
-
-Next steps (plan):
-- Stage 2: tighten lifetime primitives (move kref toward Linux refcounting semantics; clarify locking requirements).
-- Stage 3: evolve idr toward Linux-like allocation semantics (range allocation, reuse rules), or mark long-term DIFF.
-
-
-Architecture (arch/x86)
-
-Linux mapping (vendored):
-- Entry/IRQ: `linux2.6/arch/x86/kernel/entry_32.S`, `linux2.6/arch/x86/kernel/irq.c`
-- Syscall path: Linux int80/sysenter entry path + syscall table dispatch (concept mapping)
-
-Status:
-- Stage 0 only (mapping + DIFFs documented); implementation stages pending.
-
-Next steps (plan):
-- Stage 1: stabilize pt_regs + entry ABI shape (clear rules for what is saved/restored and when interrupts are enabled/disabled).
-- Stage 2: introduce a minimal Linux-like irq core boundary (irq_desc/irq_chip) and move i8259 PIC logic into an irqchip layer.
-- Stage 3: switch syscall dispatch to a syscall table (already partially done in kernel core; arch entry invariants still need convergence).
-- Stage 4: clarify and isolate out-of-scope features (APIC/SMP/TLS/ldt) so convergence does not rewrite unrelated code.
-
-
-Driver Core (drivers/base)
-
-Linux mapping (vendored):
-- Core: `linux2.6/drivers/base/core.c`, `linux2.6/drivers/base/driver.c`
-- Uevent: `linux2.6/lib/kobject_uevent.c` (concept mapping)
-
-Status:
-- Stage 0 DONE, Stage 1 partial, Stage 2 partial.
-
-Next steps (plan):
-- Stage 1:
-  - Finish uevent field coverage + ordering discipline (Linux-like `ACTION/DEVPATH/SUBSYSTEM/MODALIAS/DEVNAME/MAJOR/MINOR/SEQNUM`).
-  - Keep explicit DIFF for module autoload (out-of-scope unless added).
-- Stage 2:
-  - Tighten bind/unbind/reprobe semantics and lifetime rules (kobject refs, deferred-probe correctness).
-
-
-Timekeeping / Clocksource / Clockevents
-
-Linux mapping (vendored):
-- `linux2.6/kernel/time/clockevents.c` (concept mapping: clock_event_device registration)
-- `linux2.6/kernel/time/tick-common.c` (concept mapping: tick handling)
-
-Status:
-- Stage 0 DONE; Stage 1 partial (minimal clockevents/tick boundary; periodic only).
-
-DIFF notes (must remain explicit):
-- Tick rate is fixed at `HZ` (Linux-like jiffies semantics); dynamic HZ changes are out-of-scope.
-- Oneshoot/highres/NOHZ are out-of-scope until clocksource/timekeeping layering exists.
-
-Next steps (plan):
-- Stage 2: move time conversion/udelay/timeout semantics into Linux-like layers; avoid drivers reading PIT directly.
-
-
-Input / TTY / Console
-
-Linux mapping (vendored):
-- i8042/atkbd: `linux2.6/drivers/input/serio/i8042.c`, `linux2.6/drivers/input/keyboard/atkbd.c`
-- tty core: `linux2.6/drivers/tty/tty_io.c`, `linux2.6/drivers/tty/n_tty.c`
-
-Status:
-- Stage 0 only (mapping + coupling points documented); implementation pending.
-
-Next steps (plan):
-- Stage 1: minimal Linux shapes: serio + i8042 + atkbd + event dispatch, and tty_driver registration basics.
-- Stage 2: minimal n_tty line discipline for canonical input handling; move policy out of keyboard/console drivers.
-
-
-Filesystems (ramfs / minixfs / sysfs)
-
-ramfs
-
-Linux mapping (vendored):
-- `linux2.6/fs/ramfs/inode.c`
-
-Status:
-- Stage 0 DONE; Stage 1 pending.
-
-Next steps (plan):
-- Stage 1: align ramfs inode creation/lifetime to Linux idioms (even if caching remains simplified).
-
-
-minixfs
-
-Linux mapping (vendored):
-- `linux2.6/fs/minix/*`
-
-Status:
-- Stage 0 DONE; Stage 1-2 pending.
-
-Next steps (plan):
-- Stage 1: move toward Linux lookup model (populate dentries on demand, not via mount-time directory scan).
-- Stage 2: add minimal super/inode lifecycle hooks (put_super/evict_inode naming/shape; writeback can remain simplified but must be explicit).
-
-
-sysfs
-
-Linux mapping (vendored):
-- `linux2.6/fs/sysfs/*` (concept mapping: kobject-bound directory tree, attributes, symlinks)
-
-Status:
-- Stage 0 DONE; Stage 1 DONE; Stage 2 partial.
-
-Remaining gaps:
-- Symlink semantics remain simplified: absolute target storage and read-style exposure; relative targets remain deferred.
-
-Next steps (plan):
-- Stage 2: align symlink semantics to Linux + VFS symlink plan (relative targets + readlink semantics), without breaking reachability.
-
-
-Memory Management (mm/)
-
-VMA management (mm/mmap.c)
-
-Linux mapping (vendored):
-- `linux2.6/mm/mmap.c`
-
-Status:
-- Stage 0 DONE; Stage 1 DONE; Stage 2 partial.
-
-Remaining gaps:
-- Full Linux anon_vma objects/locking are not present (must remain explicit DIFF).
-
-Next steps (plan):
-- Stage 2: continue incremental convergence to Linux anon_vma/rmap model, or explicitly mark long-term DIFF with hard limitations.
-
-
-reclaim/swap (mm/rmap.c, mm/vmscan.c, mm/swap.c)
-
-Linux mapping (vendored):
-- `linux2.6/mm/vmscan.c`, `linux2.6/mm/swap*.c`, `linux2.6/mm/rmap.c`
-
-Status:
-- Stages 0-2 DONE; Stage 3 pending decision.
-
-Next steps (plan):
-- Stage 3: evolve swap slots toward a Linux-like swap entry model (swap entry encoding + swap map), or explicitly mark swap device as out-of-scope with clear limitations.
+  - vector/handler ownership remains arch-owned and documented
+  - PIC mode remains smoke-stable
+  - `make clean && make -j4 && make smoke-512` passes
+
+Reference Mapping (vendored linux2.6/)
+
+- input/tty/console:
+  - `linux2.6/drivers/tty/tty_io.c`, `linux2.6/drivers/tty/n_tty.c`
+  - `linux2.6/drivers/input/serio/i8042.c`, `linux2.6/drivers/input/keyboard/atkbd.c`
+- kernel/sched+fork/exit/wait/signal:
+  - `linux2.6/kernel/sched.c`, `linux2.6/kernel/fork.c`, `linux2.6/kernel/exit.c`, `linux2.6/kernel/signal.c`
+- arch/x86:
+  - `linux2.6/arch/x86/kernel/entry_32.S`, `linux2.6/arch/x86/kernel/irq.c`
+  - `linux2.6/arch/x86/kernel/i8259.c` (PIC/irqchip reference)
+- lib/:
+  - `linux2.6/lib/string.c`, `linux2.6/lib/vsprintf.c`, `linux2.6/lib/kref.c`, `linux2.6/lib/idr.c`

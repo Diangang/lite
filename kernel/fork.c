@@ -4,6 +4,7 @@
 #include "linux/pid.h"
 #include "linux/slab.h"
 #include "linux/libc.h"
+#include "linux/printk.h"
 #include "linux/fs.h"
 #include "linux/console.h"
 #include "linux/irqflags.h"
@@ -113,10 +114,15 @@ int sys_fork(struct pt_regs *regs)
     task->waitq = NULL;
     init_waitqueue_entry(&task->wait_entry, task);
     INIT_LIST_HEAD(&task->tasks);
+    INIT_LIST_HEAD(&task->children);
+    INIT_LIST_HEAD(&task->sibling);
+    init_waitqueue_head(&task->child_exit_wait);
 
-    uint32_t flags = irq_save();
+    uint32_t flags = tasklist_lock();
+    if (current)
+        list_add_tail(&task->sibling, &current->children);
     list_add_tail(&task->tasks, &task_list_head);
-    irq_restore(flags);
+    tasklist_unlock(flags);
 
     return (int)task->pid;
 }
@@ -127,8 +133,10 @@ static int task_create_internal(void (*entry)(void), const char *program)
     struct task_struct *task = (struct task_struct*)kmalloc(sizeof(struct task_struct));
     uint32_t *stack = (uint32_t*)kmalloc(THREAD_SIZE);
 
-    if (!task || !stack)
-        return printf("TASK: Failed to create task.\n"), -1;
+    if (!task || !stack) {
+        printk("TASK: Failed to create task.\n");
+        return -1;
+    }
 
     task->pid = next_task_id++;
     task->parent = current;
@@ -173,10 +181,15 @@ static int task_create_internal(void (*entry)(void), const char *program)
     task->waitq = NULL;
     init_waitqueue_entry(&task->wait_entry, task);
     INIT_LIST_HEAD(&task->tasks);
+    INIT_LIST_HEAD(&task->children);
+    INIT_LIST_HEAD(&task->sibling);
+    init_waitqueue_head(&task->child_exit_wait);
 
-    uint32_t flags = irq_save();
+    uint32_t flags = tasklist_lock();
+    if (current)
+        list_add_tail(&task->sibling, &current->children);
     list_add_tail(&task->tasks, &task_list_head);
-    irq_restore(flags);
+    tasklist_unlock(flags);
 
     return (int)task->pid;
 }

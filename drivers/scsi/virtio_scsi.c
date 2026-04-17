@@ -2,7 +2,6 @@
 #include "linux/init.h"
 #include "linux/page_alloc.h"
 #include "linux/slab.h"
-#include "linux/timer.h"
 #include "linux/time.h"
 #include "linux/virtio.h"
 #include "linux/virtio_ids.h"

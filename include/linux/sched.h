@@ -16,6 +16,11 @@ struct task_struct {
     struct task_struct *parent;
     struct thread_struct thread;
     struct list_head tasks;
+    /* Linux mapping: parent/children/sibling linkage for wait/exit handling. */
+    struct list_head children;
+    struct list_head sibling;
+    /* Linux mapping: waitqueue for child-exit notifications (wait_chldexit). */
+    wait_queue_head_t child_exit_wait;
     uint32_t wake_jiffies;
     int state;
     int time_slice;
@@ -43,12 +48,40 @@ enum {
     TASK_ZOMBIE = 3
 };
 
+/*
+ * Linux-shaped lifetime invariant for task release paths:
+ * a task_struct must not be freed while still reachable from tasklist,
+ * parent/children linkage, or any waitqueue attachment.
+ */
+static inline int task_release_invariant_holds(struct task_struct *task)
+{
+    if (!task)
+        return 0;
+    if (task->pid == 0)
+        return 0;
+    if (task->state != TASK_ZOMBIE)
+        return 0;
+    if (task->parent)
+        return 0;
+    if (!list_empty(&task->tasks))
+        return 0;
+    if (!list_empty(&task->sibling))
+        return 0;
+    if (!list_empty(&task->children))
+        return 0;
+    if (task->waitq)
+        return 0;
+    return 1;
+}
+
 extern struct list_head task_list_head;
 extern struct task_struct *current;
 extern uint32_t next_task_id;
-extern wait_queue_t exit_waitq;
 extern int need_resched;
 extern uint32_t sched_switch_count;
+
+uint32_t tasklist_lock(void);
+void tasklist_unlock(uint32_t flags);
 
 void set_task_comm(struct task_struct *task, const char *program);
 
@@ -58,6 +91,11 @@ void task_tick(void);
 void task_sleep(uint32_t ticks);
 void task_yield(void);
 void task_list(void);
+void wake_up_process(struct task_struct *task);
+struct task_struct *task_current(void);
+void task_set_need_resched(void);
+void task_clear_need_resched(void);
+int task_need_resched(void);
 
 uint32_t task_get_switch_count(void);
 const char *task_get_current_comm(void);

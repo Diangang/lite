@@ -7,6 +7,7 @@
 #include "linux/init.h"
 #include "linux/libc.h"
 #include "linux/slab.h"
+#include "linux/vsprintf.h"
 
 static struct class sd_disk_class;
 
@@ -85,20 +86,9 @@ int scsi_add_disk(struct scsi_disk *sdkp)
     if (!sdkp || !sdkp->device || !sdkp->disk)
         return -1;
     char disk_name[8];
-    char tmp[12];
-
-    sdkp->name[0] = 0;
-    itoa((int)sdkp->device->host->host_no, 10, tmp);
-    strcat(sdkp->name, tmp);
-    strcat(sdkp->name, ":");
-    itoa((int)sdkp->device->channel, 10, tmp);
-    strcat(sdkp->name, tmp);
-    strcat(sdkp->name, ":");
-    itoa((int)sdkp->device->id, 10, tmp);
-    strcat(sdkp->name, tmp);
-    strcat(sdkp->name, ":");
-    itoa((int)sdkp->device->lun, 10, tmp);
-    strcat(sdkp->name, tmp);
+    snprintf(sdkp->name, sizeof(sdkp->name), "%u:%u:%u:%u",
+             sdkp->device->host->host_no, sdkp->device->channel,
+             sdkp->device->id, (uint32_t)sdkp->device->lun);
 
     device_initialize(&sdkp->dev, sdkp->name);
     sdkp->dev.class = class_find("scsi_disk");

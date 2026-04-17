@@ -6,6 +6,7 @@
 #include "linux/sysfs.h"
 #include "linux/errno.h"
 #include "linux/platform_device.h"
+#include "linux/vsprintf.h"
 #include "base.h"
 
 static struct subsystem devices_subsys;
@@ -88,13 +89,8 @@ static uint32_t sysfs_emit_devno_line(char *buffer, uint32_t cap, dev_t devt)
 {
     if (!buffer || cap < 4)
         return 0;
-    itoa((int)MAJOR(devt), 10, buffer);
+    snprintf(buffer, cap, "%u:%u", MAJOR(devt), MINOR(devt));
     uint32_t n = (uint32_t)strlen(buffer);
-    if (n + 1 >= cap)
-        return 0;
-    buffer[n++] = ':';
-    itoa((int)MINOR(devt), 10, buffer + n);
-    n = (uint32_t)strlen(buffer);
     if (n + 1 >= cap)
         return 0;
     buffer[n++] = '\n';
@@ -319,6 +315,7 @@ int device_unbind(struct device *dev)
 {
     if (!dev)
         return -1;
+    driver_deferred_probe_remove(dev);
     if (!dev->driver)
         return 0;
     struct device_driver *drv = dev->driver;

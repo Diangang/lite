@@ -82,6 +82,9 @@ uint32_t virt_to_phys_pgd(pgd_t* pgd, void* virt_addr);
 pteval_t get_pte_flags(pgd_t* pgd, void* virt_addr);
 void set_pte_flags(pgd_t* pgd, void* virt_addr, pteval_t flags);
 void unmap_page_pgd(pgd_t* pgd, void* virt_addr);
+/* Raw PTE accessors (Linux mapping: pte_val()/set_pte_at()). */
+pteval_t get_pte_raw(pgd_t* pgd, void* virt_addr);
+void set_pte_raw(pgd_t* pgd, void* virt_addr, pteval_t pte);
 void set_page_user(void* virt_addr);
 void set_page_user_pgd(pgd_t* pgd, void* virt_addr);
 void set_page_readonly_pgd(pgd_t* pgd, void* virt_addr);

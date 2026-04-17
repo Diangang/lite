@@ -5,8 +5,6 @@
 #include "linux/uaccess.h"
 #include "linux/wait.h"
 
-wait_queue_t exit_waitq = {0};
-
 void wait_queue_init(wait_queue_t *q)
 {
     if (!q)
@@ -24,7 +22,8 @@ void init_waitqueue_entry(wait_queue_entry_t *entry, struct task_struct *task)
 
 void wait_queue_block(wait_queue_t *q)
 {
-    if (!q || !current)
+    struct task_struct *task = task_current();
+    if (!q || !task)
         return;
     uint32_t flags = irq_save();
     wait_queue_block_locked(q);
@@ -33,18 +32,19 @@ void wait_queue_block(wait_queue_t *q)
 
 void wait_queue_block_locked(wait_queue_t *q)
 {
-    if (!q || !current)
+    struct task_struct *task = task_current();
+    if (!q || !task)
         return;
-    if (current->waitq == q)
+    if (task->waitq == q)
         return;
-    if (current->state == TASK_ZOMBIE)
+    if (task->state == TASK_ZOMBIE)
         return;
 
-    current->waitq = q;
-    current->wait_entry.task = current;
-    current->wait_entry.next = q->head;
-    q->head = &current->wait_entry;
-    current->state = TASK_BLOCKED;
+    task->waitq = q;
+    task->wait_entry.task = task;
+    task->wait_entry.next = q->head;
+    q->head = &task->wait_entry;
+    task->state = TASK_BLOCKED;
 }
 
 void wait_queue_wake_all(wait_queue_t *q)
@@ -75,7 +75,7 @@ void wait_queue_wake_all(wait_queue_t *q)
         entry = next;
     }
     if (woke)
-        need_resched = 1;
+        task_set_need_resched();
     irq_restore(flags);
 }
 
@@ -108,44 +108,50 @@ void wait_queue_remove(wait_queue_t *q, struct task_struct *task)
 int do_waitpid(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0, uint32_t *out_info1)
 {
     int want_any = (id == (uint32_t)-1);
+    struct task_struct *task = task_current();
     if (id == 0)
         return -1;
-    if (list_empty(&task_list_head) || !current)
+    if (!task)
         return -1;
-    if (!want_any && current->pid == id)
+    if (!want_any && task->pid == id)
         return -1;
 
     for (;;) {
-        uint32_t flags = irq_save();
-        int has_child = 0;
+        uint32_t flags = tasklist_lock();
+        int has_child = !list_empty(&task->children);
         int has_target = 0;
         struct task_struct *t;
-        list_for_each_entry(t, &task_list_head, tasks) {
-            if (t->parent == current) {
-                has_child = 1;
-                if (want_any || t->pid == id) {
-                    has_target = 1;
-                    if (t->state == TASK_ZOMBIE) {
-                        irq_restore(flags);
-                        if (out_code) *out_code = t->exit_code;
-                        if (out_reason) *out_reason = t->exit_state;
-                        if (out_info0) *out_info0 = t->exit_info0;
-                        if (out_info1) *out_info1 = t->exit_info1;
-                        int waited = (int)t->pid;
-                        release_task(t);
-                        return waited;
-                    }
-                    if (!want_any)
-                        break;
-                }
+        struct task_struct *n;
+        list_for_each_entry_safe(t, n, &task->children, sibling) {
+            if (!(want_any || t->pid == id))
+                continue;
+            has_target = 1;
+            if (t->state == TASK_ZOMBIE) {
+                /*
+                 * Linux mapping: waitpid reaps an already-zombified child while
+                 * holding tasklist_lock, then release_task() drops the final task
+                 * list linkage afterwards.
+                 */
+                list_del_init(&t->sibling);
+                t->parent = NULL;
+                tasklist_unlock(flags);
+                if (out_code) *out_code = t->exit_code;
+                if (out_reason) *out_reason = t->exit_state;
+                if (out_info0) *out_info0 = t->exit_info0;
+                if (out_info1) *out_info1 = t->exit_info1;
+                int waited = (int)t->pid;
+                release_task(t);
+                return waited;
             }
+            if (!want_any)
+                break;
         }
         if (!has_child || !has_target) {
-            irq_restore(flags);
+            tasklist_unlock(flags);
             return -1;
         }
-        wait_queue_block_locked(&exit_waitq);
-        irq_restore(flags);
+        wait_queue_block_locked(&task->child_exit_wait);
+        tasklist_unlock(flags);
         task_yield();
     }
 }

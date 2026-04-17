@@ -2,6 +2,7 @@
 #include "linux/kernel.h"
 #include "linux/libc.h"
 #include "linux/slab.h"
+#include "linux/vsprintf.h"
 #include "base.h"
 
 struct bus_type platform_bus_type;
@@ -135,7 +136,7 @@ struct platform_device *platform_device_register_simple(const char *name, int id
     inst[n] = 0;
     if (id != PLATFORM_DEVID_NONE) {
         char tmp[12];
-        itoa(id, 10, tmp);
+        snprintf(tmp, sizeof(tmp), "%d", id);
         uint32_t t = (uint32_t)strlen(tmp);
         if (n + t >= sizeof(inst))
             t = sizeof(inst) - n - 1;

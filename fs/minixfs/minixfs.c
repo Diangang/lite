@@ -1,3 +1,4 @@
+#include "linux/file.h"
 #include "linux/fs.h"
 #include "linux/init.h"
 #include "linux/libc.h"
@@ -51,6 +52,35 @@ struct minix_mount_data {
 static struct inode_operations minix_dir_iops;
 static struct file_operations minix_dir_ops;
 static struct file_operations minix_file_ops;
+
+static struct dirent *minix_readdir(struct file *file, uint32_t index);
+
+/*
+ * Linux mapping:
+ * - super teardown boundary: put_super()/kill_sb()
+ * - inode teardown boundary: evict_inode()
+ *
+ * Lite VFS does not yet expose a generic umount path, so these helpers are
+ * currently used for local error paths and as the canonical ownership boundary
+ * for future unmount support.
+ */
+static void minix_put_super(struct super_block *sb)
+{
+    if (!sb)
+        return;
+    sb->fs_private = NULL;
+}
+
+static void minix_evict_inode(struct inode *inode)
+{
+    if (!inode)
+        return;
+    if (inode->private_data) {
+        kfree(inode->private_data);
+        inode->private_data = NULL;
+    }
+    kfree(inode);
+}
 
 /* minix_bread: Implement minix bread. */
 static uint32_t minix_bread(struct block_device *bdev, uint32_t block, void *buf)
@@ -471,6 +501,19 @@ static struct inode *minix_inode_from_disk(struct block_device *bdev, const stru
     return inode;
 }
 
+static void minix_release_root(struct super_block *sb, struct inode *root_inode)
+{
+    if (sb && sb->s_root) {
+        if (sb->s_root->name)
+            kfree((void *)sb->s_root->name);
+        kfree(sb->s_root);
+        sb->s_root = NULL;
+    }
+    if (root_inode)
+        minix_evict_inode(root_inode);
+    minix_put_super(sb);
+}
+
 static struct inode *minix_dir_finddir(struct inode *node, const char *name)
 {
     if (!node || !name || !*name)
@@ -570,7 +613,7 @@ static struct file_operations minix_dir_ops = {
     .write = NULL,
     .open = NULL,
     .close = NULL,
-    .readdir = generic_readdir,
+    .readdir = minix_readdir,
     .ioctl = NULL,
 };
 
@@ -582,6 +625,71 @@ static struct file_operations minix_file_ops = {
     .readdir = NULL,
     .ioctl = NULL
 };
+
+/* minix_readdir: Enumerate directory entries from disk on demand. */
+static struct dirent *minix_readdir(struct file *file, uint32_t index)
+{
+    static struct dirent de_out;
+    if (!file || !file->dentry || !file->dentry->inode)
+        return NULL;
+    struct dentry *d = file->dentry;
+    struct inode *node = d->inode;
+    if ((node->flags & 0x7) != FS_DIRECTORY)
+        return NULL;
+    struct minix_inode_info *info = (struct minix_inode_info *)node->private_data;
+    if (!info || !info->bdev)
+        return NULL;
+
+    if (index == 0) {
+        strcpy(de_out.name, ".");
+        de_out.ino = node->i_ino;
+        return &de_out;
+    }
+    if (index == 1) {
+        strcpy(de_out.name, "..");
+        de_out.ino = d->parent && d->parent->inode ? d->parent->inode->i_ino : node->i_ino;
+        return &de_out;
+    }
+
+    uint32_t want = index - 2;
+    uint32_t zsize = minix_zone_size(&info->sb);
+    if (zsize == 0)
+        return NULL;
+    uint32_t dir_size = info->dinode.i_size;
+    uint8_t blk[MINIX_BLOCK_SIZE];
+    uint32_t pos = 0;
+    uint32_t seen = 0;
+    while (pos + sizeof(struct minix_dir_entry) <= dir_size) {
+        uint16_t zone = minix_zone_for_pos(&info->dinode, &info->sb, pos);
+        if (!zone)
+            break;
+        uint32_t zone_off = pos % zsize;
+        uint32_t block = minix_zone_to_block(zone) + (zone_off / MINIX_BLOCK_SIZE);
+        uint32_t boff = zone_off % MINIX_BLOCK_SIZE;
+        if (minix_bread(info->bdev, block, blk) != MINIX_BLOCK_SIZE)
+            return NULL;
+        struct minix_dir_entry ent;
+        memcpy(&ent, blk + boff, sizeof(ent));
+        pos += sizeof(ent);
+        if (ent.inode == 0)
+            continue;
+        if ((ent.name[0] == '.' && ent.name[1] == 0) ||
+            (ent.name[0] == '.' && ent.name[1] == '.' && ent.name[2] == 0))
+            continue;
+        if (seen++ != want)
+            continue;
+
+        char name[15];
+        memcpy(name, ent.name, 14);
+        name[14] = 0;
+        if (name[0] == 0)
+            return NULL;
+        strcpy(de_out.name, name);
+        de_out.ino = ent.inode;
+        return &de_out;
+    }
+    return NULL;
+}
 
 
 
@@ -721,60 +829,18 @@ static int minix_fill_super(struct super_block *sb, void *data, int silent)
         return -1;
     struct inode *root_inode = minix_new_vfs_inode_dir(1, root_info);
     if (!root_inode) {
+        minix_put_super(sb);
         kfree(root_info);
         return -1;
     }
 
     sb->s_root = d_alloc(NULL, "/");
-    if (!sb->s_root)
+    if (!sb->s_root) {
+        minix_release_root(sb, root_inode);
         return -1;
+    }
     sb->s_root->inode = root_inode;
     sb->fs_private = bdev;
-
-    uint32_t dir_size = root_dinode.i_size;
-    uint32_t zsize = minix_zone_size(&msb);
-    if (zsize == 0)
-        return -1;
-
-    uint8_t blk[MINIX_BLOCK_SIZE];
-    uint32_t pos = 0;
-    while (pos + sizeof(struct minix_dir_entry) <= dir_size) {
-        uint16_t zone = minix_zone_for_pos(&root_dinode, &msb, pos);
-        if (!zone)
-            break;
-        uint32_t zone_off = pos % zsize;
-        uint32_t block = minix_zone_to_block(zone) + (zone_off / MINIX_BLOCK_SIZE);
-        uint32_t boff = zone_off % MINIX_BLOCK_SIZE;
-        if (minix_bread(bdev, block, blk) != MINIX_BLOCK_SIZE)
-            break;
-        struct minix_dir_entry de;
-        memcpy(&de, blk + boff, sizeof(de));
-        pos += sizeof(de);
-        if (de.inode == 0)
-            continue;
-        if ((de.name[0] == '.' && de.name[1] == 0) ||
-            (de.name[0] == '.' && de.name[1] == '.' && de.name[2] == 0))
-            continue;
-        char name[15];
-        memcpy(name, de.name, 14);
-        name[14] = 0;
-        uint32_t nlen = (uint32_t)strlen(name);
-        if (nlen == 0)
-            continue;
-
-        struct minix_inode_disk child_dinode;
-        if (minix_read_inode(bdev, &msb, de.inode, &child_dinode) != 0)
-            continue;
-        {
-            struct inode *child = minix_inode_from_disk(bdev, &msb, de.inode, &child_dinode);
-            if (!child)
-                continue;
-            struct dentry *d = d_alloc(sb->s_root, name);
-            if (!d)
-                continue;
-            d->inode = child;
-        }
-    }
 
     return 0;
 }
@@ -792,7 +858,7 @@ static struct file_system_type minix_fs_type = {
     .name = "minix",
     .get_sb = minix_get_sb,
     .fill_super = minix_fill_super,
-    .kill_sb = NULL,
+    .kill_sb = minix_put_super,
     .next = NULL
 };
 

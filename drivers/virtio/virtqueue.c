@@ -1,6 +1,6 @@
 #include "linux/libc.h"
 #include "linux/slab.h"
-#include "linux/timer.h"
+#include "linux/time.h"
 #include "linux/virtio.h"
 
 /*
@@ -136,15 +136,14 @@ int virtqueue_wait(struct virtqueue *vq, uint32_t timeout_ticks, uint16_t *used_
 {
     if (!vq || !used_head)
         return -1;
-    uint32_t start = timer_get_ticks();
+    uint32_t deadline = time_get_jiffies() + timeout_ticks;
     uint32_t spins = 0;
     while (!virtqueue_get_buf(vq, used_head, NULL)) {
         /*
          * Avoid unbounded busy-wait: early boot may not have a ticking clock.
          * Linux uses proper wait/irq callbacks; Lite keeps a bounded poll.
          */
-        uint32_t now = timer_get_ticks();
-        if (now - start > timeout_ticks)
+        if (time_after_eq(time_get_jiffies(), deadline))
             return -1;
         if (++spins > 2000000U)
             return -1;

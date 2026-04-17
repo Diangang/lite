@@ -51,6 +51,7 @@ size_t strlen(const char *s);
 int strcmp(const char *s1, const char *s2);
 int strncmp(const char *s1, const char *s2, size_t n);
 char *strcat(char *dest, const char *src);
+char *kstrdup(const char *s);
 char *strdup(const char *s);
 
 void itoa(int num, int base, char *buf);

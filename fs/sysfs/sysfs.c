@@ -2,7 +2,7 @@
 #include "linux/sysfs.h"
 #include "linux/libc.h"
 #include "linux/init.h"
-#include "linux/timer.h"
+#include "linux/time.h"
 #include "linux/slab.h"
 #include "linux/device.h"
 #include "linux/kernel.h"
@@ -712,6 +712,101 @@ static int sysfs_kobject_path(struct kobject *target, char *buf, uint32_t cap)
     return -1;
 }
 
+static int sysfs_relpath(const char *from_dir, const char *to, char *out, uint32_t cap)
+{
+    if (!from_dir || !to || !out || cap < 2)
+        return -1;
+    if (from_dir[0] != '/' || to[0] != '/')
+        return -1;
+
+    /* Split both absolute paths into components without allocating. */
+    const char *from_s[32];
+    uint32_t from_n[32];
+    const char *to_s[32];
+    uint32_t to_n[32];
+    uint32_t from_cnt = 0;
+    uint32_t to_cnt = 0;
+
+    const char *p = from_dir;
+    while (*p == '/')
+        p++;
+    while (*p && from_cnt < 32) {
+        const char *s = p;
+        while (*p && *p != '/')
+            p++;
+        from_s[from_cnt] = s;
+        from_n[from_cnt] = (uint32_t)(p - s);
+        from_cnt++;
+        while (*p == '/')
+            p++;
+    }
+
+    p = to;
+    while (*p == '/')
+        p++;
+    while (*p && to_cnt < 32) {
+        const char *s = p;
+        while (*p && *p != '/')
+            p++;
+        to_s[to_cnt] = s;
+        to_n[to_cnt] = (uint32_t)(p - s);
+        to_cnt++;
+        while (*p == '/')
+            p++;
+    }
+
+    /* Find common prefix (by path component). */
+    uint32_t common = 0;
+    while (common < from_cnt && common < to_cnt) {
+        if (from_n[common] != to_n[common])
+            break;
+        int same = 1;
+        for (uint32_t j = 0; j < from_n[common]; j++) {
+            if (from_s[common][j] != to_s[common][j]) {
+                same = 0;
+                break;
+            }
+        }
+        if (!same)
+            break;
+        common++;
+    }
+
+    uint32_t off = 0;
+    out[0] = 0;
+
+    /* Go up from from_dir to the common prefix. */
+    for (uint32_t i = common; i < from_cnt; i++) {
+        if (off + 3 >= cap)
+            return -1;
+        out[off++] = '.';
+        out[off++] = '.';
+        out[off++] = '/';
+        out[off] = 0;
+    }
+
+    /* Append remaining to-path components. */
+    for (uint32_t i = common; i < to_cnt; i++) {
+        uint32_t n = to_n[i];
+        if (n == 0)
+            continue;
+        if (off + n + 1 >= cap)
+            return -1;
+        memcpy(out + off, to_s[i], n);
+        off += n;
+        if (i + 1 < to_cnt)
+            out[off++] = '/';
+        out[off] = 0;
+    }
+
+    if (off == 0) {
+        out[0] = '.';
+        out[1] = 0;
+    }
+
+    return 0;
+}
+
 static struct inode *sysfs_set_kobj_link_inode(struct kobject *kobj, const char *name, const char *target)
 {
     struct sysfs_dirent *sd = sysfs_get_kobj_sd(kobj);
@@ -786,14 +881,28 @@ static struct inode *sysfs_find_kobj_link_inode(struct kobject *kobj, const char
 
 int sysfs_create_link(struct kobject *kobj, struct kobject *target, const char *name)
 {
+    char from_abs[256];
     char to_abs[256];
+    char rel[256];
     if (!kobj || !target || !name || !name[0])
+        return -1;
+    if (sysfs_kobject_path(kobj, from_abs, sizeof(from_abs)) != 0)
         return -1;
     if (sysfs_kobject_path(target, to_abs, sizeof(to_abs)) != 0)
         return -1;
 
-    /* Keep sysfs link targets absolute to preserve existing reachability. */
-    struct inode *inode = sysfs_set_kobj_link_inode(kobj, name, to_abs);
+    /*
+     * Linux mapping: sysfs stores relative symlink targets (e.g. class device
+     * "device" link points to "../../devices/...").
+     *
+     * Lite path walker already resolves relative symlink targets via dentry
+     * paths + normalization, so prefer relative targets here.
+     */
+    const char *target_str = to_abs;
+    if (sysfs_relpath(from_abs, to_abs, rel, sizeof(rel)) == 0)
+        target_str = rel;
+
+    struct inode *inode = sysfs_set_kobj_link_inode(kobj, name, target_str);
     if (!inode)
         return -1;
     struct sysfs_dirent *sd = sysfs_get_kobj_sd(kobj);

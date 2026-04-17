@@ -8,6 +8,7 @@
 #include "linux/memlayout.h"
 #include "linux/irqflags.h"
 #include "linux/rmap.h"
+#include "linux/swap.h"
 
 /* align_up: Implement align up. */
 static uint32_t align_up(uint32_t value)
@@ -36,8 +37,16 @@ static int task_free_user_page_mapped(struct mm_struct *mm, pgd_t *dir, uint32_t
         return 0;
     pte_t *table = (pte_t*)memlayout_directmap_phys_to_virt(pde & ~0xFFF);
     pteval_t pte = table[pte_idx];
-    if (!pte_present(pte))
+    if (!pte_present(pte)) {
+        uint32_t slot;
+        if (swap_pte_decode(pte, &slot)) {
+            table[pte_idx] = 0;
+            __asm__ volatile("invlpg (%0)" :: "r" ((void *)va_page) : "memory");
+            swap_free_slot(slot);
+            return 1;
+        }
         return 0;
+    }
     if (!pte_user(pte))
         return 0;
 
@@ -194,10 +203,39 @@ static void vma_add_anon(struct mm_struct *mm, uint32_t start, uint32_t end,
     }
 }
 
-/* vma_add: Insert a new anonymous VMA with a fresh anon_vma lineage. */
+/*
+ * vma_add: Insert a new anonymous VMA.
+ *
+ * Linux mapping: anon_vma lineage may be reused from adjacent VMAs to keep
+ * anon hierarchy stable (find_mergeable_anon_vma + vma_merge heuristics).
+ *
+ * Lite uses a minimal, deterministic rule:
+ * - If the new range is immediately adjacent to a same-flags VMA, reuse that
+ *   VMA's anon_vma_id (prefer the left neighbor, else the right).
+ * - Otherwise allocate a fresh anon_vma_id.
+ */
 static void vma_add(struct mm_struct *mm, uint32_t start, uint32_t end, uint32_t flags)
 {
-    vma_add_anon(mm, start, end, flags, alloc_anon_vma_id());
+    if (!mm || start >= end)
+        return;
+
+    uint32_t anon_vma_id = 0;
+    struct vm_area_struct *prev = NULL;
+    struct vm_area_struct *cur = mm->mmap;
+    while (cur && cur->vm_start < start) {
+        prev = cur;
+        cur = cur->vm_next;
+    }
+
+    if (prev && prev->vm_end == start && prev->vm_flags == flags)
+        anon_vma_id = prev->anon_vma_id;
+    else if (cur && cur->vm_start == end && cur->vm_flags == flags)
+        anon_vma_id = cur->anon_vma_id;
+
+    if (anon_vma_id == 0)
+        anon_vma_id = alloc_anon_vma_id();
+
+    vma_add_anon(mm, start, end, flags, anon_vma_id);
 }
 
 /* vma_range_free: Implement VMA range free. */

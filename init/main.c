@@ -72,6 +72,16 @@ static void prepare_namespace(void)
     vfs_init();
     populate_rootfs();
 
+    /*
+     * Linux mapping: mountpoints are directories in the parent filesystem.
+     * Create them on the root ramfs before mounting proc/devtmpfs/sysfs/minix.
+     */
+    (void)vfs_mkdir("/proc");
+    (void)vfs_mkdir("/dev");
+    (void)vfs_mkdir("/sys");
+    (void)vfs_mkdir("/mnt");
+    (void)vfs_mkdir("/mnt_nvme");
+
     if (sysfs_init() != 0)
         panic("sysfs init failed.");
     vfs_mount_fs("/proc", "proc");

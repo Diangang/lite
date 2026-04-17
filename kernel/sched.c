@@ -1,5 +1,5 @@
 #include "linux/sched.h"
-#include "linux/timer.h"
+#include "linux/time.h"
 #include "asm/pgtable.h"
 #include "asm/gdt.h"
 #include "linux/slab.h"
@@ -13,11 +13,60 @@ uint32_t next_task_id = 1;
 int need_resched = 0;
 uint32_t sched_switch_count = 0;
 
+uint32_t tasklist_lock(void)
+{
+    return irq_save();
+}
+
+void tasklist_unlock(uint32_t flags)
+{
+    irq_restore(flags);
+}
+
 struct rq {
     struct list_head *tasks;
 };
 
-static struct rq system_rq = {0};
+struct sched_cpu_state {
+    struct rq rq;
+    struct task_struct *current;
+    int need_resched;
+};
+
+static struct sched_cpu_state boot_cpu_sched = {0};
+
+static void sched_sync_compat_globals(void)
+{
+    current = boot_cpu_sched.current;
+    need_resched = boot_cpu_sched.need_resched;
+}
+
+static struct sched_cpu_state *sched_boot_cpu(void)
+{
+    return &boot_cpu_sched;
+}
+
+struct task_struct *task_current(void)
+{
+    return sched_boot_cpu()->current;
+}
+
+void task_set_need_resched(void)
+{
+    sched_boot_cpu()->need_resched = 1;
+    sched_sync_compat_globals();
+}
+
+void task_clear_need_resched(void)
+{
+    sched_boot_cpu()->need_resched = 0;
+    sched_sync_compat_globals();
+}
+
+int task_need_resched(void)
+{
+    return sched_boot_cpu()->need_resched;
+}
 
 static void runqueue_init(struct rq *rq, struct list_head *tasks)
 {
@@ -72,83 +121,107 @@ static void task_idle(void)
 /* task_tick: Implement task tick. */
 void task_tick(void)
 {
-    uint32_t now = timer_get_ticks();
-    if (runqueue_empty(&system_rq))
+    struct sched_cpu_state *cpu = sched_boot_cpu();
+    uint32_t now = time_get_jiffies();
+    if (runqueue_empty(&cpu->rq))
         return;
-    runqueue_wake_sleepers(&system_rq, now);
+    runqueue_wake_sleepers(&cpu->rq, now);
 
-    if (!current)
+    if (!cpu->current)
         return;
-    if (current->state != TASK_RUNNABLE) {
-        need_resched = 1;
+    if (cpu->current->state != TASK_RUNNABLE) {
+        task_set_need_resched();
         return;
     }
 
-    if (current->time_slice > 0)
-        current->time_slice--;
-    if (current->time_slice <= 0)
-        need_resched = 1;
+    if (cpu->current->time_slice > 0)
+        cpu->current->time_slice--;
+    if (cpu->current->time_slice <= 0)
+        task_set_need_resched();
 }
 
 /* task_schedule: Implement task schedule. */
 struct pt_regs *task_schedule(struct pt_regs *regs)
 {
-    if (!current)
+    struct sched_cpu_state *cpu = sched_boot_cpu();
+
+    if (!cpu->current)
         return regs;
 
-    current->thread.regs = regs;
-    if (!need_resched)
-        return current->thread.regs;
+    cpu->current->thread.regs = regs;
+    if (!task_need_resched())
+        return cpu->current->thread.regs;
 
-    need_resched = 0;
+    task_clear_need_resched();
 
-    struct task_struct *next = runqueue_pick_next(&system_rq, current);
-    if (next != current)
+    struct task_struct *next = runqueue_pick_next(&cpu->rq, cpu->current);
+    if (next != cpu->current)
         sched_switch_count++;
-    current = next;
-    if (current->mm && current->mm->pgd) {
-        if (current->mm->pgd != get_pgd_current())
-            switch_pgd(current->mm->pgd);
+    cpu->current = next;
+    sched_sync_compat_globals();
+    if (cpu->current->mm && cpu->current->mm->pgd) {
+        if (cpu->current->mm->pgd != get_pgd_current())
+            switch_pgd(cpu->current->mm->pgd);
     } else {
         pgd_t *kdir = get_pgd_kernel();
         if (kdir && kdir != get_pgd_current())
             switch_pgd(kdir);
     }
-    tss_set_kernel_stack((uint32_t)current->thread.sp0);
-    if (current->time_slice <= 0)
-        current->time_slice = TASK_TIMESLICE_TICKS;
+    tss_set_kernel_stack((uint32_t)cpu->current->thread.sp0);
+    if (cpu->current->time_slice <= 0)
+        cpu->current->time_slice = TASK_TIMESLICE_TICKS;
 
-    return current->thread.regs;
+    return cpu->current->thread.regs;
 }
 
 /* task_sleep: Implement task sleep. */
 void task_sleep(uint32_t ticks)
 {
-    if (!current)
+    struct task_struct *task = task_current();
+    if (!task)
         return;
     if (ticks == 0)
         return;
-    current->wake_jiffies = timer_get_ticks() + ticks;
-    current->state = TASK_SLEEPING;
-    need_resched = 1;
+    task->wake_jiffies = time_get_jiffies() + ticks;
+    task->state = TASK_SLEEPING;
+    task_set_need_resched();
     task_yield();
 }
 
 /* task_yield: Implement task yield. */
 void task_yield(void)
 {
-    need_resched = 1;
+    task_set_need_resched();
     __asm__ volatile("int $0x20");
+}
+
+/* wake_up_process: Linux-like wakeup helper for sleeping/blocked tasks. */
+void wake_up_process(struct task_struct *task)
+{
+    if (!task)
+        return;
+    if (task->state == TASK_SLEEPING) {
+        task->wake_jiffies = 0;
+        task->state = TASK_RUNNABLE;
+    } else if (task->state == TASK_BLOCKED) {
+        task->state = TASK_RUNNABLE;
+    } else {
+        return;
+    }
+    if (task->time_slice <= 0)
+        task->time_slice = TASK_TIMESLICE_TICKS;
+    task_set_need_resched();
 }
 
 /* task_should_resched: Implement task should resched. */
 int task_should_resched(void)
 {
-    if (!current)
+    struct task_struct *task = task_current();
+    if (!task)
         return 0;
-    if (current->state != TASK_RUNNABLE)
+    if (task->state != TASK_RUNNABLE)
         return 1;
-    return need_resched != 0;
+    return task_need_resched() != 0;
 }
 
 /* task_get_switch_count: Implement task get switch count. */
@@ -160,38 +233,42 @@ uint32_t task_get_switch_count(void)
 /* task_get_current_comm: Implement task get current comm. */
 const char *task_get_current_comm(void)
 {
-    if (!current)
+    struct task_struct *task = task_current();
+    if (!task)
         return NULL;
-    if (!current->comm[0])
+    if (!task->comm[0])
         return NULL;
-    return current->comm;
+    return task->comm;
 }
 
 /* task_get_current_id: Implement task get current id. */
 uint32_t task_get_current_id(void)
 {
-    if (!current)
+    struct task_struct *task = task_current();
+    if (!task)
         return 0;
-    return current->pid;
+    return task->pid;
 }
 
 /* task_current_is_user: Implement task current is user. */
 int task_current_is_user(void)
 {
-    if (!current)
+    struct task_struct *task = task_current();
+    if (!task)
         return 0;
-    return current->mm != NULL;
+    return task->mm != NULL;
 }
 
 /* task_list: Implement task list. */
 void task_list(void)
 {
-    if (runqueue_empty(&system_rq))
+    struct sched_cpu_state *cpu = sched_boot_cpu();
+    if (runqueue_empty(&cpu->rq))
         return (void)printf("No tasks.\n");
 
     printf("PID   STATE     WAKE    CURRENT\n");
     struct task_struct *task;
-    list_for_each_entry(task, system_rq.tasks, tasks) {
+    list_for_each_entry(task, cpu->rq.tasks, tasks) {
         const char *state = "RUNNABLE";
         if (task->state == TASK_SLEEPING)
         state = "SLEEPING"; else if (task->state == TASK_BLOCKED)
@@ -201,7 +278,7 @@ void task_list(void)
                task->pid,
                state,
                task->wake_jiffies,
-               task == current ? "yes" : "no");
+               task == task_current() ? "yes" : "no");
     }
 }
 
@@ -219,6 +296,9 @@ static void init_task(void)
     task->thread.regs = copy_thread(stack, task_idle, NULL);
     task->thread.sp0 = (uint32_t*)((uint32_t)stack + THREAD_SIZE);
     INIT_LIST_HEAD(&task->tasks);
+    INIT_LIST_HEAD(&task->children);
+    INIT_LIST_HEAD(&task->sibling);
+    init_waitqueue_head(&task->child_exit_wait);
     task->wake_jiffies = 0;
     task->state = TASK_RUNNABLE;
     task->time_slice = TASK_TIMESLICE_TICKS;
@@ -241,11 +321,12 @@ static void init_task(void)
     task->waitq = NULL;
     init_waitqueue_entry(&task->wait_entry, task);
 
-    runqueue_init(&system_rq, &task_list_head);
+    runqueue_init(&boot_cpu_sched.rq, &task_list_head);
     list_add(&task->tasks, &task_list_head);
-    current = task;
-    wait_queue_init(&exit_waitq);
-    tss_set_kernel_stack((uint32_t)current->thread.sp0);
+    boot_cpu_sched.current = task;
+    boot_cpu_sched.need_resched = 0;
+    sched_sync_compat_globals();
+    tss_set_kernel_stack((uint32_t)boot_cpu_sched.current->thread.sp0);
 }
 
 /* sched_init: Initialize sched. */

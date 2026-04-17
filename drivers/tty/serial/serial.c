@@ -62,7 +62,7 @@ void init_serial() {
 static int serial_probe(struct device *dev)
 {
    (void)dev;
-   register_interrupt_handler(IRQ4, serial_callback);
+   register_irq_handler(IRQ_COM1, serial_callback);
    outb(0x3f8 + 4, 0x0B);
    outb(0x3f8 + 1, 0x01);
    printf("Serial driver interrupts enabled.\n");

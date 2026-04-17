@@ -80,8 +80,9 @@ static int bus_probe_device_name(struct bus_type *bus, const char *name)
     list_for_each_entry(dev, &bus->devices, bus_list) {
         if (strcmp(dev->kobj.name, name))
             continue;
+        /* Linux-like boundary: drivers_probe does not silently reprobe a bound device. */
         if (dev->driver)
-            return 0;
+            return -1;
         return device_attach(dev);
     }
     return -1;
@@ -99,8 +100,9 @@ static int bus_probe_device_modalias(struct bus_type *bus, const char *modalias)
             continue;
         if (strcmp(buf, modalias))
             continue;
+        /* Linux-like boundary: explicit unbind is required before rebinding. */
         if (dev->driver)
-            return 0;
+            return -1;
         return device_attach(dev);
     }
     return -1;

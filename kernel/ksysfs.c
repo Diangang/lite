@@ -1,10 +1,11 @@
 #include "linux/ksysfs.h"
 #include "linux/init.h"
 #include "linux/sysfs.h"
-#include "linux/timer.h"
+#include "linux/time.h"
 #include "linux/libc.h"
 #include "linux/printk.h"
 #include "linux/device.h"
+#include "linux/vsprintf.h"
 
 struct subsystem kernel_subsys;
 
@@ -61,8 +62,8 @@ static uint32_t kernel_sysfs_show(struct kobject *kobj, const struct attribute *
         if (cap < 2)
             return 0;
         static char tmp[64];
-        uint32_t ticks = timer_get_ticks();
-        itoa((int)ticks, 10, tmp);
+        uint32_t ticks = time_get_jiffies();
+        snprintf(tmp, sizeof(tmp), "%u", ticks);
         return sysfs_emit_text_line(buffer, cap, tmp);
     }
 
@@ -73,7 +74,7 @@ static uint32_t kernel_sysfs_show(struct kobject *kobj, const struct attribute *
         if (cap < 2)
             return 0;
         static char tmp[64];
-        itoa((int)device_uevent_seqnum(), 10, tmp);
+        snprintf(tmp, sizeof(tmp), "%u", device_uevent_seqnum());
         return sysfs_emit_text_line(buffer, cap, tmp);
     }
 

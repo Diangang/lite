@@ -6,7 +6,8 @@
 #include "linux/file.h"
 #include "linux/slab.h"
 #include "linux/libc.h"
-#include "linux/timer.h"
+#include "linux/printk.h"
+#include "linux/time.h"
 #include "asm/pgtable.h"
 #include "linux/page_alloc.h"
 #include "asm/page.h"
@@ -132,47 +133,74 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
         node = vfs_resolve(try_path);
         if (!node) {
             node = vfs_resolve(basename);
-            if (!node)
-                return printf("User program not found: %s\n", name), -1;
+            if (!node) {
+                printk("User program not found: %s\n", name);
+                return -1;
+            }
         }
     }
 
-    if (node->i_size == 0)
-        return printf("User program is empty.\n"), -1;
+    if (node->i_size == 0) {
+        printk("User program is empty.\n");
+        return -1;
+    }
 
     uint8_t *buf = (uint8_t*)kmalloc(node->i_size);
-    if (!buf)
-        return printf("User program buffer alloc failed.\n"), -1;
+    if (!buf) {
+        printk("User program buffer alloc failed.\n");
+        return -1;
+    }
 
     uint32_t read = read_fs(node, 0, node->i_size, buf);
     if (read != node->i_size) {
-        printf("User program read failed.\n");
+        printk("User program read failed.\n");
         kfree(buf);
         return -1;
     }
 
-    if (node->i_size < sizeof(Elf32_Ehdr))
-        return printf("User program too small.\n"), kfree(buf), -1;
+    if (node->i_size < sizeof(Elf32_Ehdr)) {
+        printk("User program too small.\n");
+        kfree(buf);
+        return -1;
+    }
 
     Elf32_Ehdr *ehdr = (Elf32_Ehdr*)buf;
     if (!(ehdr->e_ident[0] == 0x7F && ehdr->e_ident[1] == 'E' &&
-          ehdr->e_ident[2] == 'L' && ehdr->e_ident[3] == 'F'))
-        return printf("User program is not ELF.\n"), kfree(buf), -1;
+          ehdr->e_ident[2] == 'L' && ehdr->e_ident[3] == 'F')) {
+        printk("User program is not ELF.\n");
+        kfree(buf);
+        return -1;
+    }
 
-    if (ehdr->e_ident[4] != 1 || ehdr->e_ident[5] != 1)
-        return printf("User program ELF format unsupported.\n"), kfree(buf), -1;
+    if (ehdr->e_ident[4] != 1 || ehdr->e_ident[5] != 1) {
+        printk("User program ELF format unsupported.\n");
+        kfree(buf);
+        return -1;
+    }
 
-    if (ehdr->e_ehsize != sizeof(Elf32_Ehdr))
-        return printf("User program ELF header size mismatch.\n"), kfree(buf), -1;
+    if (ehdr->e_ehsize != sizeof(Elf32_Ehdr)) {
+        printk("User program ELF header size mismatch.\n");
+        kfree(buf);
+        return -1;
+    }
 
-    if (ehdr->e_phentsize != sizeof(Elf32_Phdr))
-        return printf("User program ELF phdr size mismatch.\n"), kfree(buf), -1;
+    if (ehdr->e_phentsize != sizeof(Elf32_Phdr)) {
+        printk("User program ELF phdr size mismatch.\n");
+        kfree(buf);
+        return -1;
+    }
 
-    if (ehdr->e_type != 2 || ehdr->e_machine != 3 || ehdr->e_version != 1)
-        return printf("User program ELF header invalid.\n"), kfree(buf), -1;
+    if (ehdr->e_type != 2 || ehdr->e_machine != 3 || ehdr->e_version != 1) {
+        printk("User program ELF header invalid.\n");
+        kfree(buf);
+        return -1;
+    }
 
-    if (ehdr->e_phoff + (uint32_t)ehdr->e_phnum * ehdr->e_phentsize > node->i_size)
-        return printf("User program header out of range.\n"), kfree(buf), -1;
+    if (ehdr->e_phoff + (uint32_t)ehdr->e_phnum * ehdr->e_phentsize > node->i_size) {
+        printk("User program header out of range.\n");
+        kfree(buf);
+        return -1;
+    }
 
     uint32_t min_vaddr = 0xFFFFFFFF;
     uint32_t max_vaddr = 0;
@@ -180,27 +208,42 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
         Elf32_Phdr *phdr = (Elf32_Phdr*)(buf + ehdr->e_phoff + i * ehdr->e_phentsize);
         if (phdr->p_type != 1)
             continue;
-        if (phdr->p_vaddr >= TASK_SIZE || (phdr->p_vaddr + phdr->p_memsz) >= TASK_SIZE)
-            return printf("User program vaddr out of range.\n"), kfree(buf), -1;
+        if (phdr->p_vaddr >= TASK_SIZE || (phdr->p_vaddr + phdr->p_memsz) >= TASK_SIZE) {
+            printk("User program vaddr out of range.\n");
+            kfree(buf);
+            return -1;
+        }
 
-        if (phdr->p_filesz > 0 && phdr->p_offset + phdr->p_filesz > node->i_size)
-            return printf("User program segment out of range.\n"), kfree(buf), -1;
+        if (phdr->p_filesz > 0 && phdr->p_offset + phdr->p_filesz > node->i_size) {
+            printk("User program segment out of range.\n");
+            kfree(buf);
+            return -1;
+        }
 
         if (phdr->p_vaddr < min_vaddr) min_vaddr = phdr->p_vaddr;
         if (phdr->p_vaddr + phdr->p_memsz > max_vaddr) max_vaddr = phdr->p_vaddr + phdr->p_memsz;
     }
 
-    if (min_vaddr == 0xFFFFFFFF)
-        return printf("User program has no loadable segments.\n"), kfree(buf), -1;
+    if (min_vaddr == 0xFFFFFFFF) {
+        printk("User program has no loadable segments.\n");
+        kfree(buf);
+        return -1;
+    }
 
-    if (ehdr->e_entry < min_vaddr || ehdr->e_entry >= max_vaddr)
-        return printf("User program entry out of range.\n"), kfree(buf), -1;
+    if (ehdr->e_entry < min_vaddr || ehdr->e_entry >= max_vaddr) {
+        printk("User program entry out of range.\n");
+        kfree(buf);
+        return -1;
+    }
 
     enum { PF_X = 1, PF_W = 2, PF_R = 4 };
 
     pgd_t* user_dir = pgd_clone_kernel();
-    if (!user_dir)
-        return printf("User page directory alloc failed.\n"), kfree(buf), -1;
+    if (!user_dir) {
+        printk("User page directory alloc failed.\n");
+        kfree(buf);
+        return -1;
+    }
 
     uint32_t user_base = align_down(min_vaddr);
     uint32_t user_end = align_up(max_vaddr);
@@ -212,8 +255,11 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
 
     if (current && !current->mm)
         current->mm = mm_create();
-    if (!current || !current->mm)
-        return printf("User mm alloc failed.\n"), kfree(buf), -1;
+    if (!current || !current->mm) {
+        printk("User mm alloc failed.\n");
+        kfree(buf);
+        return -1;
+    }
     mm_reset_mmap(current->mm);
     for (uint16_t i = 0; i < ehdr->e_phnum; i++) {
         Elf32_Phdr *phdr = (Elf32_Phdr*)(buf + ehdr->e_phoff + i * ehdr->e_phentsize);
@@ -221,8 +267,15 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
             continue;
         uint32_t seg_start = align_down(phdr->p_vaddr);
         uint32_t seg_end = align_up(phdr->p_vaddr + phdr->p_memsz);
-        uint32_t vma_flags = VMA_READ;
-        if (phdr->p_flags & PF_W) vma_flags |= VMA_WRITE;
+        /*
+         * Linux mapping: while loading an ELF image, the kernel needs to write
+         * to PT_LOAD ranges even if the final mapping is read-only.
+         *
+         * Lite's page-fault permission check consults VMA flags, so mark the
+         * segment writable during load, then mprotect it to the final perms
+         * after copying.
+         */
+        uint32_t vma_flags = VMA_READ | VMA_WRITE;
         if (phdr->p_flags & PF_X) vma_flags |= VMA_EXEC;
         mm_add_vma(current->mm, seg_start, seg_end, vma_flags);
 
@@ -232,8 +285,11 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
             if (old_phys != 0xFFFFFFFF && ((old_phys & ~0xFFF) != va))
                 continue;
             void *phys = alloc_page(GFP_KERNEL);
-            if (!phys)
-                return printf("User program page alloc failed.\n"), kfree(buf), -1;
+            if (!phys) {
+                printk("User program page alloc failed.\n");
+                kfree(buf);
+                return -1;
+            }
             map_page_ex(user_dir, phys, (void*)va, PTE_PRESENT | PTE_READ_WRITE | PTE_USER);
             rmap_add(current->mm, va, (uint32_t)phys);
         }
@@ -243,8 +299,11 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
 
     for (uint32_t va = user_stack_base; va < USER_STACK_TOP; va += PAGE_SIZE) {
         void *stack_phys = alloc_page(GFP_KERNEL);
-        if (!stack_phys)
-            return printf("User stack alloc failed.\n"), kfree(buf), -1;
+        if (!stack_phys) {
+            printk("User stack alloc failed.\n");
+            kfree(buf);
+            return -1;
+        }
         map_page_ex(user_dir, stack_phys, (void*)va,
                         PTE_PRESENT | PTE_READ_WRITE | PTE_USER);
         rmap_add(current->mm, va, (uint32_t)stack_phys);
@@ -264,8 +323,10 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
         if (!(phdr->p_flags & PF_W)) {
             uint32_t seg_start = align_down(phdr->p_vaddr);
             uint32_t seg_end = align_up(phdr->p_vaddr + phdr->p_memsz);
-            for (uint32_t va = seg_start; va < seg_end; va += 4096)
-                set_page_readonly_pgd(user_dir, (void*)va);
+            uint32_t prot = VMA_READ;
+            if (phdr->p_flags & PF_X)
+                prot |= VMA_EXEC;
+            do_mprotect(current->mm, seg_start, seg_end - seg_start, prot);
         }
     }
     switch_pgd(old_dir);

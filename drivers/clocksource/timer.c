@@ -1,8 +1,8 @@
-#include "linux/timer.h"
 #include "linux/clockevents.h"
 #include "linux/interrupt.h"
 #include "linux/libc.h"
 #include "linux/time.h"
+#include "linux/timer.h"
 
 /*
  * The PIT (Programmable Interval Timer) has an internal clock running at 1193180 Hz.
@@ -54,24 +54,12 @@ static struct clock_event_device pit_clockevent = {
 /* init_timer: Initialize timer. */
 void init_timer(uint32_t frequency)
 {
-    if (!frequency)
+    if (!frequency || frequency != HZ)
         frequency = HZ;
 
     /* Register our timer callback */
-    register_interrupt_handler(IRQ0, timer_callback);
+    register_irq_handler(IRQ_TIMER, timer_callback);
 
     clockevents_register_device(&pit_clockevent);
     (void)tick_set_periodic(frequency);
-}
-
-/* timer_get_ticks: Implement timer get ticks. */
-uint32_t timer_get_ticks(void)
-{
-    return time_get_jiffies();
-}
-
-/* timer_get_uptime: Implement timer get uptime. */
-uint32_t timer_get_uptime(void)
-{
-    return time_get_uptime();
 }

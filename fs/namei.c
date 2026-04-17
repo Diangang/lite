@@ -251,11 +251,37 @@ struct dentry *path_walk(const char *path)
                     memcpy(new_path, target, tlen);
                     off = tlen;
                 } else {
-                    struct dentry *base = curr->parent ? curr->parent : curr;
+                    /*
+                     * Linux mapping: a relative symlink target is interpreted
+                     * relative to the directory containing the symlink.
+                     *
+                     * Prefer deriving that base directory from the current
+                     * string path being walked, because some pseudo filesystems
+                     * (e.g. sysfs) may not maintain stable dentry parent chains.
+                     */
                     char base_path[256];
-                    if (!vfs_build_dentry_path(base, base_path, sizeof(base_path)))
-                        return NULL;
-                    uint32_t blen = (uint32_t)strlen(base_path);
+                    uint32_t blen = 0;
+                    if (cur_path[0] == '/') {
+                        const char *base_end = s;
+                        blen = (uint32_t)(base_end - cur_path);
+                        if (blen == 0) {
+                            base_path[0] = '/';
+                            base_path[1] = 0;
+                            blen = 1;
+                        } else {
+                            while (blen > 1 && cur_path[blen - 1] == '/')
+                                blen--;
+                            if (blen >= sizeof(base_path))
+                                return NULL;
+                            memcpy(base_path, cur_path, blen);
+                            base_path[blen] = 0;
+                        }
+                    } else {
+                        struct dentry *base = curr->parent ? curr->parent : curr;
+                        if (!vfs_build_dentry_path(base, base_path, sizeof(base_path)))
+                            return NULL;
+                        blen = (uint32_t)strlen(base_path);
+                    }
                     uint32_t tlen = (uint32_t)strlen(target);
                     if (blen + 1 + tlen + 1 > sizeof(new_path))
                         return NULL;

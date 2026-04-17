@@ -4,8 +4,8 @@
 #include "linux/blk_queue.h"
 #include "linux/libc.h"
 #include "linux/slab.h"
-#include "linux/timer.h"
 #include "linux/time.h"
+#include "linux/vsprintf.h"
 
 static uint32_t scsi_host_next;
 static uint32_t scsi_disk_next;
@@ -53,10 +53,7 @@ int scsi_add_host(struct Scsi_Host *shost, struct device *parent)
 {
     if (!shost)
         return -1;
-    strcpy(shost->name, "host");
-    char num[12];
-    itoa((int)shost->host_no, 10, num);
-    strcat(shost->name, num);
+    snprintf(shost->name, sizeof(shost->name), "host%u", shost->host_no);
     device_initialize(&shost->shost_gendev, shost->name);
     shost->shost_gendev.class = class_find("scsi_host");
     shost->shost_gendev.bus = &scsi_bus_type;
@@ -90,19 +87,8 @@ int scsi_add_device(struct scsi_device *sdev)
         return -1;
     sdev->sdev_target = starget;
 
-    char tmp[12];
-    sdev->name[0] = 0;
-    itoa((int)sdev->host->host_no, 10, tmp);
-    strcat(sdev->name, tmp);
-    strcat(sdev->name, ":");
-    itoa((int)sdev->channel, 10, tmp);
-    strcat(sdev->name, tmp);
-    strcat(sdev->name, ":");
-    itoa((int)sdev->id, 10, tmp);
-    strcat(sdev->name, tmp);
-    strcat(sdev->name, ":");
-    itoa((int)sdev->lun, 10, tmp);
-    strcat(sdev->name, tmp);
+    snprintf(sdev->name, sizeof(sdev->name), "%u:%u:%u:%u",
+             sdev->host->host_no, sdev->channel, sdev->id, (uint32_t)sdev->lun);
     device_initialize(&sdev->sdev_gendev, sdev->name);
     sdev->sdev_gendev.class = class_find("scsi_device");
     sdev->sdev_gendev.bus = &scsi_bus_type;
@@ -189,16 +175,8 @@ static struct scsi_target *scsi_alloc_target(struct Scsi_Host *shost, uint32_t c
     starget->channel = channel;
     starget->id = id;
 
-    char tmp[12];
-    strcpy(starget->name, "target");
-    itoa((int)shost->host_no, 10, tmp);
-    strcat(starget->name, tmp);
-    strcat(starget->name, ":");
-    itoa((int)channel, 10, tmp);
-    strcat(starget->name, tmp);
-    strcat(starget->name, ":");
-    itoa((int)id, 10, tmp);
-    strcat(starget->name, tmp);
+    snprintf(starget->name, sizeof(starget->name), "target%u:%u:%u",
+             shost->host_no, channel, id);
 
     device_initialize(&starget->dev, starget->name);
     starget->dev.bus = &scsi_bus_type;

@@ -37,6 +37,7 @@ void mm_add_vma(struct mm_struct *mm, uint32_t start, uint32_t end, uint32_t fla
 
 uint32_t do_mmap(struct mm_struct *mm, uint32_t addr, uint32_t length, uint32_t prot);
 int do_munmap(struct mm_struct *mm, uint32_t addr, uint32_t length);
+uint32_t do_mprotect(struct mm_struct *mm, uint32_t addr, uint32_t length, uint32_t prot);
 uint32_t sys_mmap(uint32_t addr, uint32_t length, uint32_t prot);
 int sys_munmap(uint32_t addr, uint32_t length);
 uint32_t sys_mprotect(uint32_t addr, uint32_t length, uint32_t prot);

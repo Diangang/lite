@@ -5,7 +5,7 @@
 #include "linux/sched.h"
 #include "linux/fdtable.h"
 #include "internal.h"
-#include "linux/timer.h"
+#include "linux/time.h"
 #include "linux/interrupt.h"
 #include "linux/slab.h"
 #include "linux/page_alloc.h"
@@ -18,6 +18,7 @@
 #include "base.h"
 #include "linux/bootmem.h"
 #include "linux/memlayout.h"
+#include "linux/vsprintf.h"
 #include "asm/pgtable.h"
 
 static struct dirent proc_dirent;
@@ -140,7 +141,7 @@ static void buf_append(char *buf, uint32_t *off, uint32_t cap, const char *s)
 static void buf_append_u32(char *buf, uint32_t *off, uint32_t cap, uint32_t v)
 {
     char tmp[32];
-    itoa((int)v, 10, tmp);
+    snprintf(tmp, sizeof(tmp), "%u", v);
     buf_append(buf, off, cap, tmp);
 }
 
@@ -148,7 +149,7 @@ static void buf_append_u32(char *buf, uint32_t *off, uint32_t cap, uint32_t v)
 static void buf_append_hex(char *buf, uint32_t *off, uint32_t cap, uint32_t v)
 {
     char tmp[32];
-    itoa((int)v, 16, tmp);
+    snprintf(tmp, sizeof(tmp), "%x", v);
     buf_append(buf, off, cap, "0x");
     buf_append(buf, off, cap, tmp);
 }
@@ -207,7 +208,7 @@ static void proc_seq_emit_str(struct proc_seq_state *st, const char *s)
 static void proc_seq_emit_u32(struct proc_seq_state *st, uint32_t v)
 {
     char tmp[16];
-    itoa((int)v, 10, tmp);
+    snprintf(tmp, sizeof(tmp), "%u", v);
     proc_seq_emit_str(st, tmp);
 }
 
@@ -288,7 +289,7 @@ static uint32_t proc_read_sched(struct inode *node, uint32_t offset, uint32_t si
 {
     (void)node;
     static char tmp[1024];
-    uint32_t ticks = timer_get_ticks();
+    uint32_t ticks = time_get_jiffies();
     uint32_t switches = task_get_switch_count();
     uint32_t cur = task_get_current_id();
     uint32_t n = 0;
@@ -314,11 +315,11 @@ static uint32_t proc_read_irq(struct inode *node, uint32_t offset, uint32_t size
     static char tmp[1024];
     uint32_t n = 0;
     buf_append(tmp, &n, sizeof(tmp), "irq0=");
-    buf_append_u32(tmp, &n, sizeof(tmp), isr_get_count(IRQ0));
+    buf_append_u32(tmp, &n, sizeof(tmp), irq_get_count(IRQ_TIMER));
     buf_append(tmp, &n, sizeof(tmp), "\nirq1=");
-    buf_append_u32(tmp, &n, sizeof(tmp), isr_get_count(IRQ1));
+    buf_append_u32(tmp, &n, sizeof(tmp), irq_get_count(IRQ_KEYBOARD));
     buf_append(tmp, &n, sizeof(tmp), "\nirq4=");
-    buf_append_u32(tmp, &n, sizeof(tmp), isr_get_count(36));
+    buf_append_u32(tmp, &n, sizeof(tmp), irq_get_count(IRQ_COM1));
     buf_append(tmp, &n, sizeof(tmp), "\nsyscall128=");
     buf_append_u32(tmp, &n, sizeof(tmp), isr_get_count(128));
     buf_append(tmp, &n, sizeof(tmp), "\n");
@@ -878,10 +879,10 @@ static struct dirent *proc_pid_fd_readdir(struct file *file, uint32_t index)
         if (n == 0)
             continue;
         if (index == 0) {
-                itoa((int)fd, 10, e->dirent.name);
-                e->dirent.ino = e->fd_files[fd].i_ino;
-                return &e->dirent;
-            }
+            snprintf(e->dirent.name, sizeof(e->dirent.name), "%u", fd);
+            e->dirent.ino = e->fd_files[fd].i_ino;
+            return &e->dirent;
+        }
         index--;
     }
     return NULL;
@@ -1190,7 +1191,7 @@ static struct dirent *proc_readdir(struct file *file, uint32_t index)
             continue;
         if (pid_index == 0) {
             char name[16];
-            itoa((int)proc_pids[i].pid, 10, name);
+            snprintf(name, sizeof(name), "%u", proc_pids[i].pid);
             return proc_fill_dirent(name, proc_pids[i].dir.i_ino);
         }
         pid_index--;

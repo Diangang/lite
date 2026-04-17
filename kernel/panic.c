@@ -1,11 +1,11 @@
-#include "linux/libc.h"
 #include "linux/panic.h"
+#include "linux/printk.h"
 
 /* panic: Panic on the subsystem. */
 void panic(const char *msg)
 {
     if (msg)
-        printf("HALT: %s\n", msg);
+        printk("HALT: %s\n", msg);
 
     __asm__ volatile ("cli");
 

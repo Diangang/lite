@@ -2,6 +2,7 @@
 #include "linux/libc.h"
 #include "linux/pci.h"
 #include "linux/virtio.h"
+#include "linux/vsprintf.h"
 
 static char uevent_buf[4096];
 static uint32_t uevent_len = 0;
@@ -34,7 +35,7 @@ static int buf_append_ch(char *buf, uint32_t *off, uint32_t cap, char c)
 static int buf_append_u32_dec(char *buf, uint32_t *off, uint32_t cap, uint32_t v)
 {
     char tmp[16];
-    itoa((int)v, 10, tmp);
+    snprintf(tmp, sizeof(tmp), "%u", v);
     return buf_append(buf, off, cap, tmp);
 }
 

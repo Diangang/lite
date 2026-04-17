@@ -158,6 +158,43 @@ pteval_t get_pte_flags(pgd_t* pgd, void* virt_addr)
     return pte;
 }
 
+/* get_pte_raw: Return the raw PTE value even if not-present (0 if no table). */
+pteval_t get_pte_raw(pgd_t* pgd, void* virt_addr)
+{
+    if (!pgd)
+        return 0;
+
+    uint32_t va = (uint32_t)virt_addr;
+    uint32_t pde_idx = pgd_index(va);
+    uint32_t pte_idx = pte_index(va);
+
+    pgdval_t pde = pgd[pde_idx];
+    if (!pgd_present(pde))
+        return 0;
+
+    pte_t* table = (pte_t*)memlayout_directmap_phys_to_virt(pde & ~(PAGE_SIZE - 1));
+    return table[pte_idx];
+}
+
+/* set_pte_raw: Set the raw PTE value even if not-present (no-op if no table). */
+void set_pte_raw(pgd_t* pgd, void* virt_addr, pteval_t pte)
+{
+    if (!pgd)
+        return;
+
+    uint32_t va = (uint32_t)virt_addr;
+    uint32_t pde_idx = pgd_index(va);
+    uint32_t pte_idx = pte_index(va);
+
+    pgdval_t pde = pgd[pde_idx];
+    if (!pgd_present(pde))
+        return;
+
+    pte_t* table = (pte_t*)memlayout_directmap_phys_to_virt(pde & ~(PAGE_SIZE - 1));
+    table[pte_idx] = pte;
+    __asm__ volatile("invlpg (%0)" :: "r" (virt_addr) : "memory");
+}
+
 /* set_pte_flags: Set page table entry flags. */
 void set_pte_flags(pgd_t* pgd, void* virt_addr, pteval_t flags)
 {

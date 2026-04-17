@@ -10,7 +10,7 @@
 #include "linux/blk_queue.h"
 #include "linux/blk_request.h"
 #include "linux/bio.h"
-#include "linux/timer.h"
+#include "linux/time.h"
 #include "linux/time.h"
 #include "linux/page_alloc.h"
 #include "linux/memlayout.h"
@@ -89,6 +89,28 @@ static inline void mmio_write32(void *base, uint32_t off, uint32_t v)
     *(volatile uint32_t *)((uint32_t)base + off) = v;
 }
 
+/*
+ * Ensure queue DMA writes are visible to the controller before ringing a doorbell.
+ *
+ * Linux mapping: NVMe host drivers use a DMA write memory barrier (wmb()) before
+ * writing SQ/CQ doorbells to avoid the controller fetching partially written
+ * commands/completions due to posted MMIO writes.
+ */
+static inline void nvme_wmb(void)
+{
+    __asm__ volatile("sfence" : : : "memory");
+}
+
+static inline void nvme_doorbell_write(volatile uint32_t *db, uint32_t v)
+{
+    if (!db)
+        return;
+    nvme_wmb();
+    *db = v;
+    /* Read-back to flush posted MMIO writes on PCIe. */
+    (void)*db;
+}
+
 static inline uint64_t mmio_read64(void *base, uint32_t off)
 {
     uint64_t lo = mmio_read32(base, off);
@@ -117,13 +139,13 @@ static void *nvme_alloc_page(uint32_t *phys_out)
 
 static int nvme_wait_csts_rdy(struct nvme_dev *dev, int want_rdy, uint32_t timeout_ticks)
 {
-    uint32_t start = timer_get_ticks();
+    uint32_t deadline = time_get_jiffies() + timeout_ticks;
     while (1) {
         uint32_t csts = mmio_read32(dev->mmio, NVME_REG_CSTS);
         int rdy = (csts & NVME_CSTS_RDY) != 0;
         if (rdy == want_rdy)
             return 0;
-        if ((timer_get_ticks() - start) > timeout_ticks)
+        if (time_after_eq(time_get_jiffies(), deadline))
             return -1;
     }
 }
@@ -134,10 +156,7 @@ static uint32_t nvme_cap_to_ticks(uint64_t cap)
     uint32_t to = (uint32_t)((cap >> 24) & 0xFFu);
     if (to == 0)
         to = 1;
-    uint32_t ticks_per_500ms = (HZ / 2);
-    if (ticks_per_500ms == 0)
-        ticks_per_500ms = 1;
-    return to * ticks_per_500ms;
+    return msecs_to_jiffies(to * 500u);
 }
 
 static void nvme_queue_init_doorbells(struct nvme_dev *dev, struct nvme_queue *q)
@@ -172,8 +191,7 @@ static uint16_t nvme_sq_submit(struct nvme_queue *q, const struct nvme_command *
     if (tail >= q->depth)
         tail = 0;
     q->sq_tail = tail;
-    __asm__ volatile ("" : : : "memory");
-    *q->sq_db = tail;
+    nvme_doorbell_write(q->sq_db, tail);
     return tmp.command_id;
 }
 
@@ -184,7 +202,7 @@ static int nvme_cq_poll_cid(struct nvme_queue *q, uint16_t cid, struct nvme_comp
     volatile struct nvme_completion *cq = (volatile struct nvme_completion *)q->cq;
 
     /* Poll completion queue. */
-    uint32_t start = timer_get_ticks();
+    uint32_t deadline = time_get_jiffies() + timeout_ticks;
     while (1) {
         struct nvme_completion cpl = cq[q->cq_head];
         uint16_t phase = cpl.status & 1u;
@@ -198,13 +216,13 @@ static int nvme_cq_poll_cid(struct nvme_queue *q, uint16_t cid, struct nvme_comp
                 q->cq_head = 0;
                 q->cq_phase ^= 1u;
             }
-            *q->cq_db = q->cq_head;
+            nvme_doorbell_write(q->cq_db, q->cq_head);
             /* Status code is bits 15:1 (0 means success). */
             if ((cpl.status >> 1) != 0)
                 return -1;
             return 0;
         }
-        if ((timer_get_ticks() - start) > timeout_ticks)
+        if (time_after_eq(time_get_jiffies(), deadline))
             return -1;
     }
 }
@@ -332,7 +350,7 @@ static int nvme_create_io_queues(struct nvme_dev *dev)
     memset(&dbq, 0, sizeof(dbq));
     dbq.qid = qid;
     nvme_queue_init_doorbells(dev, &dbq);
-    *dbq.cq_db = 0;
+    nvme_doorbell_write(dbq.cq_db, 0);
 
     /* Create I/O SQ (admin cmd). */
     memset(&cmd, 0, sizeof(cmd));
@@ -360,23 +378,45 @@ static int nvme_io_rw(struct nvme_ns *ns, int write, uint64_t lba, uint32_t nlb,
     if (!ns || !ns->dev || !buf || nlb == 0)
         return -1;
     struct nvme_dev *dev = ns->dev;
-    uint32_t phys1 = virt_to_phys(buf);
+    /*
+     * PRP mapping:
+     * - Prefer single-page PRP1 mappings.
+     * - If the caller buffer crosses a page boundary, use a bounce buffer
+     *   instead of PRP2 to avoid relying on multi-page PRP correctness.
+     *
+     * Linux mapping: the block layer may use bounce buffers when DMA mapping
+     * constraints are not satisfied.
+     */
+    void *bounce = NULL;
+    void *dma_buf = buf;
+    uint32_t phys1 = virt_to_phys(dma_buf);
     if (phys1 == 0xFFFFFFFF)
         return -1;
 
-    /* Simplified PRP mapping: support up to 2 pages without PRP list. */
-    uint32_t off_in_page = phys1 & 0xFFF;
-    uint32_t pages = (off_in_page + buf_len + 4095u) / 4096u;
-    uint64_t prp2 = 0;
-    if (pages > 2)
+    if (buf_len > 4096u)
         return -1;
-    if (pages == 2) {
-        uint32_t next_page_va = ((uint32_t)buf & ~0xFFFu) + 4096u;
-        uint32_t phys2 = virt_to_phys((void *)next_page_va);
-        if (phys2 == 0xFFFFFFFF)
+
+    uint32_t off_in_page = phys1 & 0xFFFu;
+    uint32_t pages = (off_in_page + buf_len + 4095u) / 4096u;
+    if (pages > 1) {
+        bounce = kmalloc(buf_len + 4096u);
+        if (!bounce)
             return -1;
-        prp2 = (uint64_t)phys2;
+        dma_buf = (void *)((((uint32_t)bounce) + 4095u) & ~0xFFFu);
+        if (write)
+            memcpy(dma_buf, buf, buf_len);
+        phys1 = virt_to_phys(dma_buf);
+        if (phys1 == 0xFFFFFFFF) {
+            kfree(bounce);
+            return -1;
+        }
+        off_in_page = phys1 & 0xFFFu;
+        if (off_in_page != 0) {
+            kfree(bounce);
+            return -1;
+        }
     }
+    uint64_t prp2 = 0;
 
     struct nvme_command cmd;
     memset(&cmd, 0, sizeof(cmd));
@@ -387,7 +427,22 @@ static int nvme_io_rw(struct nvme_ns *ns, int write, uint64_t lba, uint32_t nlb,
     cmd.cdw10 = (uint32_t)(lba & 0xFFFFFFFFu);
     cmd.cdw11 = (uint32_t)(lba >> 32);
     cmd.cdw12 = (nlb - 1) & 0xFFFFu;
-    return nvme_submit_cmd(&dev->io_q, &cmd, NULL);
+    struct nvme_completion cpl;
+    int ret = nvme_submit_cmd(&dev->io_q, &cmd, &cpl);
+    if (ret != 0) {
+        printf("nvme: io %s failed lba=%u nlb=%u len=%u status=0x%x\n",
+               write ? "write" : "read",
+               (unsigned)lba, (unsigned)nlb, (unsigned)buf_len, (unsigned)cpl.status);
+        if (bounce)
+            kfree(bounce);
+        return -1;
+    }
+    if (bounce) {
+        if (!write)
+            memcpy(buf, dma_buf, buf_len);
+        kfree(bounce);
+    }
+    return 0;
 }
 
 static void nvme_request_fn(struct request_queue *q)

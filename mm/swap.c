@@ -14,8 +14,6 @@
 
 struct swap_slot {
     int used;
-    struct mm_struct *mm;
-    uint32_t vaddr;
     uint8_t *data;
 };
 
@@ -26,10 +24,45 @@ void swap_init(void)
 {
     for (int i = 0; i < SWAP_SLOTS; i++) {
         swap_slots[i].used = 0;
-        swap_slots[i].mm = 0;
-        swap_slots[i].vaddr = 0;
         swap_slots[i].data = 0;
     }
+}
+
+pteval_t swap_pte_encode(uint32_t slot)
+{
+    /*
+     * Linux mapping: swap entry encoded in a non-present PTE. Lite keeps only
+     * a small slot index; slot+1 is stored to avoid encoding as 0.
+     */
+    return ((pteval_t)(slot + 1) << PAGE_SHIFT);
+}
+
+int swap_pte_decode(pteval_t pte, uint32_t *slot)
+{
+    if (!slot)
+        return 0;
+    if (pte_present(pte))
+        return 0;
+    uint32_t enc = (uint32_t)(pte >> PAGE_SHIFT);
+    if (enc == 0)
+        return 0;
+    enc -= 1;
+    if (enc >= SWAP_SLOTS)
+        return 0;
+    *slot = enc;
+    return 1;
+}
+
+void swap_free_slot(uint32_t slot)
+{
+    if (slot >= SWAP_SLOTS)
+        return;
+    if (!swap_slots[slot].used)
+        return;
+    if (swap_slots[slot].data)
+        kfree(swap_slots[slot].data);
+    swap_slots[slot].data = 0;
+    swap_slots[slot].used = 0;
 }
 
 /* swap_out_page: Implement swap out page. */
@@ -65,14 +98,12 @@ int swap_out_page(struct page *page)
         return -1;
     memcpy(buf, memlayout_directmap_phys_to_virt(phys), PAGE_SIZE);
 
-    unmap_page_pgd(page->map_mm->pgd, (void*)page->map_vaddr);
+    set_pte_raw(page->map_mm->pgd, (void*)page->map_vaddr, swap_pte_encode((uint32_t)slot));
     rmap_remove(page->map_mm, page->map_vaddr, phys);
     free_page((unsigned long)phys);
     page->flags &= ~PG_ISOLATED;
 
     swap_slots[slot].used = 1;
-    swap_slots[slot].mm = page->map_mm;
-    swap_slots[slot].vaddr = page->map_vaddr;
     swap_slots[slot].data = buf;
     return 0;
 }
@@ -85,14 +116,11 @@ int swap_in_mm(struct mm_struct *mm, uint32_t vaddr)
     if (vaddr >= TASK_SIZE)
         return 0;
 
-    int slot = -1;
-    for (int i = 0; i < SWAP_SLOTS; i++) {
-        if (swap_slots[i].used && swap_slots[i].mm == mm && swap_slots[i].vaddr == vaddr) {
-            slot = i;
-            break;
-        }
-    }
-    if (slot < 0)
+    pteval_t pte = get_pte_raw(mm->pgd, (void*)vaddr);
+    uint32_t slot;
+    if (!swap_pte_decode(pte, &slot))
+        return 0;
+    if (!swap_slots[slot].used || !swap_slots[slot].data)
         return 0;
 
     void *phys = alloc_page(GFP_KERNEL);
@@ -106,10 +134,6 @@ int swap_in_mm(struct mm_struct *mm, uint32_t vaddr)
     memcpy((void*)vaddr, swap_slots[slot].data, PAGE_SIZE);
     rmap_add(mm, vaddr, (uint32_t)phys);
 
-    kfree(swap_slots[slot].data);
-    swap_slots[slot].used = 0;
-    swap_slots[slot].mm = 0;
-    swap_slots[slot].vaddr = 0;
-    swap_slots[slot].data = 0;
+    swap_free_slot(slot);
     return 1;
 }

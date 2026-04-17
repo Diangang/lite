@@ -216,6 +216,7 @@ int driver_probe_device(struct device_driver *drv, struct device *dev)
     }
     sysfs_create_link(&drv->kobj, &dev->kobj, dev->kobj.name);
     sysfs_create_link(&dev->kobj, &drv->kobj, "driver");
+    driver_deferred_probe_remove(dev);
     device_uevent_emit("bind", dev);
     return 0;
 }

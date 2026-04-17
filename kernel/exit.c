@@ -5,6 +5,7 @@
 #include "linux/libc.h"
 #include "linux/fs.h"
 #include "linux/irqflags.h"
+#include "linux/panic.h"
 #include "linux/signal.h"
 #include "linux/wait.h"
 
@@ -39,20 +40,33 @@ static void task_release_resources(struct task_struct *task)
 /* reparent_children: Implement reparent children. */
 static int reparent_children(struct task_struct *parent, struct task_struct *reaper)
 {
-    if (list_empty(&task_list_head) || !reaper || !parent)
+    if (!reaper || !parent)
         return 0;
 
     int wake = 0;
+    if (list_empty(&parent->children))
+        return 0;
     struct task_struct *t;
-    list_for_each_entry(t, &task_list_head, tasks) {
-        if (t->parent == parent && t != parent) {
-            t->parent = reaper;
-            if (t->state == TASK_ZOMBIE)
-                wake = 1;
-        }
+    struct task_struct *n;
+    list_for_each_entry_safe(t, n, &parent->children, sibling) {
+        list_del(&t->sibling);
+        t->parent = reaper;
+        list_add_tail(&t->sibling, &reaper->children);
+        if (t->state == TASK_ZOMBIE)
+            wake = 1;
     }
 
     return wake;
+}
+
+static struct task_struct *task_reaper_locked(void)
+{
+    struct task_struct *reaper = find_task_by_pid(1);
+    if (reaper)
+        return reaper;
+    if (!list_empty(&task_list_head))
+        return list_first_entry(&task_list_head, struct task_struct, tasks);
+    return NULL;
 }
 
 /* task_zombify: Implement task zombify. */
@@ -87,24 +101,20 @@ void exit_notify(struct task_struct *task, int code, int reason, uint32_t info0,
     if (task->state == TASK_BLOCKED && task->waitq)
         wait_queue_remove(task->waitq, task);
 
-    struct task_struct *reaper = find_task_by_pid(1);
-    if (!reaper) {
-        if (!list_empty(&task_list_head))
-            reaper = list_first_entry(&task_list_head, struct task_struct, tasks);
-        else
-            reaper = task;
-    }
-
-    uint32_t flags = irq_save();
+    uint32_t flags = tasklist_lock();
+    struct task_struct *reaper = task_reaper_locked();
+    if (!reaper)
+        reaper = task;
     int wake = reparent_children(task, reaper);
-    irq_restore(flags);
+    tasklist_unlock(flags);
 
     task_zombify(task, code, reason, info0, info1);
     signal_notify_exit(task);
-    wait_queue_wake_all(&exit_waitq);
-    if (wake)
-        wait_queue_wake_all(&exit_waitq);
-    need_resched = 1;
+    if (task->parent)
+        wake_up_all(&task->parent->child_exit_wait);
+    if (wake && reaper)
+        wake_up_all(&reaper->child_exit_wait);
+    task_set_need_resched();
 }
 
 /* release_task: Implement release task. */
@@ -113,21 +123,34 @@ void release_task(struct task_struct *task)
     task_destroy(task);
 }
 
+static void task_release_invariant_check(struct task_struct *task)
+{
+    if (task_release_invariant_holds(task))
+        return;
+    panic("release_task invariant violated");
+}
+
 /* task_destroy: Implement task destroy. */
 void task_destroy(struct task_struct *task)
 {
+    struct task_struct *self = task_current();
     if (!task)
         return;
-    if (!current || list_empty(&task_list_head))
+    if (!self || list_empty(&task_list_head))
         return;
-    if (task == current)
+    if (task == self)
         return;
     if (task->pid == 0)
         return;
 
-    uint32_t flags = irq_save();
-    list_del(&task->tasks);
-    irq_restore(flags);
+    uint32_t flags = tasklist_lock();
+    if (!list_empty(&task->sibling))
+        list_del_init(&task->sibling);
+    if (!list_empty(&task->tasks))
+        list_del_init(&task->tasks);
+    tasklist_unlock(flags);
+
+    task_release_invariant_check(task);
 
     if (task->thread.sp0)
         kfree((void*)((uint32_t)task->thread.sp0 - THREAD_SIZE));
@@ -137,9 +160,10 @@ void task_destroy(struct task_struct *task)
 /* do_exit: Perform exit. */
 void do_exit(int code)
 {
-    if (!current)
+    struct task_struct *task = task_current();
+    if (!task)
         return;
-    if (current->pid == 0)
+    if (task->pid == 0)
         return;
     do_exit_reason(code, TASK_EXIT_NORMAL, 0, 0);
 }
@@ -147,11 +171,12 @@ void do_exit(int code)
 /* do_exit_reason: Perform exit reason. */
 void do_exit_reason(int code, int reason, uint32_t info0, uint32_t info1)
 {
-    if (!current)
+    struct task_struct *task = task_current();
+    if (!task)
         return;
-    if (current->pid == 0)
+    if (task->pid == 0)
         return;
-    exit_notify(current, code, reason, info0, info1);
+    exit_notify(task, code, reason, info0, info1);
 }
 
 /* sys_exit: Implement sys exit. */

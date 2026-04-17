@@ -15,6 +15,7 @@
 #include "linux/init.h"
 #include "linux/slab.h"
 #include "linux/libc.h"
+#include "linux/vsprintf.h"
 
 static uint32_t blk_reads;
 static uint32_t blk_writes;
@@ -26,7 +27,7 @@ static uint32_t blk_sysfs_emit_u32_line(char *buffer, uint32_t cap, uint32_t val
 {
     if (!buffer || cap < 2)
         return 0;
-    itoa((int)value, 10, buffer);
+    snprintf(buffer, cap, "%u", value);
     uint32_t n = (uint32_t)strlen(buffer);
     if (n + 1 >= cap)
         return 0;
@@ -63,7 +64,7 @@ static int blk_sysfs_append_ch(char *buffer, uint32_t *off, uint32_t cap, char c
 static int blk_sysfs_append_u32(char *buffer, uint32_t *off, uint32_t cap, uint32_t v)
 {
     char tmp[16];
-    itoa((int)v, 10, tmp);
+    snprintf(tmp, sizeof(tmp), "%u", v);
     return blk_sysfs_append(buffer, off, cap, tmp);
 }
 

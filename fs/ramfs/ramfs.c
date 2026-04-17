@@ -14,6 +14,91 @@ static struct file_operations ramfs_dir_ops;
 static struct file_operations ramfs_file_ops;
 static struct file_operations ramfs_symlink_ops;
 
+static uint32_t ramfs_apply_umask(uint32_t mode);
+
+/*
+ * Linux mapping:
+ * - inode creation funnels through ramfs_get_inode() (Linux: ramfs_get_inode()).
+ * - inode teardown funnels through ramfs_evict_inode() (Linux: evict_inode()).
+ *
+ * Lite does not have a global inode cache/evict path, so ramfs calls the
+ * teardown helper from unlink/rmdir where inodes are actually freed.
+ */
+static struct inode *ramfs_get_inode(struct inode *dir, uint32_t type, uint32_t mode)
+{
+    (void)dir;
+    struct inode *inode = (struct inode *)kmalloc(sizeof(*inode));
+    if (!inode)
+        return NULL;
+    memset(inode, 0, sizeof(*inode));
+
+    inode->i_ino = get_next_ino();
+    inode->uid = task_get_uid();
+    inode->gid = task_get_gid();
+
+    if (type == FS_DIRECTORY) {
+        struct address_space *mapping = (struct address_space *)kmalloc(sizeof(*mapping));
+        if (!mapping) {
+            kfree(inode);
+            return NULL;
+        }
+        address_space_init(mapping, inode);
+        inode->i_mapping = mapping;
+        inode->flags = FS_DIRECTORY;
+        inode->i_op = &ramfs_dir_iops;
+        inode->f_ops = &ramfs_dir_ops;
+        inode->i_mode = ramfs_apply_umask(mode ? mode : 0777);
+        return inode;
+    }
+
+    if (type == FS_SYMLINK) {
+        inode->flags = FS_SYMLINK;
+        inode->i_op = NULL;
+        inode->f_ops = &ramfs_symlink_ops;
+        inode->i_mode = 0777;
+        inode->i_size = 0;
+        return inode;
+    }
+
+    /* Regular files by default. */
+    struct address_space *mapping = (struct address_space *)kmalloc(sizeof(*mapping));
+    if (!mapping) {
+        kfree(inode);
+        return NULL;
+    }
+    address_space_init(mapping, inode);
+    inode->i_mapping = mapping;
+    inode->flags = FS_FILE;
+    inode->i_op = NULL;
+    inode->f_ops = &ramfs_file_ops;
+    inode->i_size = 0;
+    inode->i_mode = ramfs_apply_umask(mode ? mode : 0666);
+    return inode;
+}
+
+static void ramfs_evict_inode(struct inode *inode)
+{
+    if (!inode)
+        return;
+
+    if ((inode->flags & 0x7) != FS_DIRECTORY) {
+        /* Truncate file mapping to free physical pages. */
+        if (inode->i_mapping)
+            truncate_inode_pages(inode->i_mapping, 0);
+    }
+
+    if (inode->private_data) {
+        kfree(inode->private_data);
+        inode->private_data = NULL;
+    }
+    if (inode->i_mapping) {
+        address_space_release(inode->i_mapping);
+        kfree(inode->i_mapping);
+        inode->i_mapping = NULL;
+    }
+    kfree(inode);
+}
+
 static uint32_t ramfs_apply_umask(uint32_t mode)
 {
     uint32_t mask = task_get_umask();
@@ -58,50 +143,11 @@ struct inode *ramfs_create_child(struct inode *dir, const char *name, uint32_t t
         return NULL;
     // Actually, `ramfs_create_child` is called by `vfs_open` and `vfs_mkdir` when it wants to create a file.
     // They already handle the dcache! So `ramfs_create_child` just needs to return a new bare inode!
-
-    struct inode *inode = (struct inode*)kmalloc(sizeof(struct inode));
-    if (!inode)
-        return NULL;
-    memset(inode, 0, sizeof(*inode));
-
-    inode->i_ino = get_next_ino();
-    inode->uid = task_get_uid();
-    inode->gid = task_get_gid();
-
-    if (type == FS_DIRECTORY) {
-        struct address_space *mapping = (struct address_space*)kmalloc(sizeof(struct address_space));
-        if (!mapping) {
-            kfree(inode);
-            return NULL;
-        }
-        address_space_init(mapping, inode);
-        inode->i_mapping = mapping;
-        inode->flags = FS_DIRECTORY;
-        inode->i_op = &ramfs_dir_iops;
-        inode->f_ops = &ramfs_dir_ops;
-        inode->i_mode = ramfs_apply_umask(0777);
-    } else if (type == FS_SYMLINK) {
-        inode->flags = FS_SYMLINK;
-        inode->i_op = NULL;
-        inode->f_ops = &ramfs_symlink_ops;
-        inode->i_mode = 0777;
-        inode->i_size = 0;
-    } else {
-        struct address_space *mapping = (struct address_space*)kmalloc(sizeof(struct address_space));
-        if (!mapping) {
-            kfree(inode);
-            return NULL;
-        }
-        address_space_init(mapping, inode);
-        inode->i_mapping = mapping;
-        inode->flags = FS_FILE;
-        inode->i_op = NULL;
-        inode->f_ops = &ramfs_file_ops;
-        inode->i_size = 0;
-        inode->i_mode = ramfs_apply_umask(0666);
-    }
-
-    return inode;
+    if (type == FS_DIRECTORY)
+        return ramfs_get_inode(dir, FS_DIRECTORY, 0777);
+    if (type == FS_SYMLINK)
+        return ramfs_get_inode(dir, FS_SYMLINK, 0777);
+    return ramfs_get_inode(dir, FS_FILE, 0666);
 }
 
 /* ramfs_unlink: Implement ramfs unlink. */
@@ -136,22 +182,11 @@ static int ramfs_unlink(struct dentry *dir_dentry, const char *name)
         // Simple protection: don't unlink directories, use rmdir
         return -1;
     }
-
-    // Truncate the file mapping to free physical pages
-    if (target->i_mapping)
-        truncate_inode_pages(target->i_mapping, 0);
-
-    if (target->private_data)
-        kfree(target->private_data);
-    if (target->i_mapping) {
-        address_space_release(target->i_mapping);
-        kfree(target->i_mapping);
-    }
     vfs_dentry_detach(found);
     if (found->name)
         kfree((void*)found->name);
     kfree(found);
-    kfree(target);
+    ramfs_evict_inode(target);
 
     return 0;
 }
@@ -187,16 +222,11 @@ static int ramfs_rmdir(struct dentry *dir_dentry, const char *name)
         return -1;
     if (found->children)
         return -1;
-
-    if (target->i_mapping) {
-        address_space_release(target->i_mapping);
-        kfree(target->i_mapping);
-    }
     vfs_dentry_detach(found);
     if (found->name)
         kfree((void*)found->name);
     kfree(found);
-    kfree(target);
+    ramfs_evict_inode(target);
 
     return 0;
 }
@@ -278,29 +308,19 @@ static int ramfs_fill_super(struct super_block *sb, void *data, int silent)
     (void)data;
     (void)silent;
 
-    struct inode *inode = (struct inode*)kmalloc(sizeof(struct inode));
+    struct inode *inode = ramfs_get_inode(NULL, FS_DIRECTORY, 0755);
     if (!inode)
         return -1;
-
-    memset(inode, 0, sizeof(*inode));
-
-    inode->flags = FS_DIRECTORY;
+    /* Keep Linux-like special root ino value. */
     inode->i_ino = 1;
-    inode->i_op = &ramfs_dir_iops;
-    inode->f_ops = &ramfs_dir_ops;
     inode->uid = 0;
     inode->gid = 0;
-    inode->i_mode = 0755;
-
-    struct address_space *mapping = (struct address_space*)kmalloc(sizeof(struct address_space));
-    if (!mapping)
-        return -1;
-    address_space_init(mapping, inode);
-    inode->i_mapping = mapping;
 
     sb->s_root = d_alloc(NULL, "/");
-    if (!sb->s_root)
+    if (!sb->s_root) {
+        ramfs_evict_inode(inode);
         return -1;
+    }
     sb->s_root->inode = inode;
 
     return 0;

@@ -1,8 +1,13 @@
 #include "linux/interrupt.h"
+#include "asm/apic.h"
 #include "asm/idt.h"
+#include "asm/i8259.h"
+#include "asm/io_apic.h"
+#include "asm/irq_vectors.h"
+#include "linux/panic.h"
 #include "linux/sched.h"
 #include "linux/exit.h"
-#include "linux/libc.h"
+#include "linux/printk.h"
 #include "linux/serial.h"
 #include "linux/console.h"
 
@@ -47,44 +52,30 @@ extern void isr128();
 /* ... we will add more as needed, but for now let's focus on IRQ1 (Keyboard) */
 extern void irq0();
 extern void irq1();
+extern void irq2();
+extern void irq3();
 extern void irq4();
-
-/*
- * Remap the PIC (Programmable Interrupt Controller)
- * This moves IRQs 0-7 to IDT entries 32-39, and IRQs 8-15 to 40-47.
- * This is necessary because IDT entries 0-31 are reserved for CPU exceptions.
- */
-static void pic_remap(void)
-{
-    /* Master - Command: 0x20, Data: 0x21 */
-    /* Slave  - Command: 0xA0, Data: 0xA1 */
-
-    /* ICW1: Start initialization */
-    outb(0x20, 0x11);
-    outb(0xA0, 0x11);
-
-    /* ICW2: Remap offset */
-    outb(0x21, 0x20); /* Master IRQ0 starts at 32 (0x20) */
-    outb(0xA1, 0x28); /* Slave IRQ8 starts at 40 (0x28) */
-
-    /* ICW3: Cascade identity */
-    outb(0x21, 0x04);
-    outb(0xA1, 0x02);
-
-    /* ICW4: 8086 mode */
-    outb(0x21, 0x01);
-    outb(0xA1, 0x01);
-
-    /* OCW1: Unmask all interrupts (0x00 = enable all, 0xFF = disable all) */
-    /* Only enable IRQ0 (Timer), IRQ1 (Keyboard), and IRQ4 (Serial) for now */
-    outb(0x21, 0xEC); /* 1110 1100: Enable IRQ0, IRQ1, IRQ4 */
-    outb(0xA1, 0xFF); /* Disable all slave IRQs */
-}
+extern void irq5();
+extern void irq6();
+extern void irq7();
+extern void irq8();
+extern void irq9();
+extern void irq10();
+extern void irq11();
+extern void irq12();
+extern void irq13();
+extern void irq14();
+extern void irq15();
+extern void apic_timer_interrupt();
+extern void call_function_interrupt();
+extern void reschedule_interrupt();
+extern void error_interrupt();
+extern void spurious_interrupt();
 
 /* register_interrupt_handler: Register interrupt handler. */
-void register_interrupt_handler(uint8_t n, isr_t handler)
+void register_interrupt_handler(uint8_t vector, isr_t handler)
 {
-    interrupt_handlers[n] = handler;
+    interrupt_handlers[vector] = handler;
 }
 
 /* Exception messages */
@@ -123,6 +114,14 @@ char *exception_messages[] = {
     "Reserved"
 };
 
+static struct pt_regs *apic_placeholder_interrupt(struct pt_regs *regs)
+{
+    if (pic_mode)
+        panic("APIC/IPI vector fired while PIC mode is active.");
+    panic("APIC/IPI interrupt path not implemented.");
+    return regs;
+}
+
 /* Common handler for all ISRs */
 struct pt_regs *isr_handler(struct pt_regs *regs)
 {
@@ -136,9 +135,7 @@ struct pt_regs *isr_handler(struct pt_regs *regs)
     }
 
     if (regs->int_no < 32 && ((regs->cs & 0x3) == 0x3)) {
-        printf("\nUser Exception: ");
-        printf(exception_messages[regs->int_no]);
-        printf("\n");
+        printk("\nUser Exception: %s\n", exception_messages[regs->int_no]);
         do_exit_reason(1, TASK_EXIT_EXCEPTION, regs->int_no, regs->eip);
         struct pt_regs *task_schedule(struct pt_regs *r);
         regs = task_schedule(regs);
@@ -146,12 +143,8 @@ struct pt_regs *isr_handler(struct pt_regs *regs)
     }
 
     /* Unhandled interrupt - Panic! */
-    printf("\nKERNEL PANIC! Exception: ");
-    if (regs->int_no < 32)
-        printf(exception_messages[regs->int_no]);
-    else
-        printf("Unknown Exception");
-    printf("\n");
+    printk("\nKERNEL PANIC! Exception: %s\n",
+           regs->int_no < 32 ? exception_messages[regs->int_no] : "Unknown Exception");
     panic("System Halted.");
     return regs;
 }
@@ -161,19 +154,15 @@ struct pt_regs *irq_handler(struct pt_regs *regs)
 {
     if (regs->int_no < 256)
         interrupt_count[regs->int_no]++;
+    struct irq_desc *desc = irq_desc_from_vector((uint8_t)regs->int_no);
+    if (!desc) {
+        printk("Unexpected IRQ vector %d\n", regs->int_no);
+        panic("Unhandled IRQ vector.");
+    }
 
-    /* Send EOI (End of Interrupt) signal to PICs */
-    /* If IRQ >= 8 (slave), send to slave PIC */
-    if (regs->int_no >= 40)
-        outb(0xA0, 0x20);
+    regs = irq_dispatch(regs);
 
-    /* Always send to master PIC */
-    outb(0x20, 0x20);
-
-    if (interrupt_handlers[regs->int_no] != 0)
-        interrupt_handlers[regs->int_no](regs);
-
-    if (regs->int_no == IRQ0) {
+    if (desc->irq == IRQ_TIMER) {
         task_tick();
         if (task_should_resched())
             regs = task_schedule(regs);
@@ -224,20 +213,45 @@ void isr_install(void)
     idt_set_gate(30, (uint32_t)isr30, 0x08, 0x8E);
     idt_set_gate(31, (uint32_t)isr31, 0x08, 0x8E);
     idt_set_gate(128, (uint32_t)isr128, 0x08, 0xEF);
+
+    /* Linux-shaped APIC/IPI vectors: installed but inactive in PIC mode. */
+    idt_set_gate(LOCAL_TIMER_VECTOR, (uint32_t)apic_timer_interrupt, 0x08, 0x8E);
+    idt_set_gate(CALL_FUNCTION_VECTOR, (uint32_t)call_function_interrupt, 0x08, 0x8E);
+    idt_set_gate(RESCHEDULE_VECTOR, (uint32_t)reschedule_interrupt, 0x08, 0x8E);
+    idt_set_gate(ERROR_APIC_VECTOR, (uint32_t)error_interrupt, 0x08, 0x8E);
+    idt_set_gate(SPURIOUS_APIC_VECTOR, (uint32_t)spurious_interrupt, 0x08, 0x8E);
+
+    register_interrupt_handler(LOCAL_TIMER_VECTOR, apic_placeholder_interrupt);
+    register_interrupt_handler(CALL_FUNCTION_VECTOR, apic_placeholder_interrupt);
+    register_interrupt_handler(RESCHEDULE_VECTOR, apic_placeholder_interrupt);
+    register_interrupt_handler(ERROR_APIC_VECTOR, apic_placeholder_interrupt);
+    register_interrupt_handler(SPURIOUS_APIC_VECTOR, apic_placeholder_interrupt);
 }
 
 /* irq_install: Implement IRQ install. */
 void irq_install(void)
 {
-    pic_remap();
+    static void (*const irq_stubs[NR_IRQS])(void) = {
+        irq0, irq1, irq2, irq3, irq4, irq5, irq6, irq7,
+        irq8, irq9, irq10, irq11, irq12, irq13, irq14, irq15,
+    };
 
-    /* Install IRQ handlers in IDT */
-    /* IRQ0 (Timer) -> IDT 32 */
-    idt_set_gate(32, (uint32_t)irq0, 0x08, 0x8E);
+    if (apic_init() != 0)
+        panic("local APIC placeholder init failed.");
+    if (io_apic_init() != 0)
+        panic("I/O APIC placeholder init failed.");
+    if (!pic_mode) {
+        if (apic_enabled() || io_apic_enabled())
+            panic("APIC interrupt mode not implemented.");
+        panic("non-PIC interrupt mode is not implemented.");
+    }
+    if (i8259_init() != 0)
+        panic("i8259 init failed.");
 
-    /* IRQ1 (Keyboard) -> IDT 33 */
-    idt_set_gate(33, (uint32_t)irq1, 0x08, 0x8E);
+    irq_init_legacy_vectors();
 
-    /* IRQ4 (Serial) -> IDT 36 */
-    idt_set_gate(36, (uint32_t)irq4, 0x08, 0x8E);
+    for (uint32_t irq = 0; irq < NR_IRQS; irq++) {
+        irq_set_chip_and_handler(irq, i8259_get_chip(), NULL);
+        idt_set_gate(irq_to_vector(irq), (uint32_t)irq_stubs[irq], 0x08, 0x8E);
+    }
 }

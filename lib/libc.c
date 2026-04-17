@@ -148,14 +148,24 @@ void printf(const char *format, ...)
     va_end(args);
 }
 
-/* strdup: Implement strdup. */
-char *strdup(const char *s)
+char *kstrdup(const char *s)
 {
     if (!s)
         return NULL;
-    int len = strlen(s);
-    char *dup = (char*)kmalloc(len + 1);
-    if (dup)
-        memcpy(dup, s, len + 1);
+    size_t len = strlen(s) + 1;
+    char *dup = (char *)kmalloc(len);
+    if (!dup)
+        return NULL;
+    memcpy(dup, s, len);
     return dup;
+}
+
+/* strdup: Implement strdup. */
+char *strdup(const char *s)
+{
+    /*
+     * Lite DIFF: keep libc-style strdup() as a convenience helper, but kernel
+     * call sites should prefer Linux-shaped kstrdup().
+     */
+    return kstrdup(s);
 }

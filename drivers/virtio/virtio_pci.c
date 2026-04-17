@@ -11,6 +11,7 @@
 #include "linux/memlayout.h"
 #include "linux/vmalloc.h"
 #include "linux/pci_regs.h"
+#include "linux/vsprintf.h"
 
 /*
  * Minimal virtio-pci transport for virtio-scsi.
@@ -490,10 +491,7 @@ static int virtio_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id
     vp_parse_modern_caps(vpdev);
 
     static uint32_t virtio_index;
-    strcpy(vpdev->name, "virtio");
-    char tmp[12];
-    itoa((int)virtio_index++, 10, tmp);
-    strcat(vpdev->name, tmp);
+    snprintf(vpdev->name, sizeof(vpdev->name), "virtio%u", virtio_index++);
 
     device_initialize(&vpdev->vdev.dev, vpdev->name);
     vpdev->vdev.dev.release = virtio_pci_dev_release;

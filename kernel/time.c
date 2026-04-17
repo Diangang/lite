@@ -1,19 +1,21 @@
 #include "linux/time.h"
 
 volatile uint32_t jiffies = 0;
-static uint32_t time_hz = HZ;
 
 /* time_set_hz: Implement time set hz. */
 void time_set_hz(uint32_t hz)
 {
-    if (hz)
-        time_hz = hz;
+    /*
+     * Linux mapping: jiffies tick base is the compile-time HZ constant.
+     * Lite documents the same fixed-rate rule and ignores dynamic changes.
+     */
+    (void)hz;
 }
 
 /* time_get_hz: Implement time get hz. */
 uint32_t time_get_hz(void)
 {
-    return time_hz;
+    return HZ;
 }
 
 /* time_tick: Implement time tick. */
@@ -31,7 +33,5 @@ uint32_t time_get_jiffies(void)
 /* time_get_uptime: Implement time get uptime. */
 uint32_t time_get_uptime(void)
 {
-    if (!time_hz)
-        return 0;
-    return jiffies / time_hz;
+    return jiffies / HZ;
 }

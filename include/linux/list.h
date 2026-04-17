@@ -51,6 +51,23 @@ static inline void list_del(struct list_head *entry)
 	entry->prev = NULL;
 }
 
+static inline void list_del_init(struct list_head *entry)
+{
+	/*
+	 * Linux mapping: list_del_init().
+	 *
+	 * Lite DIFF: list_del() clears next/prev to NULL, so make list_del_init()
+	 * tolerant of a node that has already been removed.
+	 */
+	if (!entry || !entry->next || !entry->prev) {
+		if (entry)
+			INIT_LIST_HEAD(entry);
+		return;
+	}
+	__list_del(entry->prev, entry->next);
+	INIT_LIST_HEAD(entry);
+}
+
 static inline int list_empty(const struct list_head *head)
 {
 	return head->next == head;
