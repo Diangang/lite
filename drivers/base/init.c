@@ -1,12 +1,11 @@
-#include "linux/device.h"
 #include "linux/libc.h"
-#include "linux/platform_device.h"
 #include "base.h"
 
 /* driver_init: Initialize driver. */
 void driver_init(void)
 {
     /* Linux-like: init.c only orchestrates subsystem init order. */
+    devtmpfs_init();
     devices_init();
     buses_init();
     classes_init();

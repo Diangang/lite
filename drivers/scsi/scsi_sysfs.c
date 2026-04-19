@@ -19,7 +19,6 @@ static int scsi_sysfs_register(void)
     memset(&scsi_bus_type, 0, sizeof(scsi_bus_type));
     scsi_bus_type.name = "scsi";
     INIT_LIST_HEAD(&scsi_bus_type.list);
-    INIT_LIST_HEAD(&scsi_bus_type.devices);
     if (bus_register_static(&scsi_bus_type) != 0)
         return -1;
 

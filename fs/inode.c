@@ -1,6 +1,9 @@
 #include "linux/fs.h"
+#include "linux/blkdev.h"
+#include "linux/chrdev.h"
 #include "linux/cred.h"
 #include "linux/libc.h"
+#include "linux/slab.h"
 #include "linux/uaccess.h"
 
 /* Global inode allocator for pseudo filesystems */
@@ -11,6 +14,79 @@ uint32_t get_next_ino(void)
 {
     // In a real SMP kernel, this would be an atomic operation or per-CPU counter
     return ++last_ino;
+}
+
+void init_special_inode(struct inode *inode, uint32_t type, dev_t devt, struct file_operations *f_ops)
+{
+    if (!inode)
+        return;
+    inode->flags = type;
+    inode->i_ino = get_next_ino();
+    inode->impl = (uintptr_t)devt;
+    inode->f_ops = f_ops;
+}
+
+struct inode *alloc_special_inode(uint32_t type, dev_t devt, struct file_operations *f_ops,
+                                  uint32_t mode, uint32_t uid, uint32_t gid)
+{
+    struct inode *inode = (struct inode *)kmalloc(sizeof(*inode));
+
+    if (!inode)
+        return NULL;
+    memset(inode, 0, sizeof(*inode));
+    init_special_inode(inode, type, devt, f_ops);
+    inode->i_mode = (mode & 0777);
+    inode->uid = uid;
+    inode->gid = gid;
+    return inode;
+}
+
+struct inode *create_special_inode(uint32_t type, dev_t devt, void *private_data,
+                                   uint32_t mode, uint32_t uid, uint32_t gid)
+{
+    if (type == FS_CHARDEVICE)
+        return chrdev_inode_create(devt, mode, uid, gid);
+    if (type == FS_BLOCKDEVICE) {
+        struct block_device *bdev = (struct block_device *)private_data;
+        struct inode *inode = blockdev_inode_create(bdev);
+        if (!inode)
+            return NULL;
+        inode->i_mode = (mode & 0777);
+        inode->uid = uid;
+        inode->gid = gid;
+        return inode;
+    }
+    return NULL;
+}
+
+void destroy_special_inode(struct inode *inode)
+{
+    if (!inode)
+        return;
+    if ((inode->flags & 0x7) == FS_CHARDEVICE) {
+        chrdev_inode_destroy(inode);
+        return;
+    }
+    if ((inode->flags & 0x7) == FS_BLOCKDEVICE) {
+        struct block_device *bdev = (struct block_device *)inode->private_data;
+        blockdev_inode_destroy(bdev);
+        return;
+    }
+}
+
+int special_inode_matches(struct inode *inode, uint32_t type, dev_t devt)
+{
+    if (!inode)
+        return 0;
+    if ((inode->flags & 0x7) != type)
+        return 0;
+    if (type == FS_BLOCKDEVICE) {
+        struct block_device *bdev = (struct block_device *)inode->private_data;
+        return bdev && bdev->devt == devt;
+    }
+    if (type == FS_CHARDEVICE)
+        return (dev_t)inode->impl == devt;
+    return 0;
 }
 
 /* vfs_check_access: Implement vfs check access. */

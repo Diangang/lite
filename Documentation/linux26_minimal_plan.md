@@ -1,5 +1,11 @@
 # Lite OS: The Road to Linux 2.6 Minimal Core
 
+
+## 文档定位
+- 这是一份**Linux 2.6 最小核心演进计划**，属于规划草案。
+- 它用于描述目标收敛方向，**不等同于当前代码已经具备的能力**。
+- 当前实际落地状态请以 `Linux26-Subsystem-Alignment.md` 和源码为准。
+
 这个文档记录了 Lite OS 向着真正的宏内核（以 Linux 2.6 架构为蓝本）演进的计划和当前状态。
 
 ## 当前架构演进状态

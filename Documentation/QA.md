@@ -1,5 +1,10 @@
 # Lite OS QA（按当前实现梳理）
 
+
+## 文档定位
+- 这是 **当前实现行为** 的权威问答文档。
+- 当其它规划、路线、问题日志与本文件冲突时，以本文件和实际源码为准。
+
 本文基于当前仓库代码整理，目标是回答“这套系统现在到底怎么工作”，而不是泛泛介绍 Linux 概念。回答优先对应当前实现，再在必要时说明与标准 Linux 2.6 的关系与差距。
 
 ---
@@ -108,7 +113,82 @@
 
 因此当前系统必须把外部硬件中断搬到 0x20 之后，IRQ handler 才能与 CPU 异常清晰分开。相关逻辑在 [irq.c](file:///data25/lidg/lite/arch/x86/kernel/irq.c)。
 
-### Q2.5: TSS 在当前项目里还重要吗？
+### Q2.5: 中断和 `i8259` 是什么关系？为什么以前看起来没有 `i8259.c` 也能正常处理中断？
+**回答**：
+要先区分“哪一类中断”：
+- **CPU 异常**：不经过 `i8259`
+- **`int 0x80` 系统调用**：不经过 `i8259`
+- **传统外设硬件中断**：经过 `i8259`
+
+当前 Lite 里：
+- 异常入口走 [interrupt.s](file:///data25/lidg/lite/arch/x86/kernel/interrupt.s#L9-L34) 的 `isr_common_stub`
+- 硬件 IRQ 入口走 [interrupt.s](file:///data25/lidg/lite/arch/x86/kernel/interrupt.s#L36-L87) 的 `irq_common_stub`
+- 真实生效的外部中断控制器是 [i8259.c](file:///data25/lidg/lite/arch/x86/kernel/i8259.c#L53-L75)
+
+可以把当前外设中断链路理解为：
+- **设备 -> i8259 -> CPU vector 32..47 -> `irq_common_stub` -> `irq_handler()` -> `irq_desc/irq_chip/设备 handler`**
+
+所以“以前没有独立 `i8259.c` 也能跑”的原因，不是系统不需要 PIC，而是：
+- 早期实现里，PIC remap / EOI / mask/unmask 这类逻辑更可能散落在 generic IRQ 初始化或处理中
+- 现在只是把这些 legacy PIC 语义显式收敛到了 [i8259.c](file:///data25/lidg/lite/arch/x86/kernel/i8259.c)
+
+这一步的意义主要是模型整理，而不是凭空增加了新功能：
+- generic IRQ 层只保留 `irq_desc` / `irq_chip` 这种 Linux-shaped 抽象
+- legacy PIC 的具体控制器行为从 generic 路径里剥离出来，放到专门的 arch 控制器层
+
+### Q2.6: `APIC` 和 `IO_APIC` 分别是什么？和 `i8259` 怎么区分？
+**回答**：
+可以把它们看成“PIC 之后的新一代中断体系里的两个不同角色”：
+
+- **`i8259`**：
+  - 老式 PIC
+  - 负责传统外设 IRQ 线
+  - 当前 Lite 真正运行的是这套模型
+- **local APIC（当前代码里简写为 `APIC`）**：
+  - 每个 CPU 本地一个
+  - 更偏向 CPU 本地中断：本地 timer、IPI、接收路由到本 CPU 的中断向量
+- **`IO_APIC`**：
+  - 更偏向外设入口侧
+  - 负责把外设 IRQ 路由到某个 CPU 的某个 vector
+
+一个直观理解方式是：
+- `IO_APIC` 像“外设中断分发器”
+- local APIC 像“每个 CPU 的本地收件站”
+- `i8259` 像更老、更简单的总机
+
+在 Linux 风格的 APIC 模型中，典型外设中断链路会更像：
+- **设备 -> IO_APIC -> 某个 CPU 的 local APIC -> 对应 vector handler**
+
+而本地 timer / IPI 则通常不经过 `IO_APIC`，而是直接属于 local APIC 的职责。
+
+### Q2.7: 当前 Lite 里的 `APIC` / `IO_APIC` 到底工作到什么程度？
+**回答**：
+当前代码已经把边界建出来了，但运行时还没有启用真实 APIC 模式：
+
+- [apic.c](file:///data25/lidg/lite/arch/x86/kernel/apic.c)：
+  - `pic_mode = 1`
+  - `lapic_enabled = 0`
+  - 说明系统仍然停留在 PIC 运行模式
+  - 但已经预留并分层了 Linux-shaped 向量：
+    - `LOCAL_TIMER_VECTOR`
+    - `RESCHEDULE_VECTOR`
+    - `CALL_FUNCTION_VECTOR`
+    - `ERROR_APIC_VECTOR`
+    - `SPURIOUS_APIC_VECTOR`
+- [io_apic.c](file:///data25/lidg/lite/arch/x86/kernel/io_apic.c)：
+  - 目前只是 no-op placeholder
+  - 还没有真正的 IOAPIC redirection table / 路由逻辑
+- [irq_install](file:///data25/lidg/lite/arch/x86/kernel/isr.c#L219-L245)：
+  - 会先调用 `apic_init()` 和 `io_apic_init()`
+  - 但如果不是 `pic_mode`，当前实现会直接 panic
+
+因此现在的真实状态是：
+- **PIC / i8259：真的在跑**
+- **APIC / IO_APIC：边界、向量和 handler 所有权已经建好，但仍是 placeholder**
+
+换句话说，Lite 当前不是 APIC mode，只是已经开始把代码组织整理成更接近 Linux 2.6 的 APIC / IOAPIC 结构。
+
+### Q2.8: TSS 在当前项目里还重要吗？
 **回答**：
 重要，但用途已经很收敛了。当前项目不是走 x86 “硬件任务切换”，而是只使用 TSS 中少量字段，最关键的是：
 - **`esp0/ss0`**：当 CPU 从用户态进入内核态时，切换到该任务的内核栈顶
@@ -294,7 +374,7 @@ VGA 参考（保留用于后续重做）：
 - TTY 写入输入缓冲，必要时唤醒等待者
 - 用户程序从 `/dev/tty` 或标准输入读取
 
-TTY 输入逻辑在 [tty.c](file:///data25/lidg/lite/drivers/tty/tty.c#L97-L186)，设备节点在 [devtmpfs.c](file:///data25/lidg/lite/fs/devtmpfs/devtmpfs.c)。
+TTY 输入逻辑在 [tty.c](file:///data25/lidg/lite/drivers/tty/tty.c#L97-L186)，设备节点与 `/dev` 挂载逻辑在 [devtmpfs.c](file:///data25/lidg/lite/drivers/base/devtmpfs.c)。
 
 ### Q5.4: `/dev/console` 和 `/dev/tty` 在当前系统里是什么关系？
 **回答**：
@@ -394,7 +474,7 @@ devtmpfs 负责把抽象设备节点暴露到 `/dev`，当前至少包含：
 - `/dev/tty`
 - 动态注册的块设备节点
 
-这样用户态不需要自己手动创建设备节点，就能访问 tty/console/ramdisk/NVMe 等设备。可参考 [devtmpfs.c](file:///data25/lidg/lite/fs/devtmpfs/devtmpfs.c)。
+这样用户态不需要自己手动创建设备节点，就能访问 tty/console/ramdisk/NVMe 等设备。当前 devtmpfs 已收敛到 [devtmpfs.c](file:///data25/lidg/lite/drivers/base/devtmpfs.c)，底层承载使用 ramfs。
 
 ### Q7.5: 为什么会有 “driver core 的 probe” 和 “PCI/NVMe 自己的 probe” 两层？
 **回答**：
@@ -426,7 +506,7 @@ Linux 也是两层分工，Lite 当前做法与其一致。
 **回答**：
 1.  `attribute` 表示一个 sysfs 文件节点（名字/权限），具体读写由 `sysfs_ops->show/store` 分发。
 2.  `attribute_group` 用于成组管理一批 attribute，并可通过 `is_visible()` 动态控制某些属性是否对某个对象实例可见。
-3.  例子：`/sys/kernel/version/uptime/uevent` 是一组 kernel 属性，靠 `kobj_type.default_groups` 注册（见 [ksysfs.c](file:///data25/lidg/lite/kernel/ksysfs.c#L10-L98)）。
+3.  例子：`/sys/kernel/version/uptime/uevent_helper/uevent_seqnum` 是一组 kernel 属性，当前通过 `kernel_kobj + sysfs_create_group()` 注册；其中 `/sys/kernel` 下的几个文件使用 `kobj_attribute` 直接提供 `show/store`（见 [ksysfs.c](file:///data25/lidg/lite/kernel/ksysfs.c)、[sysfs.c](file:///data25/lidg/lite/fs/sysfs/sysfs.c)）。
 
 ### Q7.10: PCI 的 `id_table` 是什么？`pci_bus_match()` 在做什么？
 **回答**：

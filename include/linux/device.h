@@ -5,6 +5,7 @@
 #include "linux/fs.h"
 #include "linux/kdev_t.h"
 #include "linux/kobject.h"
+#include "linux/klist.h"
 #include "linux/list.h"
 
 struct device;
@@ -12,6 +13,7 @@ struct bus_type;
 struct class;
 struct device_driver;
 struct device_type;
+struct subsys_private;
 
 struct device_type {
     const char *name;
@@ -52,7 +54,7 @@ struct device {
     struct bus_type *bus;
     struct device_driver *driver;
     struct class *class;
-    struct list_head bus_list;
+    struct klist_node knode_bus;
     struct list_head class_list;
     const struct attribute_group **groups;
     const struct device_type *type;
@@ -65,11 +67,9 @@ struct bus_type {
     const char *name;
     struct subsystem subsys;
     struct list_head list;
-    struct list_head devices;
-    struct kset drivers;
     const struct attribute_group **dev_groups;
-    int drivers_autoprobe;
     int (*match)(struct device *dev, struct device_driver *drv);
+    struct subsys_private *p;
 };
 
 struct device_driver {
@@ -77,7 +77,8 @@ struct device_driver {
     struct bus_type *bus;
     int (*probe)(struct device *dev);
     void (*remove)(struct device *dev);
-    struct list_head devices;
+    struct klist klist_devices;
+    struct klist_node knode_bus;
 };
 
 struct class {
@@ -115,6 +116,9 @@ int device_get_devpath(struct device *dev, char *buf, uint32_t cap);
 int device_get_sysfs_path(struct device *dev, char *buf, uint32_t cap);
 int device_get_modalias(struct device *dev, char *buf, uint32_t cap);
 const char *device_get_devnode(struct device *dev, uint32_t *mode, uint32_t *uid, uint32_t *gid);
+int devtmpfs_create_node(struct device *dev);
+int devtmpfs_delete_node(struct device *dev);
+int devtmpfs_mount(const char *mntdir);
 
 void init_driver(struct device_driver *drv, const char *name, struct bus_type *bus, int (*probe)(struct device *));
 int class_register(struct class *cls);

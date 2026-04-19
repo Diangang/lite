@@ -31,15 +31,6 @@ static const struct attribute_group *driver_default_groups[] = {
     NULL,
 };
 
-static struct device_driver *driver_from_bus_entry(struct list_head *entry)
-{
-    struct kobject *kobj;
-
-    if (!entry)
-        return NULL;
-    kobj = container_of(entry, struct kobject, entry);
-    return container_of(kobj, struct device_driver, kobj);
-}
 
 static uint32_t sysfs_emit_text_line(char *buffer, uint32_t cap, const char *text)
 {
@@ -60,12 +51,17 @@ static struct device *sysfs_find_driver_bus_device(struct device_driver *drv, co
 {
     if (!drv || !drv->bus || !name || !name[0])
         return NULL;
-    struct device *cur;
-    list_for_each_entry(cur, &drv->bus->devices, bus_list) {
+    struct klist_iter iter;
+    struct klist_node *node;
+    klist_iter_init(bus_devices_klist(drv->bus), &iter);
+    while ((node = klist_next(&iter)) != NULL) {
+        struct device *cur = container_of(node, struct device, knode_bus);
         if (!strcmp(cur->kobj.name, name))
-            return cur;
+            break;
     }
-    return NULL;
+    struct device *ret = node ? container_of(node, struct device, knode_bus) : NULL;
+    klist_iter_exit(&iter);
+    return ret;
 }
 
 static uint32_t driver_sysfs_show(struct kobject *kobj, const struct attribute *attr, char *buffer, uint32_t cap)
@@ -231,34 +227,42 @@ int driver_attach(struct device_driver *drv)
 {
     if (!drv || !drv->bus)
         return -1;
-    struct device *dev;
-    list_for_each_entry(dev, &drv->bus->devices, bus_list) {
+    struct klist_iter iter;
+    struct klist_node *node;
+    klist_iter_init(bus_devices_klist(drv->bus), &iter);
+    while ((node = klist_next(&iter)) != NULL) {
+        struct device *dev = container_of(node, struct device, knode_bus);
         if (dev->driver)
             continue;
         int rc = driver_probe_device(drv, dev);
         if (rc == -EPROBE_DEFER)
             driver_deferred_probe_add(dev);
     }
+    klist_iter_exit(&iter);
     return 0;
 }
 
 /* driver_register: Implement driver register. */
 int driver_register(struct device_driver *drv)
 {
-    struct list_head *entry;
+    struct klist_iter iter;
+    struct klist_node *node;
 
     if (!drv || !drv->bus)
         return -1;
-    list_for_each(entry, &drv->bus->drivers.list) {
-        struct device_driver *cur = driver_from_bus_entry(entry);
-        if (!cur)
-            continue;
-        if (!strcmp(cur->kobj.name, drv->kobj.name))
+    klist_iter_init(bus_drivers_klist(drv->bus), &iter);
+    while ((node = klist_next(&iter)) != NULL) {
+        struct device_driver *cur = container_of(node, struct device_driver, knode_bus);
+        if (cur && !strcmp(cur->kobj.name, drv->kobj.name)) {
+            klist_iter_exit(&iter);
             return -1;
+        }
     }
-    drv->kobj.kset = &drv->bus->drivers;
-    kset_add(&drv->bus->drivers, &drv->kobj);
-    if (drv->bus->drivers_autoprobe)
+    klist_iter_exit(&iter);
+    drv->kobj.kset = bus_drivers_kset(drv->bus);
+    kset_add(bus_drivers_kset(drv->bus), &drv->kobj);
+    klist_add_tail(&drv->knode_bus, bus_drivers_klist(drv->bus));
+    if (bus_drivers_autoprobe(drv->bus))
         driver_attach(drv);
     driver_deferred_probe_trigger();
     return 0;
@@ -269,13 +273,19 @@ int driver_unregister(struct device_driver *drv)
 {
     if (!drv || !drv->bus)
         return -1;
-    struct device *dev;
-    list_for_each_entry(dev, &drv->bus->devices, bus_list) {
+    struct klist_iter iter;
+    struct klist_node *node;
+    klist_iter_init(bus_devices_klist(drv->bus), &iter);
+    while ((node = klist_next(&iter)) != NULL) {
+        struct device *dev = container_of(node, struct device, knode_bus);
         if (dev->driver == drv)
             device_unbind(dev);
     }
+    klist_iter_exit(&iter);
+    if (klist_node_attached(&drv->knode_bus))
+        klist_remove(&drv->knode_bus);
     kobject_del(&drv->kobj);
-    kset_remove(&drv->bus->drivers, &drv->kobj);
+    kset_remove(bus_drivers_kset(drv->bus), &drv->kobj);
     drv->kobj.kset = NULL;
     /* Drop the registration reference (Linux mapping: driver_unregister ends the kobject lifetime). */
     kobject_put(&drv->kobj);
@@ -289,7 +299,10 @@ void init_driver(struct device_driver *drv, const char *name, struct bus_type *b
         return;
     memset(drv, 0, sizeof(*drv));
     kobject_init_with_ktype(&drv->kobj, name, &ktype_driver, NULL);
-    INIT_LIST_HEAD(&drv->devices);
+    klist_init(&drv->klist_devices, NULL, NULL);
+    INIT_LIST_HEAD(&drv->knode_bus.n_node);
+    drv->knode_bus.n_klist = NULL;
+    kref_init(&drv->knode_bus.n_ref);
     drv->bus = bus;
     drv->probe = probe;
 }

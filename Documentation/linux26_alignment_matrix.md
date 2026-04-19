@@ -1,5 +1,11 @@
 # Linux 2.6 对齐迁移矩阵（x86 32 位）
 
+
+## 文档定位
+- 这是一份**路径/文件级对齐矩阵**，用于说明 Lite 与 `linux2.6/` 的目录映射关系。
+- 它适合做迁移与审计索引，**不是当前实现状态的唯一真相源**。
+- 具体阶段进度请以 `Linux26-Subsystem-Alignment.md` 为准。
+
 本矩阵以仓库根目录的 `linux2.6/` 为唯一对齐基准，用于把 Lite OS 当前实现逐文件映射到 Linux 2.6 的目录/文件，并标注对齐状态与下一步迁移动作。
 
 状态说明：
@@ -53,7 +59,7 @@
 | fs/ramfs/ramfs.c | fs/ramfs/inode.c | Partial | 文件粒度不同；后续拆分并对齐 super/inode 操作表 |
 | fs/procfs/* | fs/proc/* | Partial | procfs 2.6 结构更复杂；先对齐关键节点语义与遍历 |
 | fs/sysfs/sysfs.c | fs/sysfs/* | Partial | /sys/bus/{platform,pci}/{devices,drivers} 已按 bus 视角枚举，/sys/devices 开始按 parent/child 形成层级视图；完整 sysfs link/attr 语义仍待补齐 |
-| fs/devtmpfs/devtmpfs.c | drivers/base/devtmpfs.c（不同版本位置差异） | Partial | 以语义对齐为主，后续再精确对齐路径 |
+| drivers/base/devtmpfs.c | drivers/base/devtmpfs.c | Improved | 已迁移到 driver core，挂载底层复用 ramfs；与 Linux 的 tmpfs/shmem 仍有承载差异 |
 
 ## drivers（设备模型与核心驱动）
 

@@ -1,5 +1,11 @@
 # Lite `include/linux` Struct Audit (Target: Linux 2.6 Naming)
 
+
+## 文档定位
+- 这是一份**命名审计文档**，关注 public header 中 `struct` 名称与 Linux 2.6 的对应关系。
+- 它主要回答“名字是否对齐”，**不直接代表运行时语义已完全一致**。
+- 运行时行为与生命周期请结合 `QA.md`、`device_driver_model.md` 和源码阅读。
+
 This document audits **all** `struct` definitions under `include/linux/*.h` in this tree, focusing on **name compatibility** with Linux 2.6. Where a name cannot reasonably match Linux 2.6 (because Linux simply does not have an equivalent or semantics differ fundamentally), the entry includes a short rationale and the intended mapping.
 
 Scope: only `include/linux/**/*.h` public headers (47 structs in this tree).

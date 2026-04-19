@@ -818,7 +818,6 @@ static int pci_init(void)
     pci_bus_type.match = pci_bus_match;
     pci_bus_type.dev_groups = pci_dev_groups;
     INIT_LIST_HEAD(&pci_bus_type.list);
-    INIT_LIST_HEAD(&pci_bus_type.devices);
     if (bus_register_static(&pci_bus_type) != 0)
         return -1;
     memset(pci_buses, 0, sizeof(pci_buses));

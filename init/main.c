@@ -9,7 +9,6 @@
 #include "linux/fs.h"
 #include "linux/ramfs.h"
 #include "linux/procfs.h"
-#include "linux/devtmpfs.h"
 #include "linux/minixfs.h"
 #include "linux/blkdev.h"
 #include "linux/sysfs.h"
@@ -85,7 +84,7 @@ static void prepare_namespace(void)
     if (sysfs_init() != 0)
         panic("sysfs init failed.");
     vfs_mount_fs("/proc", "proc");
-    vfs_mount_fs("/dev", "devtmpfs");
+    devtmpfs_mount("/dev");
     sysfs_mount();
     virtio_scsi_late_probe();
     /*

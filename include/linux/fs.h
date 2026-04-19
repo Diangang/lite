@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "linux/kdev_t.h"
 
 #define FS_FILE        0x01
 #define FS_DIRECTORY   0x02
@@ -50,6 +51,7 @@ struct inode {
     struct address_space *i_mapping;
     struct inode_operations *i_op;
     struct file_operations *f_ops;
+    void *i_private;
     void *private_data;
 
     uint32_t mode;
@@ -129,6 +131,12 @@ int vfs_mount(const char *path, struct super_block *sb);
 int vfs_mount_fs(const char *path, const char *fs_name);
 int vfs_mount_fs_dev(const char *path, const char *fs_name, const char *dev_name);
 int vfs_chdir(const char *path);
+struct inode *vfs_resolve_at(struct dentry *root, const char *path);
+int vfs_create_path_at(struct dentry *root, const char *path);
+int vfs_mknod_at(struct dentry *root, const char *path, uint32_t type, dev_t devt,
+                 void *private_data, uint32_t mode, uint32_t uid, uint32_t gid);
+int vfs_unlink_at(struct dentry *root, const char *path);
+int vfs_rmdir_at(struct dentry *root, const char *path);
 int vfs_mkdir(const char *path);
 int vfs_symlink(const char *target, const char *linkpath);
 int vfs_unlink(const char *path);
@@ -144,6 +152,13 @@ int vfs_ioctl(struct file *f, uint32_t request, uint32_t arg);
 void vfs_close(struct file *f);
 
 uint32_t get_next_ino(void);
+void init_special_inode(struct inode *inode, uint32_t type, dev_t devt, struct file_operations *f_ops);
+struct inode *alloc_special_inode(uint32_t type, dev_t devt, struct file_operations *f_ops,
+                                  uint32_t mode, uint32_t uid, uint32_t gid);
+struct inode *create_special_inode(uint32_t type, dev_t devt, void *private_data,
+                                   uint32_t mode, uint32_t uid, uint32_t gid);
+void destroy_special_inode(struct inode *inode);
+int special_inode_matches(struct inode *inode, uint32_t type, dev_t devt);
 uint32_t read_fs(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer);
 uint32_t write_fs(struct inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer);
 void open_fs(struct inode *node, uint8_t read, uint8_t write);

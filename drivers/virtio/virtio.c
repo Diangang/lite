@@ -143,7 +143,6 @@ static int virtio_init(void)
     virtio_bus_type.name = "virtio";
     virtio_bus_type.match = virtio_bus_match;
     INIT_LIST_HEAD(&virtio_bus_type.list);
-    INIT_LIST_HEAD(&virtio_bus_type.devices);
     return bus_register_static(&virtio_bus_type);
 }
 subsys_initcall(virtio_init);

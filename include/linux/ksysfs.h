@@ -3,7 +3,7 @@
 
 #include "linux/kobject.h"
 
-/* Linux-like /sys/kernel root subsystem. */
-extern struct subsystem kernel_subsys;
+/* Linux-like /sys/kernel root kobject. */
+extern struct kobject *kernel_kobj;
 
 #endif

@@ -1,5 +1,11 @@
 # Console / TTY / Serial / printk：现状梳理与 Linux 2.6 对齐方案
 
+
+## 文档定位
+- 这份文档同时包含**当前现状梳理**和**后续对齐方案**。
+- 其中“现状”部分可作为当前 console/tty/serial 语义参考；“Level 1/2/3” 属于规划内容，不应视为已实现。
+- 若与源码冲突，以 `QA.md` 和 `drivers/tty/*`、`drivers/video/console/*` 的实际代码为准。
+
 本文档收敛近期关于“串口、TTY、console、printk”的问题讨论，并给出一份可执行的分级改造路线。目标是让后续实现修改有清晰参照与验收标准。
 
 ---
@@ -34,13 +40,13 @@
 #### 2.1.2 用户态 `/dev/console` write 路径
 
 - Lite：`/dev/console` 的 `.write` -> `console_write` -> `console_put_char`
-  - [devtmpfs.c](file:///data25/lidg/lite/fs/devtmpfs/devtmpfs.c#L34-L40)
+  - [devtmpfs.c](file:///data25/lidg/lite/drivers/base/devtmpfs.c)
   - [console_write](file:///data25/lidg/lite/drivers/video/console/console.c#L27-L34)
 
 #### 2.1.3 用户态 `/dev/tty` write 路径
 
 - Lite：`/dev/tty` 的 `.write` -> `tty_write` -> `tty_put_char` ->（按 targets）serial
-  - [devtmpfs.c](file:///data25/lidg/lite/fs/devtmpfs/devtmpfs.c#L65-L71)
+  - [devtmpfs.c](file:///data25/lidg/lite/drivers/base/devtmpfs.c)
   - [tty_put_char](file:///data25/lidg/lite/drivers/tty/tty.c#L79-L87)
 
 #### 2.1.4 串口输出是否依赖中断
@@ -61,8 +67,7 @@
 #### 2.2.2 读取路径（用户态 read）
 
 Lite 的 `/dev/console` read 和 `/dev/tty` read 都复用 `tty_read_blocking()`：
-- `/dev/console` read：[dev_console_read](file:///data25/lidg/lite/fs/devtmpfs/devtmpfs.c#L25-L32)
-- `/dev/tty` read：[dev_tty_read](file:///data25/lidg/lite/fs/devtmpfs/devtmpfs.c#L55-L63)
+- `/dev/console` / `/dev/tty` 节点与字符设备分发：[devtmpfs.c](file:///data25/lidg/lite/drivers/base/devtmpfs.c)
 - 阻塞读取与行规程（最小版）：[tty_read_blocking](file:///data25/lidg/lite/drivers/tty/tty.c#L153-L218)
 
 #### 2.2.3 为什么“init_serial 能输出，但可能不响应输入”

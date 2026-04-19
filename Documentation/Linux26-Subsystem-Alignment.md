@@ -1,5 +1,10 @@
 Linux 2.6 Subsystem Alignment (Remaining Work)
 
+
+## 文档定位
+- 这是 **当前 Linux 2.6 对齐进度** 的权威跟踪文档。
+- 它记录仍在推进的子系统、阶段状态和显式 DIFF；已完成内容只保留必要快照，不再作为完整实现手册。
+
 This document tracks only the subsystems that are NOT fully aligned yet.
 Subsystems that are already marked as DONE have been removed from this file to keep focus on remaining work.
 

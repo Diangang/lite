@@ -24,7 +24,6 @@ int platform_bus_init(void)
     platform_bus_type.name = "platform";
     platform_bus_type.match = platform_bus_match;
     INIT_LIST_HEAD(&platform_bus_type.list);
-    INIT_LIST_HEAD(&platform_bus_type.devices);
     return bus_register_static(&platform_bus_type);
 }
 

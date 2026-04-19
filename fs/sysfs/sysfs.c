@@ -935,6 +935,24 @@ int sysfs_create_file(struct kobject *kobj, const struct attribute *attr)
     return 0;
 }
 
+int sysfs_create_group(struct kobject *kobj, const struct attribute_group *grp)
+{
+    if (!kobj || !grp || !grp->attrs)
+        return -1;
+    if (grp->name && grp->name[0])
+        return sysfs_create_named_dir(kobj, grp->name, 0555, &sys_group_dir_ops, (void *)grp);
+    const struct attribute **attr = grp->attrs;
+    while (attr && *attr) {
+        uint32_t mode = grp->is_visible ? grp->is_visible(kobj, *attr) : (*attr)->mode;
+        if (mode) {
+            if (sysfs_create_file(kobj, *attr) != 0)
+                return -1;
+        }
+        attr++;
+    }
+    return 0;
+}
+
 void sysfs_remove_file(struct kobject *kobj, const struct attribute *attr)
 {
     struct sysfs_dirent *ad;
@@ -955,6 +973,22 @@ void sysfs_remove_file(struct kobject *kobj, const struct attribute *attr)
     ad->inode.impl = (uintptr_t)0;
     ad->inode.private_data = NULL;
     ad->inode.f_ops = &sys_dead_ops;
+}
+
+void sysfs_remove_group(struct kobject *kobj, const struct attribute_group *grp)
+{
+    if (!kobj || !grp || !grp->attrs)
+        return;
+    if (grp->name && grp->name[0]) {
+        sysfs_remove_subdir(kobj, grp->name);
+        return;
+    }
+    const struct attribute **attr = grp->attrs;
+    while (attr && *attr) {
+        if (!grp->is_visible || grp->is_visible(kobj, *attr))
+            sysfs_remove_file(kobj, *attr);
+        attr++;
+    }
 }
 
 void sysfs_remove_link(struct kobject *kobj, const char *name)
@@ -1031,8 +1065,17 @@ static uint32_t sys_read_kobj_attr(struct inode *node, uint32_t offset, uint32_t
         return 0;
     struct kobject *kobj = (struct kobject *)(uintptr_t)node->impl;
     const struct attribute *attr = (const struct attribute *)node->private_data;
-    if (!kobj || !kobj->ktype || !kobj->ktype->sysfs_ops || !kobj->ktype->sysfs_ops->show)
+    uint32_t (*show)(struct kobject *kobj, const struct attribute *attr, char *buffer, uint32_t cap) = NULL;
+    struct kobj_attribute *kattr = NULL;
+    if (!kobj)
         return 0;
+    if (kobj->ktype && kobj->ktype->sysfs_ops && kobj->ktype->sysfs_ops->show) {
+        show = kobj->ktype->sysfs_ops->show;
+    } else {
+        kattr = container_of(attr, struct kobj_attribute, attr);
+        if (!kattr || !kattr->show)
+            return 0;
+    }
 
     uint32_t cap = node->i_size ? node->i_size : 256;
     if (cap > 8192)
@@ -1041,7 +1084,7 @@ static uint32_t sys_read_kobj_attr(struct inode *node, uint32_t offset, uint32_t
     if (!tmp)
         return 0;
     tmp[0] = 0;
-    uint32_t n = kobj->ktype->sysfs_ops->show(kobj, attr, tmp, cap);
+    uint32_t n = show ? show(kobj, attr, tmp, cap) : kattr->show(kobj, kattr, tmp, cap);
     if (n > cap)
         n = cap;
     tmp[n] = 0;
@@ -1071,8 +1114,17 @@ static uint32_t sys_write_kobj_attr(struct inode *node, uint32_t offset, uint32_
         return 0;
     struct kobject *kobj = (struct kobject *)(uintptr_t)node->impl;
     const struct attribute *attr = (const struct attribute *)node->private_data;
-    if (!kobj || !kobj->ktype || !kobj->ktype->sysfs_ops || !kobj->ktype->sysfs_ops->store)
+    uint32_t (*store)(struct kobject *kobj, const struct attribute *attr, uint32_t offset, uint32_t size, const uint8_t *buffer) = NULL;
+    struct kobj_attribute *kattr = NULL;
+    if (!kobj)
         return 0;
+    if (kobj->ktype && kobj->ktype->sysfs_ops && kobj->ktype->sysfs_ops->store) {
+        store = kobj->ktype->sysfs_ops->store;
+    } else {
+        kattr = container_of(attr, struct kobj_attribute, attr);
+        if (!kattr || !kattr->store)
+            return 0;
+    }
 
     if (size > 4096)
         size = 4096;
@@ -1087,7 +1139,8 @@ static uint32_t sys_write_kobj_attr(struct inode *node, uint32_t offset, uint32_
         size--;
     }
 
-    uint32_t ret = kobj->ktype->sysfs_ops->store(kobj, attr, 0, size, (const uint8_t *)tmp);
+    uint32_t ret = store ? store(kobj, attr, 0, size, (const uint8_t *)tmp)
+                         : kattr->store(kobj, kattr, (const uint8_t *)tmp, size);
     kfree(tmp);
     return ret;
 }
@@ -1504,7 +1557,7 @@ static struct dirent *sys_bus_entry_readdir(struct file *file, uint32_t index)
     index -= attr_count;
     if (index == 0) {
         strcpy(sys_dirent.name, "devices");
-        struct inode *dino = sysfs_find_kobj_link_inode(kobj, "devices");
+        struct inode *dino = sysfs_get_kobj_dir_inode(bus_devices_kobj(bus));
         if (!dino)
             return NULL;
         sys_dirent.ino = dino->i_ino;
@@ -1512,7 +1565,7 @@ static struct dirent *sys_bus_entry_readdir(struct file *file, uint32_t index)
     }
     if (index == 1) {
         strcpy(sys_dirent.name, "drivers");
-        struct inode *dino = sysfs_get_kobj_dir_inode(&bus->drivers.kobj);
+        struct inode *dino = sysfs_get_kobj_dir_inode(bus_drivers_kobj(bus));
         if (!dino)
             return NULL;
         sys_dirent.ino = dino->i_ino;
@@ -1534,9 +1587,9 @@ static struct inode *sys_bus_entry_finddir(struct inode *node, const char *name)
     if (attr)
         return sysfs_get_kobj_attr_inode(kobj, attr);
     if (!strcmp(name, "devices"))
-        return sysfs_find_kobj_link_inode(kobj, "devices");
+        return sysfs_get_kobj_dir_inode(bus_devices_kobj(bus));
     if (!strcmp(name, "drivers"))
-        return sysfs_get_kobj_dir_inode(&bus->drivers.kobj);
+        return sysfs_get_kobj_dir_inode(bus_drivers_kobj(bus));
     return NULL;
 }
 
@@ -1548,23 +1601,29 @@ static struct dirent *sys_bus_devices_readdir(struct file *file, uint32_t index)
     struct kobject *kobj = (struct kobject *)(uintptr_t)node->impl;
     if (!kobj)
         return NULL;
-    struct bus_type *bus = container_of(kobj, struct bus_type, subsys.kset.kobj);
+    struct kobject *owner = kobj->parent ? kobj->parent : kobj;
+    struct bus_type *bus = container_of(owner, struct bus_type, subsys.kset.kobj);
     uint32_t i = 0;
-    struct device *dev;
+    struct klist_iter iter;
+    struct klist_node *node_iter;
     struct device *pci_root = pci_root_device();
-    list_for_each_entry(dev, &bus->devices, bus_list) {
+    klist_iter_init(bus_devices_klist(bus), &iter);
+    while ((node_iter = klist_next(&iter)) != NULL) {
+        struct device *dev = container_of(node_iter, struct device, knode_bus);
         if (dev == pci_root)
             continue;
         if (i == index) {
             strcpy(sys_dirent.name, dev->kobj.name);
-            struct inode *ino = sysfs_find_kobj_link_inode(kobj, dev->kobj.name);
+            struct inode *ino = sysfs_find_kobj_link_inode(bus_devices_kobj(bus), dev->kobj.name);
             if (!ino)
-                return NULL;
+                break;
             sys_dirent.ino = ino->i_ino;
+            klist_iter_exit(&iter);
             return &sys_dirent;
         }
         i++;
     }
+    klist_iter_exit(&iter);
     return NULL;
 }
 
@@ -1575,15 +1634,23 @@ static struct inode *sys_bus_devices_finddir(struct inode *node, const char *nam
     struct kobject *kobj = (struct kobject *)(uintptr_t)node->impl;
     if (!kobj)
         return NULL;
-    struct bus_type *bus = container_of(kobj, struct bus_type, subsys.kset.kobj);
-    struct device *dev;
+    struct kobject *owner = kobj->parent ? kobj->parent : kobj;
+    struct bus_type *bus = container_of(owner, struct bus_type, subsys.kset.kobj);
+    struct klist_iter iter;
+    struct klist_node *node_iter;
     struct device *pci_root = pci_root_device();
-    list_for_each_entry(dev, &bus->devices, bus_list) {
+    klist_iter_init(bus_devices_klist(bus), &iter);
+    while ((node_iter = klist_next(&iter)) != NULL) {
+        struct device *dev = container_of(node_iter, struct device, knode_bus);
         if (dev == pci_root)
             continue;
-        if (!strcmp(dev->kobj.name, name))
-            return sysfs_find_kobj_link_inode(kobj, dev->kobj.name);
+        if (!strcmp(dev->kobj.name, name)) {
+            struct inode *ino = sysfs_find_kobj_link_inode(bus_devices_kobj(bus), dev->kobj.name);
+            klist_iter_exit(&iter);
+            return ino;
+        }
     }
+    klist_iter_exit(&iter);
     return NULL;
 }
 
@@ -1864,7 +1931,7 @@ static int sysfs_fill_super(struct super_block *sb, void *data, int silent)
     if (sysfs_create_dir(&classes_kset_get()->kobj) != 0)
         return -1;
 
-    if (sysfs_create_dir(&kernel_subsys.kset.kobj) != 0)
+    if (kernel_kobj && sysfs_create_dir(kernel_kobj) != 0)
         return -1;
 
     return 0;

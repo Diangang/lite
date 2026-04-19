@@ -1,5 +1,10 @@
 # Lite 设备模型与 Linux 2.6 基础架构差异与完善路线
 
+
+## 文档定位
+- 这是一份**设备模型收敛路线图**，用于记录 driver core / sysfs / devtmpfs 的后续改造方向。
+- 它**不是当前设备模型行为的权威说明**；当前实现请优先参考 `device_driver_model.md`、`QA.md` 与 `drivers/base/*`。
+
 本文聚焦“驱动核心（driver core）/ 设备模型（device model）/ sysfs/devtmpfs 呈现”的基础架构对齐，不讨论具体驱动功能与性能统计细节。
 
 ## 1. Lite 当前设备模型的骨架（现状）

@@ -2,7 +2,6 @@
 #include "linux/kernel.h"
 #include "linux/slab.h"
 #include "linux/libc.h"
-#include "linux/devtmpfs.h"
 #include "linux/sysfs.h"
 #include "linux/errno.h"
 #include "linux/platform_device.h"
@@ -48,7 +47,9 @@ void device_initialize(struct device *dev, const char *name)
     if (!dev)
         return;
     kobject_init_with_ktype(&dev->kobj, name, &ktype_device, NULL);
-    INIT_LIST_HEAD(&dev->bus_list);
+    INIT_LIST_HEAD(&dev->knode_bus.n_node);
+    dev->knode_bus.n_klist = NULL;
+    kref_init(&dev->knode_bus.n_ref);
     INIT_LIST_HEAD(&dev->class_list);
     /* Linux mapping: device_initialize should leave the device in a known state. */
     dev->bus = NULL;
@@ -335,25 +336,30 @@ int device_release_driver(struct device *dev)
 
 int device_attach(struct device *dev)
 {
-    struct list_head *entry;
+    struct klist_iter iter;
+    struct klist_node *node;
 
     if (!dev || !dev->bus)
         return -1;
     if (dev->driver)
         return 0;
-    list_for_each(entry, &dev->bus->drivers.list) {
-        struct kobject *kobj = container_of(entry, struct kobject, entry);
-        struct device_driver *drv = container_of(kobj, struct device_driver, kobj);
+    klist_iter_init(bus_drivers_klist(dev->bus), &iter);
+    while ((node = klist_next(&iter)) != NULL) {
+        struct device_driver *drv = container_of(node, struct device_driver, knode_bus);
         if (dev->bus->match && dev->bus->match(dev, drv)) {
             int rc = driver_probe_device(drv, dev);
             if (rc == -EPROBE_DEFER) {
+                klist_iter_exit(&iter);
                 driver_deferred_probe_add(dev);
                 return 0;
             }
-            if (rc == 0)
+            if (rc == 0) {
+                klist_iter_exit(&iter);
                 return 0;
+            }
         }
     }
+    klist_iter_exit(&iter);
     return 0;
 }
 
@@ -380,16 +386,18 @@ int device_add(struct device *dev)
     if (!dev)
         return -1;
     kset_add(devices_kset_get(), &dev->kobj);
-    INIT_LIST_HEAD(&dev->bus_list);
+    INIT_LIST_HEAD(&dev->knode_bus.n_node);
+    dev->knode_bus.n_klist = NULL;
+    kref_init(&dev->knode_bus.n_ref);
     INIT_LIST_HEAD(&dev->class_list);
     if (dev->bus)
-        list_add_tail(&dev->bus_list, &dev->bus->devices);
+        klist_add_tail(&dev->knode_bus, bus_devices_klist(dev->bus));
     if (dev->class)
         list_add_tail(&dev->class_list, &dev->class->devices);
     device_sysfs_add_links(dev);
-    devtmpfs_register_device(dev);
+    devtmpfs_create_node(dev);
     device_uevent_emit("add", dev);
-    if (dev->bus && dev->bus->drivers_autoprobe)
+    if (dev->bus && bus_drivers_autoprobe(dev->bus))
         device_attach(dev);
     return 0;
 }
@@ -413,12 +421,12 @@ int device_unregister(struct device *dev)
     /* Avoid deferred-probe UAF if the device is destroyed while deferred. */
     driver_deferred_probe_remove(dev);
     device_unbind(dev);
-    if (dev->bus && dev->bus_list.next && dev->bus_list.prev)
-        list_del(&dev->bus_list);
+    if (dev->bus && klist_node_attached(&dev->knode_bus))
+        klist_remove(&dev->knode_bus);
     if (dev->class && dev->class_list.next && dev->class_list.prev)
         list_del(&dev->class_list);
     device_sysfs_remove_links(dev);
-    devtmpfs_unregister_device(dev);
+    devtmpfs_delete_node(dev);
     device_uevent_emit("remove", dev);
     kobject_del(&dev->kobj);
     kset_remove(&devices_subsys.kset, &dev->kobj);

@@ -10,14 +10,47 @@ static LIST_HEAD(bus_list_head);
 
 #define to_bus_attr(_attr) container_of(_attr, struct bus_attribute, attr)
 
+static struct device *bus_device_from_node(struct klist_node *node)
+{
+    return node ? container_of(node, struct device, knode_bus) : NULL;
+}
+
+static struct device_driver *bus_driver_from_node(struct klist_node *node)
+{
+    return node ? container_of(node, struct device_driver, knode_bus) : NULL;
+}
+
+static void bus_device_klist_get(struct klist_node *node)
+{
+    struct device *dev = bus_device_from_node(node);
+    if (dev)
+        kobject_get(&dev->kobj);
+}
+
+static void bus_device_klist_put(struct klist_node *node)
+{
+    struct device *dev = bus_device_from_node(node);
+    if (dev)
+        kobject_put(&dev->kobj);
+}
+
+static void bus_driver_klist_get(struct klist_node *node)
+{
+    struct device_driver *drv = bus_driver_from_node(node);
+    if (drv)
+        kobject_get(&drv->kobj);
+}
+
+static void bus_driver_klist_put(struct klist_node *node)
+{
+    struct device_driver *drv = bus_driver_from_node(node);
+    if (drv)
+        kobject_put(&drv->kobj);
+}
+
 static inline struct kobject *bus_kobj(struct bus_type *bus)
 {
     return bus ? &bus->subsys.kset.kobj : NULL;
-}
-
-static inline struct kobject *bus_drivers_kobj(struct bus_type *bus)
-{
-    return bus ? &bus->drivers.kobj : NULL;
 }
 
 static void bus_sysfs_unregister_subdirs(struct bus_type *bus)
@@ -25,7 +58,7 @@ static void bus_sysfs_unregister_subdirs(struct bus_type *bus)
     if (!bus)
         return;
     kobject_del(bus_drivers_kobj(bus));
-    sysfs_remove_subdir(bus_kobj(bus), "devices");
+    kobject_del(bus_devices_kobj(bus));
 }
 
 static uint32_t bus_emit_text_line(char *buffer, uint32_t cap, const char *text)
@@ -49,6 +82,7 @@ static void bus_release_kobj(struct kobject *kobj)
 {
     struct bus_type *bus = container_of(kobj, struct bus_type, subsys.kset.kobj);
     bus_sysfs_unregister_subdirs(bus);
+    kfree(bus->p);
     kfree(bus);
 }
 
@@ -56,7 +90,7 @@ static uint32_t bus_attr_show_drivers_autoprobe(struct bus_type *bus, struct bus
                                                 char *buffer, uint32_t cap)
 {
     (void)attr;
-    return bus_emit_text_line(buffer, cap, (bus && bus->drivers_autoprobe) ? "1" : "0");
+    return bus_emit_text_line(buffer, cap, bus_drivers_autoprobe(bus) ? "1" : "0");
 }
 
 static uint32_t bus_attr_store_drivers_autoprobe(struct bus_type *bus, struct bus_attribute *attr,
@@ -67,11 +101,11 @@ static uint32_t bus_attr_store_drivers_autoprobe(struct bus_type *bus, struct bu
         return 0;
     for (uint32_t i = 0; i < size; i++) {
         if (buffer[i] == '0') {
-            bus->drivers_autoprobe = 0;
+            bus_set_drivers_autoprobe(bus, 0);
             return size;
         }
         if (buffer[i] == '1') {
-            bus->drivers_autoprobe = 1;
+            bus_set_drivers_autoprobe(bus, 1);
             return size;
         }
     }
@@ -80,37 +114,47 @@ static uint32_t bus_attr_store_drivers_autoprobe(struct bus_type *bus, struct bu
 
 static int bus_probe_device_name(struct bus_type *bus, const char *name)
 {
-    struct device *dev;
+    struct klist_iter iter;
+    struct klist_node *node;
     if (!bus || !name || !name[0])
         return -1;
-    list_for_each_entry(dev, &bus->devices, bus_list) {
+    klist_iter_init(bus_devices_klist(bus), &iter);
+    while ((node = klist_next(&iter)) != NULL) {
+        struct device *dev = bus_device_from_node(node);
         if (strcmp(dev->kobj.name, name))
             continue;
         /* Linux-like boundary: drivers_probe does not silently reprobe a bound device. */
         if (dev->driver)
-            return -1;
+            break;
+        klist_iter_exit(&iter);
         return device_attach(dev);
     }
+    klist_iter_exit(&iter);
     return -1;
 }
 
 static int bus_probe_device_modalias(struct bus_type *bus, const char *modalias)
 {
-    struct device *dev;
+    struct klist_iter iter;
+    struct klist_node *node;
     char buf[128];
 
     if (!bus || !modalias || !modalias[0])
         return -1;
-    list_for_each_entry(dev, &bus->devices, bus_list) {
+    klist_iter_init(bus_devices_klist(bus), &iter);
+    while ((node = klist_next(&iter)) != NULL) {
+        struct device *dev = bus_device_from_node(node);
         if (device_get_modalias(dev, buf, sizeof(buf)) != 0)
             continue;
         if (strcmp(buf, modalias))
             continue;
         /* Linux-like boundary: explicit unbind is required before rebinding. */
         if (dev->driver)
-            return -1;
+            break;
+        klist_iter_exit(&iter);
         return device_attach(dev);
     }
+    klist_iter_exit(&iter);
     return -1;
 }
 
@@ -197,12 +241,18 @@ static int bus_sysfs_register_subdirs(struct bus_type *bus)
 {
     if (!bus)
         return -1;
-    if (sysfs_create_subdir(bus_kobj(bus), "devices", 0555) != 0)
+    struct kset *devices = bus_devices_kset(bus);
+    struct kset *drivers = bus_drivers_kset(bus);
+    if (!devices || !drivers)
         return -1;
-    kset_init(&bus->drivers, "drivers");
-    bus->drivers.kobj.parent = bus_kobj(bus);
-    if (kobject_add(&bus->drivers.kobj) != 0) {
-        sysfs_remove_subdir(bus_kobj(bus), "devices");
+    kset_init(devices, "devices");
+    devices->kobj.parent = bus_kobj(bus);
+    if (kobject_add(&devices->kobj) != 0)
+        return -1;
+    kset_init(drivers, "drivers");
+    drivers->kobj.parent = bus_kobj(bus);
+    if (kobject_add(&drivers->kobj) != 0) {
+        kobject_del(&devices->kobj);
         return -1;
     }
     return 0;
@@ -240,14 +290,18 @@ int bus_default_match(struct device *dev, struct device_driver *drv)
 
 int bus_rescan_devices(struct bus_type *bus)
 {
-    struct device *dev;
+    struct klist_iter iter;
+    struct klist_node *node;
     if (!bus)
         return -1;
-    list_for_each_entry(dev, &bus->devices, bus_list) {
+    klist_iter_init(bus_devices_klist(bus), &iter);
+    while ((node = klist_next(&iter)) != NULL) {
+        struct device *dev = bus_device_from_node(node);
         if (dev->driver)
             continue;
         device_attach(dev);
     }
+    klist_iter_exit(&iter);
     return 0;
 }
 
@@ -258,14 +312,22 @@ struct bus_type *bus_register(const char *name, int (*match)(struct device *, st
     if (!bus)
         return NULL;
     memset(bus, 0, sizeof(*bus));
+    bus->p = (struct subsys_private *)kmalloc(sizeof(*bus->p));
+    if (!bus->p) {
+        kfree(bus);
+        return NULL;
+    }
+    memset(bus->p, 0, sizeof(*bus->p));
+    bus->p->bus = bus;
     bus->name = name;
     kset_init(&bus->subsys.kset, name);
     bus->subsys.kset.kobj.ktype = &ktype_bus;
     bus->subsys.kset.kobj.kset = buses_kset_get();
-    bus->drivers_autoprobe = 1;
+    bus_set_drivers_autoprobe(bus, 1);
     bus->match = match ? match : bus_default_match;
     INIT_LIST_HEAD(&bus->list);
-    INIT_LIST_HEAD(&bus->devices);
+    klist_init(bus_devices_klist(bus), bus_device_klist_get, bus_device_klist_put);
+    klist_init(bus_drivers_klist(bus), bus_driver_klist_get, bus_driver_klist_put);
     list_add_tail(&bus->list, &bus_list_head);
     if (subsystem_register(&bus->subsys) != 0) {
         list_del(&bus->list);
@@ -283,6 +345,7 @@ struct bus_type *bus_register(const char *name, int (*match)(struct device *, st
 
 int bus_register_static(struct bus_type *bus)
 {
+    int allocated_p = 0;
     if (!bus)
         return -1;
     if (!bus->name || !bus->name[0])
@@ -292,24 +355,40 @@ int bus_register_static(struct bus_type *bus)
         if (!strcmp(cur->name, bus->name))
             return -1;
     }
+    if (!bus->p) {
+        bus->p = (struct subsys_private *)kmalloc(sizeof(*bus->p));
+        if (!bus->p)
+            return -1;
+        memset(bus->p, 0, sizeof(*bus->p));
+        bus->p->bus = bus;
+        allocated_p = 1;
+    }
     if (!bus->match)
         bus->match = bus_default_match;
-    bus->drivers_autoprobe = 1;
+    bus_set_drivers_autoprobe(bus, 1);
     kset_init(&bus->subsys.kset, bus->name);
     bus->subsys.kset.kobj.ktype = &ktype_bus;
     bus->subsys.kset.kobj.kset = buses_kset_get();
-    if (!bus->devices.next || !bus->devices.prev)
-        INIT_LIST_HEAD(&bus->devices);
+    klist_init(bus_devices_klist(bus), bus_device_klist_get, bus_device_klist_put);
+    klist_init(bus_drivers_klist(bus), bus_driver_klist_get, bus_driver_klist_put);
     if (!bus->list.next || !bus->list.prev)
         INIT_LIST_HEAD(&bus->list);
     list_add_tail(&bus->list, &bus_list_head);
     if (subsystem_register(&bus->subsys) != 0) {
         list_del(&bus->list);
+        if (allocated_p) {
+            kfree(bus->p);
+            bus->p = NULL;
+        }
         return -1;
     }
     if (bus_sysfs_register_subdirs(bus) != 0) {
         subsystem_unregister(&bus->subsys);
         list_del(&bus->list);
+        if (allocated_p) {
+            kfree(bus->p);
+            bus->p = NULL;
+        }
         return -1;
     }
     return 0;

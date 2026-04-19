@@ -11,6 +11,12 @@ struct attribute {
     uint32_t mode;
 };
 
+struct kobj_attribute {
+    struct attribute attr;
+    uint32_t (*show)(struct kobject *kobj, struct kobj_attribute *attr, char *buffer, uint32_t cap);
+    uint32_t (*store)(struct kobject *kobj, struct kobj_attribute *attr, const uint8_t *buffer, uint32_t size);
+};
+
 struct attribute_group {
     const char *name;
     const struct attribute **attrs;
@@ -26,9 +32,11 @@ int sysfs_init(void);
 void sysfs_mount(void);
 int sysfs_create_dir(struct kobject *kobj);
 int sysfs_create_file(struct kobject *kobj, const struct attribute *attr);
+int sysfs_create_group(struct kobject *kobj, const struct attribute_group *grp);
 int sysfs_create_subdir(struct kobject *kobj, const char *name, uint32_t mode);
 int sysfs_create_link(struct kobject *kobj, struct kobject *target, const char *name);
 void sysfs_remove_file(struct kobject *kobj, const struct attribute *attr);
+void sysfs_remove_group(struct kobject *kobj, const struct attribute_group *grp);
 void sysfs_remove_subdir(struct kobject *kobj, const char *name);
 void sysfs_remove_link(struct kobject *kobj, const char *name);
 void sysfs_remove_dir(struct kobject *kobj);

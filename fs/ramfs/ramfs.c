@@ -303,7 +303,7 @@ static struct file_operations ramfs_symlink_ops = {
 };
 
 /* ramfs_fill_super: Implement ramfs fill super. */
-static int ramfs_fill_super(struct super_block *sb, void *data, int silent)
+int ramfs_fill_super(struct super_block *sb, void *data, int silent)
 {
     (void)data;
     (void)silent;

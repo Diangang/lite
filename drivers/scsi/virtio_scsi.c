@@ -10,6 +10,7 @@
 #include "linux/blk_queue.h"
 #include "linux/memlayout.h"
 #include "asm/pgtable.h"
+#include "base.h"
 #include "scsi/scsi.h"
 #include "scsi/scsi_host.h"
 
@@ -273,10 +274,10 @@ static int virtio_scsi_init(void)
      * Lite driver core auto-probes during driver_register(); defer that for
      * virtio-scsi so initcalls are not blocked by synchronous device scan.
      */
-    int saved_autoprobe = virtio_bus_type.drivers_autoprobe;
-    virtio_bus_type.drivers_autoprobe = 0;
+    int saved_autoprobe = bus_drivers_autoprobe(&virtio_bus_type);
+    bus_set_drivers_autoprobe(&virtio_bus_type, 0);
     int ret = register_virtio_driver(&virtio_scsi_driver);
-    virtio_bus_type.drivers_autoprobe = saved_autoprobe;
+    bus_set_drivers_autoprobe(&virtio_bus_type, saved_autoprobe);
     return ret;
 }
 module_init(virtio_scsi_init);

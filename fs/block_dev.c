@@ -74,16 +74,10 @@ struct inode *blockdev_inode_create(struct block_device *bdev)
     }
     /* Keep bdev alive as long as the inode exists (Linux: bd_inode lifetime). */
     bdgrab(bdev);
-    struct inode *inode = (struct inode *)kmalloc(sizeof(struct inode));
+    struct inode *inode = alloc_special_inode(FS_BLOCKDEVICE, bdev->devt, &blockdev_ops,
+                                              0666, 0, 0);
     if (!inode)
         return NULL;
-    memset(inode, 0, sizeof(*inode));
-    inode->flags = FS_BLOCKDEVICE;
-    inode->i_ino = get_next_ino();
-    inode->f_ops = &blockdev_ops;
-    inode->uid = 0;
-    inode->gid = 0;
-    inode->i_mode = 0666;
     inode->i_size = bdev->size;
     inode->private_data = bdev;
     struct address_space *mapping = (struct address_space *)kmalloc(sizeof(struct address_space));

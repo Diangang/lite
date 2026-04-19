@@ -1,5 +1,10 @@
 # Lite OS Annotation（按当前代码结构梳理）
 
+
+## 文档定位
+- 这是一份**源码导读/总览文档**，用于帮助建立当前系统主线与模块边界的整体地图。
+- 它强调结构理解，不追求逐符号、逐函数精确覆盖；具体接口与行为请回到对应源码与 `QA.md`。
+
 本文档不是逐文件逐行注释，而是站在“当前系统主链路如何拼起来”的角度，对代码目录、模块边界和关键入口进行归纳。适合在阅读源码前先建立整体地图。
 
 ---
@@ -360,7 +365,7 @@ bootmem 阶段的目标不是“高效分配”，而是：
 - [ramfs](file:///data25/lidg/lite/fs/ramfs)：根文件系统
 - [procfs](file:///data25/lidg/lite/fs/procfs/procfs.c)：内核状态导出
 - [sysfs](file:///data25/lidg/lite/fs/sysfs/sysfs.c)：设备模型可视化
-- [devtmpfs](file:///data25/lidg/lite/fs/devtmpfs/devtmpfs.c)：设备节点
+- [devtmpfs](file:///data25/lidg/lite/drivers/base/devtmpfs.c)：driver core 维护的 `/dev` 节点，底层承载使用 ramfs
 - [minixfs](file:///data25/lidg/lite/fs/minixfs/minixfs.c)：真实块设备文件系统测试目标
 
 其中：

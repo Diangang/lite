@@ -378,6 +378,187 @@ struct inode *vfs_resolve(const char *path)
     return NULL;
 }
 
+static char *find_slash(char *s)
+{
+    while (s && *s) {
+        if (*s == '/')
+            return s;
+        s++;
+    }
+    return NULL;
+}
+
+static struct dentry *vfs_lookup_child(struct dentry *parent, const char *name)
+{
+    struct dentry *child;
+    struct inode *inode;
+
+    if (!parent || !name || !name[0])
+        return NULL;
+    child = d_lookup(parent, name);
+    if (child)
+        return child;
+    if (!parent->inode)
+        return NULL;
+    inode = finddir_fs(parent->inode, name);
+    if (!inode)
+        return NULL;
+    child = d_alloc(parent, name);
+    if (!child)
+        return NULL;
+    child->inode = inode;
+    return child;
+}
+
+static struct dentry *vfs_walk_parent_at(struct dentry *root, const char *path,
+                                         char *leaf, uint32_t leaf_cap,
+                                         int create_dirs)
+{
+    char tmp[256];
+    char *p;
+    struct dentry *curr = root;
+
+    if (!root || !path || !path[0] || !leaf || leaf_cap == 0)
+        return NULL;
+    if (strlen(path) >= sizeof(tmp))
+        return NULL;
+    strcpy(tmp, path);
+
+    p = tmp;
+    for (;;) {
+        char *slash = find_slash(p);
+        struct dentry *child;
+        if (!slash)
+            break;
+        *slash = 0;
+        if (!p[0])
+            return NULL;
+        child = vfs_lookup_child(curr, p);
+        if (!child && create_dirs) {
+            struct inode *inode = mkdir_fs(curr->inode, p);
+            if (!inode)
+                return NULL;
+            child = d_alloc(curr, p);
+            if (!child)
+                return NULL;
+            child->inode = inode;
+        }
+        if (!child || !child->inode || (child->inode->flags & 0x7) != FS_DIRECTORY)
+            return NULL;
+        curr = child;
+        p = slash + 1;
+    }
+
+    if (!p[0] || strlen(p) >= leaf_cap)
+        return NULL;
+    strcpy(leaf, p);
+    return curr;
+}
+
+struct inode *vfs_resolve_at(struct dentry *root, const char *path)
+{
+    char leaf[128];
+    struct dentry *parent;
+    struct dentry *child;
+
+    parent = vfs_walk_parent_at(root, path, leaf, sizeof(leaf), 0);
+    if (!parent)
+        return NULL;
+    child = vfs_lookup_child(parent, leaf);
+    return child ? child->inode : NULL;
+}
+
+int vfs_create_path_at(struct dentry *root, const char *path)
+{
+    char leaf[128];
+    return vfs_walk_parent_at(root, path, leaf, sizeof(leaf), 1) ? 0 : -1;
+}
+
+static int vfs_attach_inode_at(struct dentry *root, const char *path, struct inode *inode)
+{
+    char name[128];
+    struct dentry *pdentry;
+    struct dentry *d;
+
+    if (!inode)
+        return -1;
+    pdentry = vfs_walk_parent_at(root, path, name, sizeof(name), 0);
+    if (!pdentry)
+        return -1;
+
+    d = vfs_lookup_child(pdentry, name);
+
+    if (d) {
+        if (d->inode)
+            return 0;
+        d->inode = inode;
+        d->d_flags &= ~DENTRY_NEGATIVE;
+        return 0;
+    }
+
+    d = d_alloc(pdentry, name);
+    if (!d)
+        return -1;
+    d->inode = inode;
+    return 0;
+}
+
+int vfs_mknod_at(struct dentry *root, const char *path, uint32_t type, dev_t devt,
+                 void *private_data, uint32_t mode, uint32_t uid, uint32_t gid)
+{
+    struct inode *inode = create_special_inode(type, devt, private_data, mode, uid, gid);
+    int ret;
+
+    if (!inode)
+        return -1;
+    ret = vfs_attach_inode_at(root, path, inode);
+    if (ret != 0)
+        destroy_special_inode(inode);
+    return ret;
+}
+
+static struct inode *vfs_detach_inode_at(struct dentry *root, const char *path)
+{
+    char name[128];
+    struct dentry *pdentry;
+    struct dentry *d;
+    struct inode *inode;
+
+    pdentry = vfs_walk_parent_at(root, path, name, sizeof(name), 0);
+    if (!pdentry)
+        return NULL;
+
+    d = vfs_lookup_child(pdentry, name);
+    if (!d || !d->inode)
+        return NULL;
+
+    inode = d->inode;
+    d->inode = NULL;
+    vfs_dentry_detach(d);
+    vfs_dentry_put(d);
+    return inode;
+}
+
+int vfs_unlink_at(struct dentry *root, const char *path)
+{
+    struct inode *inode = vfs_detach_inode_at(root, path);
+
+    if (!inode)
+        return -1;
+    destroy_special_inode(inode);
+    return 0;
+}
+
+int vfs_rmdir_at(struct dentry *root, const char *path)
+{
+    char name[128];
+    struct dentry *pdentry = vfs_walk_parent_at(root, path, name, sizeof(name), 0);
+
+    if (!pdentry || !pdentry->inode || (pdentry->inode->flags & 0x7) != FS_DIRECTORY)
+        return -1;
+    return rmdir_fs(pdentry, name);
+}
+
 /* vfs_mkdir: Implement vfs mkdir. */
 int vfs_mkdir(const char *path)
 {
