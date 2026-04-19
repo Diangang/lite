@@ -6,9 +6,8 @@
 #include "linux/libc.h"
 
 /*
- * In Linux, architecture-specific code (like arch/x86/kernel/setup.c or board-*.c)
- * is responsible for telling the core kernel what hardware devices exist on the board
- * by registering platform devices.
+ * Lite keeps a minimal x86 board-description shim here. Linux typically wires
+ * board/platform devices through arch/x86 platform code and initcall hooks.
  */
 static int x86_platform_devices_init(void)
 {
@@ -18,7 +17,7 @@ static int x86_platform_devices_init(void)
 
     return 0;
 }
-subsys_initcall(x86_platform_devices_init);
+device_initcall(x86_platform_devices_init);
 
 /* setup_arch: Set up arch. */
 void setup_arch(struct multiboot_info* mbi)
@@ -28,9 +27,9 @@ void setup_arch(struct multiboot_info* mbi)
     init_idt();
 }
 
-/* __attribute__: Implement attribute. */
+/* i386_start_kernel: x86_32 entry trampoline before generic start_kernel(). */
 __attribute__((section(".text.entry")))
-void kernel_entry(uint32_t magic, struct multiboot_info* mbi)
+void i386_start_kernel(uint32_t magic, struct multiboot_info* mbi)
 {
     start_kernel(mbi, magic);
     panic(NULL);

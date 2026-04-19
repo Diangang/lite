@@ -46,8 +46,8 @@ struct tss_entry {
     uint16_t iomap_base;
 } __attribute__((packed));
 
-static struct gdt_ptr          gdt_ptr;
-static struct gdt_entry        gdt_entries[6];
+static struct gdt_ptr          gdt_descr;
+static struct gdt_entry        gdt_table[6];
 static struct tss_entry        tss;
 static uint8_t tss_stack[4096] __attribute__((aligned(16)));
 
@@ -74,15 +74,15 @@ static inline void gdt_flush(uint32_t gdt_ptr_addr, uint16_t tss_selector)
 /* gdt_set_gate: Implement GDT set gate. */
 static void gdt_set_gate(int32_t num, uint32_t base, uint32_t limit, uint8_t access, uint8_t gran)
 {
-    gdt_entries[num].base_low    = (base & 0xFFFF);
-    gdt_entries[num].base_middle = (base >> 16) & 0xFF;
-    gdt_entries[num].base_high   = (base >> 24) & 0xFF;
+    gdt_table[num].base_low    = (base & 0xFFFF);
+    gdt_table[num].base_middle = (base >> 16) & 0xFF;
+    gdt_table[num].base_high   = (base >> 24) & 0xFF;
 
-    gdt_entries[num].limit_low   = (limit & 0xFFFF);
-    gdt_entries[num].granularity = (limit >> 16) & 0x0F;
+    gdt_table[num].limit_low   = (limit & 0xFFFF);
+    gdt_table[num].granularity = (limit >> 16) & 0x0F;
 
-    gdt_entries[num].granularity |= gran & 0xF0;
-    gdt_entries[num].access      = access;
+    gdt_table[num].granularity |= gran & 0xF0;
+    gdt_table[num].access      = access;
 }
 
 /* tss_set_kernel_stack: Implement TSS set kernel stack. */
@@ -115,8 +115,8 @@ static void init_tss(void)
 /* init_gdt: Initialize GDT. */
 void init_gdt(void)
 {
-    gdt_ptr.limit = (sizeof(struct gdt_entry) * 6) - 1;
-    gdt_ptr.base  = (uint32_t)&gdt_entries;
+    gdt_descr.limit = (sizeof(struct gdt_entry) * 6) - 1;
+    gdt_descr.base  = (uint32_t)&gdt_table;
 
     /* 0: Null Descriptor */
     gdt_set_gate(0, 0, 0, 0, 0);
@@ -140,6 +140,6 @@ void init_gdt(void)
 
     init_tss();
 
-    gdt_flush((uint32_t)&gdt_ptr, 0x28);
+    gdt_flush((uint32_t)&gdt_descr, 0x28);
     printf("GDT initialized.\n");
 }

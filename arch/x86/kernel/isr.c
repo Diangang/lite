@@ -11,7 +11,7 @@
 #include "linux/serial.h"
 #include "linux/console.h"
 
-isr_t interrupt_handlers[256];
+static isr_t interrupt_handlers[256];
 static uint32_t interrupt_count[256];
 
 /* Defined in interrupt.s */
@@ -79,7 +79,7 @@ void register_interrupt_handler(uint8_t vector, isr_t handler)
 }
 
 /* Exception messages */
-char *exception_messages[] = {
+static const char * const exception_messages[] = {
     "Division By Zero",
     "Debug",
     "Non Maskable Interrupt",

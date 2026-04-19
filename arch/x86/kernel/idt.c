@@ -16,9 +16,9 @@ struct idt_ptr {
     uint32_t base;
 } __attribute__((packed));
 
-/* Declare an IDT of 256 entries */
-struct idt_entry idt_entries[256];
-struct idt_ptr   idt_ptr;
+/* Linux-style internal IDT storage: idt_table + idt_descr. */
+static struct idt_entry idt_table[256];
+static struct idt_ptr   idt_descr;
 
 /*
  * Helper to set an entry in the IDT.
@@ -29,11 +29,11 @@ struct idt_ptr   idt_ptr;
  */
 void idt_set_gate(uint8_t num, uint32_t base, uint16_t sel, uint8_t flags)
 {
-    idt_entries[num].base_low  = (base & 0xFFFF);
-    idt_entries[num].base_high = (base >> 16) & 0xFFFF;
-    idt_entries[num].sel       = sel;
-    idt_entries[num].always0   = 0;
-    idt_entries[num].flags     = flags;
+    idt_table[num].base_low  = (base & 0xFFFF);
+    idt_table[num].base_high = (base >> 16) & 0xFFFF;
+    idt_table[num].sel       = sel;
+    idt_table[num].always0   = 0;
+    idt_table[num].flags     = flags;
 }
 
 /* idt_flush: Implement IDT flush. */
@@ -45,11 +45,11 @@ static inline void idt_flush(uint32_t idt_ptr_addr)
 /* init_idt: Initialize IDT. */
 void init_idt(void)
 {
-    idt_ptr.limit = sizeof(struct idt_entry) * 256 - 1;
-    idt_ptr.base  = (uint32_t)&idt_entries;
+    idt_descr.limit = sizeof(struct idt_entry) * 256 - 1;
+    idt_descr.base  = (uint32_t)&idt_table;
 
     /* Initialize all IDT entries to zero first */
-    memset(&idt_entries, 0, sizeof(struct idt_entry) * 256);
+    memset(&idt_table, 0, sizeof(struct idt_entry) * 256);
 
     /* Install CPU Exceptions */
     isr_install();
@@ -58,6 +58,6 @@ void init_idt(void)
     irq_install();
 
     /* Load the IDT pointer */
-    idt_flush((uint32_t)&idt_ptr);
+    idt_flush((uint32_t)&idt_descr);
     printf("IDT and Interrupts initialized.\n");
 }

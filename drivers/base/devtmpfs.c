@@ -117,14 +117,6 @@ static int create_path(const char *nodepath)
     }
 }
 
-static int devtmpfs_get_nodetype(struct device *dev, uint32_t *type)
-{
-    if (!dev)
-        return -1;
-    *type = (dev->type == &disk_type) ? FS_BLOCKDEVICE : FS_CHARDEVICE;
-    return 0;
-}
-
 static int handle_create(const char *nodename, uint32_t type, dev_t devt, void *private_data,
                          uint32_t mode, uint32_t uid, uint32_t gid, struct device *dev)
 {
@@ -135,8 +127,7 @@ static int handle_create(const char *nodename, uint32_t type, dev_t devt, void *
     if (existing) {
         if (!dev)
             return 0;
-        if (devtmpfs_get_nodetype(dev, &existing_type) != 0)
-            return -1;
+        existing_type = (dev->type == &disk_type) ? FS_BLOCKDEVICE : FS_CHARDEVICE;
         return special_inode_matches(existing, existing_type, dev->devt) ? 0 : -1;
     }
     if (vfs_mknod_at(devtmpfs_root, nodename, type, devt, private_data, mode, uid, gid) == 0)
@@ -170,8 +161,7 @@ static int dev_mynode(struct device *dev, struct inode *inode)
         return 0;
     if (inode->i_private != &thread)
         return 0;
-    if (devtmpfs_get_nodetype(dev, &type) != 0)
-        return 0;
+    type = (dev->type == &disk_type) ? FS_BLOCKDEVICE : FS_CHARDEVICE;
     return special_inode_matches(inode, type, dev->devt);
 }
 
@@ -334,8 +324,13 @@ int devtmpfs_create_node(struct device *dev)
 {
     struct req req;
 
+    if (!thread)
+        return 0;
     if (!dev)
         return -1;
+    req.mode = 0;
+    req.uid = 0;
+    req.gid = 0;
     req.name = device_get_devnode(dev, &req.mode, &req.uid, &req.gid);
     if (!req.name || !req.name[0])
         return -1;
@@ -349,6 +344,8 @@ int devtmpfs_delete_node(struct device *dev)
 {
     struct req req;
 
+    if (!thread)
+        return 0;
     if (!dev)
         return -1;
     req.name = device_get_devnode(dev, NULL, NULL, NULL);

@@ -12,8 +12,8 @@ static inline int blk_irqs_enabled(void)
     return (flags & 0x200u) != 0;
 }
 
-/* bio_complete: Implement bio complete. */
-static void bio_complete(struct bio *bio, int error)
+/* bio_endio: Minimal bio completion helper. */
+static void bio_endio(struct bio *bio, int error)
 {
     if (!bio)
         return;
@@ -29,7 +29,7 @@ int submit_bio(struct bio *bio)
         return -1;
     int ret = generic_make_request(bio);
     if (ret != 0 && bio->bi_status == 0)
-        bio_complete(bio, ret);
+        bio_endio(bio, ret);
     return ret;
 }
 
@@ -70,12 +70,12 @@ void blk_cleanup_queue(struct request_queue *q)
 int generic_make_request(struct bio *bio)
 {
     if (!bio || !bio->bi_bdev) {
-        bio_complete(bio, -1);
+        bio_endio(bio, -1);
         return -1;
     }
     struct request_queue *q = (bio->bi_bdev->disk) ? bio->bi_bdev->disk->queue : NULL;
     if (!q) {
-        bio_complete(bio, -1);
+        bio_endio(bio, -1);
         return -1;
     }
     if (q->request_fn) {
@@ -94,13 +94,13 @@ int generic_make_request(struct bio *bio)
                 q->running = 0;
             }
             if ((q->queued + q->in_flight) >= q->nr_requests) {
-                bio_complete(bio, -1);
+                bio_endio(bio, -1);
                 return -1;
             }
         }
         struct request *rq = (struct request *)kmalloc(sizeof(struct request));
         if (!rq) {
-            bio_complete(bio, -1);
+            bio_endio(bio, -1);
             return -1;
         }
         rq->bio = bio;
@@ -125,7 +125,7 @@ int generic_make_request(struct bio *bio)
         return 0;
     }
     if (!q->make_request_fn) {
-        bio_complete(bio, -1);
+        bio_endio(bio, -1);
         return -1;
     }
     return q->make_request_fn(q, bio);
@@ -154,6 +154,6 @@ void blk_complete_request(struct request_queue *q, struct request *rq, int error
         return;
     if (q && q->in_flight)
         q->in_flight--;
-    bio_complete(rq->bio, error);
+    bio_endio(rq->bio, error);
     kfree(rq);
 }

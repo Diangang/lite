@@ -163,36 +163,36 @@ static struct device_attribute block_attr_queue_nr_requests = {
     .show = block_attr_show_queue_nr_requests,
 };
 
-static const struct attribute *block_device_attrs[] = {
+static const struct attribute *disk_attrs[] = {
     &block_attr_size.attr,
     &block_attr_stat.attr,
     NULL,
 };
 
-static const struct attribute_group block_device_group = {
+static const struct attribute_group disk_attr_group = {
     .name = NULL,
-    .attrs = block_device_attrs,
+    .attrs = disk_attrs,
     .is_visible = NULL,
 };
 
-static const struct attribute *block_queue_attrs[] = {
+static const struct attribute *queue_attrs[] = {
     &block_attr_queue_nr_requests.attr,
     NULL,
 };
 
-static const struct attribute_group block_queue_group = {
+static const struct attribute_group queue_attr_group = {
     .name = "queue",
-    .attrs = block_queue_attrs,
+    .attrs = queue_attrs,
     .is_visible = NULL,
 };
 
-static const struct attribute_group *block_device_groups[] = {
-    &block_device_group,
-    &block_queue_group,
+static const struct attribute_group *disk_attr_groups[] = {
+    &disk_attr_group,
+    &queue_attr_group,
     NULL,
 };
 
-static const char *disk_devnode(struct device *dev, uint32_t *mode, uint32_t *uid, uint32_t *gid)
+static const char *block_devnode(struct device *dev, uint32_t *mode, uint32_t *uid, uint32_t *gid)
 {
     if (mode)
         *mode = 0666;
@@ -205,7 +205,7 @@ static const char *disk_devnode(struct device *dev, uint32_t *mode, uint32_t *ui
 
 const struct device_type disk_type = {
     .name = "disk",
-    .devnode = disk_devnode,
+    .devnode = block_devnode,
 };
 
 int gendisk_init(struct gendisk *disk, const char *name, uint32_t major, uint32_t first_minor)
@@ -564,13 +564,13 @@ void get_block_stats(uint32_t *reads, uint32_t *writes, uint32_t *bytes_read, ui
         *bytes_written = blk_bytes_written;
 }
 
-static int block_class_init(void)
+static int genhd_device_init(void)
 {
     memset(&block_class, 0, sizeof(block_class));
     block_class.name = "block";
     INIT_LIST_HEAD(&block_class.list);
     INIT_LIST_HEAD(&block_class.devices);
-    block_class.dev_groups = block_device_groups;
+    block_class.dev_groups = disk_attr_groups;
     return class_register(&block_class);
 }
-core_initcall(block_class_init);
+subsys_initcall(genhd_device_init);

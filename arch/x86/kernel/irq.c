@@ -2,7 +2,7 @@
 #include "linux/interrupt.h"
 
 static struct irq_desc irq_descs[NR_IRQS];
-static struct irq_desc *irq_vector_map[256];
+static struct irq_desc *vector_irq[256];
 static uint8_t irq_legacy_vectors[NR_IRQS];
 
 void irq_init_legacy_vectors(void)
@@ -41,7 +41,7 @@ struct irq_desc *irq_to_desc(unsigned int irq)
 
 struct irq_desc *irq_desc_from_vector(uint8_t vector)
 {
-    return irq_vector_map[vector];
+    return vector_irq[vector];
 }
 
 void irq_set_chip_and_handler(unsigned int irq, struct irq_chip *chip, isr_t handler)
@@ -53,7 +53,7 @@ void irq_set_chip_and_handler(unsigned int irq, struct irq_chip *chip, isr_t han
     desc->vector = irq_to_vector(irq);
     desc->chip = chip;
     desc->handler = handler;
-    irq_vector_map[desc->vector] = desc;
+    vector_irq[desc->vector] = desc;
 }
 
 int register_irq_handler(unsigned int irq, isr_t handler)

@@ -278,13 +278,13 @@ trampoline_high:                           # First instruction in high half
 	sub $KERNEL_BASE, %eax              # %eax -> physical pgdir
 	mov %eax, %cr3                      # Reload CR3 to flush TLB
 
-	/* Rebuild the C call arguments and pass them to kernel_entry/start_kernel. */
+	/* Rebuild the C call arguments and pass them to i386_start_kernel(). */
 	mov boot_mbi, %ebx                  # %ebx = physical mbi pointer
 	add $KERNEL_BASE, %ebx              # Convert to higher-half VA
 	mov boot_magic, %eax                # %eax = multiboot magic
 	push %ebx                           # Arg2: mbi pointer
 	push %eax                           # Arg1: magic
-	mov $kernel_entry, %eax             # C trampoline entry
+	mov $i386_start_kernel, %eax        # C trampoline entry
 	call *%eax                          # Enter C world (never returns)
 
 	/* start_kernel() is not expected to return. Halt forever if it does. */

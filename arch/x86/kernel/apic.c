@@ -93,46 +93,21 @@ int apic_enabled(void)
     return lapic_enabled;
 }
 
-struct pt_regs *apic_timer_interrupt_handler(struct pt_regs *regs)
-{
-    return apic_handle_local_timer(regs);
-}
-
-struct pt_regs *reschedule_interrupt_handler(struct pt_regs *regs)
-{
-    return apic_handle_reschedule_ipi(regs);
-}
-
-struct pt_regs *call_function_interrupt_handler(struct pt_regs *regs)
-{
-    return apic_handle_call_function_ipi(regs);
-}
-
-struct pt_regs *error_interrupt_handler(struct pt_regs *regs)
-{
-    return apic_handle_error_event(regs);
-}
-
-struct pt_regs *spurious_interrupt_handler(struct pt_regs *regs)
-{
-    return apic_handle_spurious_event(regs);
-}
-
 static void apic_install_local_timer_vector(void)
 {
-    register_interrupt_handler(LOCAL_TIMER_VECTOR, apic_timer_interrupt_handler);
+    register_interrupt_handler(LOCAL_TIMER_VECTOR, apic_handle_local_timer);
 }
 
 static void apic_install_ipi_vectors(void)
 {
-    register_interrupt_handler(RESCHEDULE_VECTOR, reschedule_interrupt_handler);
-    register_interrupt_handler(CALL_FUNCTION_VECTOR, call_function_interrupt_handler);
+    register_interrupt_handler(RESCHEDULE_VECTOR, apic_handle_reschedule_ipi);
+    register_interrupt_handler(CALL_FUNCTION_VECTOR, apic_handle_call_function_ipi);
 }
 
 static void apic_install_local_event_vectors(void)
 {
-    register_interrupt_handler(ERROR_APIC_VECTOR, error_interrupt_handler);
-    register_interrupt_handler(SPURIOUS_APIC_VECTOR, spurious_interrupt_handler);
+    register_interrupt_handler(ERROR_APIC_VECTOR, apic_handle_error_event);
+    register_interrupt_handler(SPURIOUS_APIC_VECTOR, apic_handle_spurious_event);
 }
 
 void apic_install_interrupts(void)
