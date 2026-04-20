@@ -31,7 +31,7 @@
 
 - Lite：`printk_putc()` 直接调用 `console_put_char()` 同步输出，并同时写入内部 ring buffer
   - [printk.c](file:///data25/lidg/lite/kernel/printk.c#L10-L23)
-  - [console_put_char](file:///data25/lidg/lite/drivers/video/console/console.c#L20-L25)
+  - [printk.c](file:///data25/lidg/lite/kernel/printk.c#L16-L45)
 
 关键语义：
 - 当前 `printk` 是“记录 + 立刻输出”的混合模式，没有 Linux 2.6 风格的“deferred console flush”。
@@ -41,7 +41,7 @@
 
 - Lite：`/dev/console` 的 `.write` -> `console_write` -> `console_put_char`
   - [devtmpfs.c](file:///data25/lidg/lite/drivers/base/devtmpfs.c)
-  - [console_write](file:///data25/lidg/lite/drivers/video/console/console.c#L27-L34)
+  - [printk.c](file:///data25/lidg/lite/kernel/printk.c#L33-L45)
 
 #### 2.1.3 用户态 `/dev/tty` write 路径
 
@@ -157,7 +157,7 @@ Linux 2.6 的串口输入链路（简化表达）：
 - VGA 后续按 Linux 2.6 风格重做后，再以“注册两个 console”实现双输出（而不是 bitmask）。
 
 改动量（中等）：
-- 重构：`kernel/printk.c`、`drivers/video/console/console.c`
+- 重构：`kernel/printk.c`（console core 已并入 printk）
 - 新增：console 注册与 flush 控制（锁/级别控制的最小版）
 - 适配：串口提供 console `.write()` 回调
 

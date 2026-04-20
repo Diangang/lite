@@ -362,7 +362,7 @@ VGA 参考（保留用于后续重做）：
 - **VGA（参考/暂时移除）**：历史上作为文本模式输出端，直接写 `0xB8000`；后续会按 Linux 2.6 的 vt/console 体系重做（参考 [Kernel-QA.md:L513-L599](file:///data25/lidg/lite/Documentation/archived/Kernel-QA.md#L513-L599)）
 
 关键路径：
-- console 输出分发：[console.c](file:///data25/lidg/lite/drivers/video/console/console.c#L17-L28)
+- console 输出分发：[printk.c](file:///data25/lidg/lite/kernel/printk.c#L8-L45)
 - tty 输出分发：[tty.c](file:///data25/lidg/lite/drivers/tty/tty.c#L79-L86)
 - 串口硬件（8250/16550A）：[8250.c](file:///data25/lidg/lite/drivers/tty/serial/8250.c#L1-L33)
 

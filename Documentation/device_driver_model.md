@@ -767,7 +767,7 @@ pci0000:00 / pci device
 Lite 当前将 console 抽象成“可注册的 console driver 链表”，并由串口注册为一个 console 后端；tty 负责交互语义与行规程风格的输入输出。
 
 参考实现：
-- console 框架：[console.h](file:///data25/lidg/lite/include/linux/console.h)、[console.c](file:///data25/lidg/lite/drivers/video/console/console.c)
+- console 框架：[console.h](file:///data25/lidg/lite/include/linux/console.h)、[printk.c](file:///data25/lidg/lite/kernel/printk.c)
 - 串口注册 console 后端：[8250.c](file:///data25/lidg/lite/drivers/tty/serial/8250.c#L34-L58)
 - tty 输出分发（当前输出到串口）：[tty.c](file:///data25/lidg/lite/drivers/tty/tty.c#L79-L86)
 

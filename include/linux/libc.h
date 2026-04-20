@@ -57,5 +57,7 @@ char *strdup(const char *s);
 void itoa(int num, int base, char *buf);
 
 void printf(const char *format, ...);
+int vsnprintf(char *buf, size_t size, const char *format, __builtin_va_list args);
+int snprintf(char *buf, size_t size, const char *format, ...);
 
 #endif

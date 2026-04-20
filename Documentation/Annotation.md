@@ -401,7 +401,7 @@ bootmem 阶段的目标不是“高效分配”，而是：
 ### 7.1 console / tty / serial 的边界
 
 核心文件：
-- [console.c](file:///data25/lidg/lite/drivers/video/console/console.c)
+- [printk.c](file:///data25/lidg/lite/kernel/printk.c)
 - [tty.c](file:///data25/lidg/lite/drivers/tty/tty.c)
 - [8250.c](file:///data25/lidg/lite/drivers/tty/serial/8250.c)
 

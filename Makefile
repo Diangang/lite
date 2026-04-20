@@ -6,7 +6,7 @@ LD = ld
 
 CFLAGS = -m32 -ffreestanding -O2 -Wall -Wextra -fno-pie -fno-builtin
 CFLAGS += -MMD -MP
-CFLAGS += -Iinclude -Ikernel -Iinit -Ilib -Iarch/x86 -Imm -Ifs -Idrivers -Idrivers/base -Idrivers/pci -Idrivers/pci/pcie -Idrivers/nvme -Idrivers/input -Idrivers/tty -Idrivers/tty/serial -Idrivers/clocksource -Idrivers/video -Idrivers/video/console -Idrivers/scsi
+CFLAGS += -Iinclude -Ikernel -Iinit -Ilib -Iarch/x86 -Imm -Ifs -Idrivers -Idrivers/base -Idrivers/pci -Idrivers/pci/pcie -Idrivers/nvme -Idrivers/input -Idrivers/tty -Idrivers/tty/serial -Idrivers/clocksource -Idrivers/scsi
 LDFLAGS = -m elf_i386 -T arch/x86/kernel/linker.ld -nostdlib
 
 SOURCES_S = arch/x86/boot/boot.s arch/x86/kernel/interrupt.s
@@ -21,7 +21,7 @@ SOURCES_C += block/blkdev.c
 SOURCES_C += fs/sysfs/sysfs.c init/initramfs.c
 SOURCES_C += drivers/base/core.c drivers/base/virtual.c drivers/base/uevent.c drivers/base/bus.c drivers/base/class.c drivers/base/driver.c drivers/base/platform.c drivers/base/devtmpfs.c drivers/base/init.c drivers/pci/pci.c drivers/pci/pcie/pcie.c drivers/nvme/nvme-core.c drivers/nvme/nvme.c drivers/input/serio/serio.c drivers/input/serio/i8042.c drivers/input/keyboard/atkbd.c drivers/block/ramdisk.c
 SOURCES_C += drivers/clocksource/timer.c drivers/tty/tty.c drivers/tty/n_tty.c drivers/tty/serial/serial_core.c drivers/tty/serial/8250.c
-SOURCES_C += drivers/video/console/console.c drivers/video/console/console_driver.c
+# printk/console core lives in kernel/printk.c; no video console backends.
 SOURCES_C += drivers/virtio/virtio.c drivers/virtio/virtio_pci.c drivers/virtio/virtqueue.c
 SOURCES_C += drivers/scsi/scsi_sysfs.c drivers/scsi/hosts.c drivers/scsi/scsi.c drivers/scsi/sd.c drivers/scsi/virtio_scsi.c
 OBJECTS = $(SOURCES_S:.s=.o) $(SOURCES_C:.c=.o)

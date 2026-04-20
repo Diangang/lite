@@ -207,20 +207,29 @@ static int nvme_cq_poll_cid(struct nvme_queue *q, uint16_t cid, struct nvme_comp
         struct nvme_completion cpl = cq[q->cq_head];
         uint16_t phase = cpl.status & 1u;
         if (phase == q->cq_phase) {
-            if (cpl.command_id != cid || cpl.sq_id != q->qid)
-                return -1;
-            if (cpl_out)
-                *cpl_out = cpl;
+            /*
+             * Always consume CQEs in order (Linux mapping: nvme_process_cq()).
+             *
+             * Note: Completions can legitimately arrive out-of-order with respect
+             * to submission. Even though Lite submits synchronously, stale CQEs
+             * left behind would otherwise permanently poison the CQ head.
+             */
             q->cq_head++;
             if (q->cq_head >= q->depth) {
                 q->cq_head = 0;
                 q->cq_phase ^= 1u;
             }
             nvme_doorbell_write(q->cq_db, q->cq_head);
-            /* Status code is bits 15:1 (0 means success). */
-            if ((cpl.status >> 1) != 0)
-                return -1;
-            return 0;
+
+            if (cpl.command_id == cid && cpl.sq_id == q->qid) {
+                if (cpl_out)
+                    *cpl_out = cpl;
+                /* Status code is bits 15:1 (0 means success). */
+                if ((cpl.status >> 1) != 0)
+                    return -1;
+                return 0;
+            }
+            /* Unrelated completion: keep polling until our CID completes. */
         }
         if (time_after_eq(time_get_jiffies(), deadline))
             return -1;

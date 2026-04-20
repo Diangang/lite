@@ -5,6 +5,52 @@
 #include "linux/libc.h"
 #include "linux/printk.h"
 
+/*
+ * Console core (Linux mapping: kernel/printk/printk.c register_console()).
+ *
+ * Lite keeps a minimal subset:
+ * - A single linked list of console sinks.
+ * - printk_putc() fans out to all registered sinks.
+ */
+static struct console *console_list;
+
+int register_console(struct console *con)
+{
+    if (!con || !con->write)
+        return -1;
+    con->next = console_list;
+    console_list = con;
+    return 0;
+}
+
+void unregister_console(struct console *con)
+{
+    struct console **pp = &console_list;
+    while (*pp) {
+        if (*pp == con) {
+            *pp = con->next;
+            con->next = (struct console *)0;
+            return;
+        }
+        pp = &(*pp)->next;
+    }
+}
+
+uint32_t console_write(const uint8_t *buf, uint32_t len)
+{
+    if (!buf || len == 0)
+        return 0;
+    for (struct console *con = console_list; con; con = con->next)
+        con->write(buf, len);
+    return len;
+}
+
+void console_put_char(char c)
+{
+    unsigned char b = (unsigned char)c;
+    console_write((const uint8_t *)&b, 1);
+}
+
 /* printk_putc: Implement printk putc. */
 static char printk_log_buf[8192];
 static uint32_t printk_log_head;
