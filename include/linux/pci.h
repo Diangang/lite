@@ -67,7 +67,6 @@ struct pci_device_id {
 };
 
 struct pci_driver {
-    const char *name;
     const struct pci_device_id *id_table;
     int (*probe)(struct pci_dev *pdev, const struct pci_device_id *id);
     void (*remove)(struct pci_dev *pdev);
@@ -84,7 +83,7 @@ static inline struct pci_driver *to_pci_driver(struct device_driver *drv)
 }
 
 int pci_register_driver(struct pci_driver *drv);
-int pci_unregister_driver(struct pci_driver *drv);
+void pci_unregister_driver(struct pci_driver *drv);
 struct pci_dev *pci_get_pci_dev(struct device *dev);
 
 uint32_t pci_config_read32(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset);

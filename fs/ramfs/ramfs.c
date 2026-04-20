@@ -33,8 +33,8 @@ static struct inode *ramfs_get_inode(struct inode *dir, uint32_t type, uint32_t 
     memset(inode, 0, sizeof(*inode));
 
     inode->i_ino = get_next_ino();
-    inode->uid = task_get_uid();
-    inode->gid = task_get_gid();
+    inode->uid = current_uid();
+    inode->gid = current_gid();
 
     if (type == FS_DIRECTORY) {
         struct address_space *mapping = (struct address_space *)kmalloc(sizeof(*mapping));
@@ -101,7 +101,7 @@ static void ramfs_evict_inode(struct inode *inode)
 
 static uint32_t ramfs_apply_umask(uint32_t mode)
 {
-    uint32_t mask = task_get_umask();
+    uint32_t mask = current_umask();
     return mode & (~mask) & 0777;
 }
 
@@ -130,24 +130,6 @@ static uint32_t ramfs_symlink_read(struct inode *node, uint32_t offset, uint32_t
         size = remain;
     memcpy(buffer, target + offset, size);
     return size;
-}
-
-/* ramfs_create_child: Implement ramfs create child. */
-struct inode *ramfs_create_child(struct inode *dir, const char *name, uint32_t type)
-{
-    if (!dir || !name)
-        return NULL;
-    if (!ramfs_valid_name(name))
-        return NULL;
-    if ((dir->flags & 0x7) != FS_DIRECTORY)
-        return NULL;
-    // Actually, `ramfs_create_child` is called by `vfs_open` and `vfs_mkdir` when it wants to create a file.
-    // They already handle the dcache! So `ramfs_create_child` just needs to return a new bare inode!
-    if (type == FS_DIRECTORY)
-        return ramfs_get_inode(dir, FS_DIRECTORY, 0777);
-    if (type == FS_SYMLINK)
-        return ramfs_get_inode(dir, FS_SYMLINK, 0777);
-    return ramfs_get_inode(dir, FS_FILE, 0666);
 }
 
 /* ramfs_unlink: Implement ramfs unlink. */
@@ -239,19 +221,31 @@ static struct inode *ramfs_lookup(struct inode *dir, const char *name)
 
 static struct inode *ramfs_create_file(struct inode *dir, const char *name)
 {
-    return ramfs_create_child(dir, name, FS_FILE);
+    if (!dir || !name || !ramfs_valid_name(name))
+        return NULL;
+    if ((dir->flags & 0x7) != FS_DIRECTORY)
+        return NULL;
+    return ramfs_get_inode(dir, FS_FILE, 0666);
 }
 
 static struct inode *ramfs_mkdir_inode(struct inode *dir, const char *name)
 {
-    return ramfs_create_child(dir, name, FS_DIRECTORY);
+    if (!dir || !name || !ramfs_valid_name(name))
+        return NULL;
+    if ((dir->flags & 0x7) != FS_DIRECTORY)
+        return NULL;
+    return ramfs_get_inode(dir, FS_DIRECTORY, 0777);
 }
 
 static struct inode *ramfs_symlink_inode(struct inode *dir, const char *name, const char *target)
 {
     if (!target)
         return NULL;
-    struct inode *inode = ramfs_create_child(dir, name, FS_SYMLINK);
+    if (!dir || !name || !ramfs_valid_name(name))
+        return NULL;
+    if ((dir->flags & 0x7) != FS_DIRECTORY)
+        return NULL;
+    struct inode *inode = ramfs_get_inode(dir, FS_SYMLINK, 0777);
     if (!inode)
         return NULL;
     uint32_t len = (uint32_t)strlen(target);

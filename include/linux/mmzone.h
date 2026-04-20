@@ -77,7 +77,7 @@ extern struct zonelist dma_zonelist;
 
 void init_zones(void);
 void build_all_zonelists(void);
-void refresh_zone_watermarks(void);
+void setup_per_zone_wmarks(void);
 struct page *pfn_to_page(uint32_t pfn);
 uint32_t page_to_pfn(struct page *page);
 struct zone *pfn_to_zone(uint32_t pfn);

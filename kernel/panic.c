@@ -1,11 +1,20 @@
+#include <stdarg.h>
+
 #include "linux/panic.h"
 #include "linux/printk.h"
 
-/* panic: Panic on the subsystem. */
-void panic(const char *msg)
+/* panic: Halt the system after emitting a Linux-shaped panic message. */
+void panic(const char *fmt, ...)
 {
-    if (msg)
-        printk("HALT: %s\n", msg);
+    if (fmt) {
+        va_list args;
+
+        printk("Kernel panic - not syncing: ");
+        va_start(args, fmt);
+        vprintk(fmt, args);
+        va_end(args);
+        printk("\n");
+    }
 
     __asm__ volatile ("cli");
 

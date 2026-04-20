@@ -61,7 +61,7 @@ static int reparent_children(struct task_struct *parent, struct task_struct *rea
 
 static struct task_struct *task_reaper_locked(void)
 {
-    struct task_struct *reaper = find_task_by_pid(1);
+    struct task_struct *reaper = find_task_by_vpid(1);
     if (reaper)
         return reaper;
     if (!list_empty(&task_list_head))

@@ -213,7 +213,7 @@ static struct pt_regs *sys_fork_dispatch(struct pt_regs *regs, int from_user)
 static struct pt_regs *sys_umask_dispatch(struct pt_regs *regs, int from_user)
 {
     (void)from_user;
-    regs->eax = task_set_umask(regs->ebx);
+    regs->eax = sys_umask(regs->ebx);
     return regs;
 }
 
@@ -226,14 +226,14 @@ static struct pt_regs *sys_chmod_dispatch(struct pt_regs *regs, int from_user)
 static struct pt_regs *sys_getuid_dispatch(struct pt_regs *regs, int from_user)
 {
     (void)from_user;
-    regs->eax = task_get_uid();
+    regs->eax = current_uid();
     return regs;
 }
 
 static struct pt_regs *sys_getgid_dispatch(struct pt_regs *regs, int from_user)
 {
     (void)from_user;
-    regs->eax = task_get_gid();
+    regs->eax = current_gid();
     return regs;
 }
 
@@ -287,8 +287,8 @@ static struct pt_regs *syscall_handler(struct pt_regs *regs)
     return regs;
 }
 
-/* init_syscall: Initialize syscall. */
-void init_syscall(void)
+/* syscall_init: Initialize syscall entry. */
+void syscall_init(void)
 {
     register_interrupt_handler(128, syscall_handler);
 }

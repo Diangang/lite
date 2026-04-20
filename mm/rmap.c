@@ -8,8 +8,8 @@ struct rmap_item {
     struct rmap_item *next;
 };
 
-/* rmap_add: Implement rmap add. */
-void rmap_add(struct mm_struct *mm, uint32_t vaddr, uint32_t phys)
+/* page_add_anon_rmap: Implement Lite anonymous reverse mapping add. */
+void page_add_anon_rmap(struct mm_struct *mm, uint32_t vaddr, uint32_t phys)
 {
     (void)mm;
     uint32_t pfn = phys / 4096;
@@ -42,8 +42,8 @@ void rmap_add(struct mm_struct *mm, uint32_t vaddr, uint32_t phys)
         pg->mapcount++;
 }
 
-/* rmap_remove: Implement rmap remove. */
-void rmap_remove(struct mm_struct *mm, uint32_t vaddr, uint32_t phys)
+/* page_remove_rmap: Implement Lite anonymous reverse mapping removal. */
+void page_remove_rmap(struct mm_struct *mm, uint32_t vaddr, uint32_t phys)
 {
     (void)vaddr;
     uint32_t pfn = phys / 4096;
@@ -96,11 +96,11 @@ void rmap_remove(struct mm_struct *mm, uint32_t vaddr, uint32_t phys)
     }
 }
 
-/* rmap_dup: Implement rmap dup. */
-void rmap_dup(struct mm_struct *src_mm, struct mm_struct *dst_mm, uint32_t vaddr, uint32_t phys)
+/* page_dup_rmap: Duplicate a Lite anonymous reverse mapping. */
+void page_dup_rmap(struct mm_struct *src_mm, struct mm_struct *dst_mm, uint32_t vaddr, uint32_t phys)
 {
     (void)src_mm;
-    rmap_add(dst_mm, vaddr, phys);
+    page_add_anon_rmap(dst_mm, vaddr, phys);
 }
 
 /* page_mapcount: Implement page mapcount. */

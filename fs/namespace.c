@@ -1,10 +1,11 @@
 #include "linux/fs.h"
+#include "linux/namei.h"
 #include "linux/ramfs.h"
 #include "linux/slab.h"
 #include "linux/libc.h"
 #include "linux/console.h"
 
-/* vfs_get_mounts: Implement vfs get mounts. */
+/* vfs_get_mounts: Return the current mount list. */
 static struct file_system_type *file_systems;
 static struct vfsmount *vfs_mounts;
 
@@ -13,8 +14,8 @@ struct vfsmount *vfs_get_mounts(void)
     return vfs_mounts;
 }
 
-/* get_filesystem: Get filesystem. */
-static struct file_system_type *get_filesystem(const char *name)
+/* get_fs_type: Linux-style filesystem type lookup. */
+static struct file_system_type *get_fs_type(const char *name)
 {
     if (!name)
         return NULL;
@@ -87,10 +88,11 @@ int unregister_filesystem(struct file_system_type *fs)
     return -1;
 }
 
-/* vfs_mount_rootfs: Implement vfs mount rootfs. */
-static int vfs_mount_rootfs(const char *fs_name)
+/* init_mount_tree: Install the initial root mount. */
+static int init_mount_tree(void)
 {
-    struct file_system_type *fs = get_filesystem(fs_name);
+    const char *fs_name = "ramfs";
+    struct file_system_type *fs = get_fs_type(fs_name);
 
     if (!fs)
         panic("Root filesystem type not found.");
@@ -126,11 +128,15 @@ int vfs_mount(const char *path, struct super_block *sb)
         panic("mount path or super_block null.");
 
     struct dentry *mount_root = sb->s_root;
-    struct dentry *d = path_walk(path);
+    struct path lookup;
+    struct dentry *d = NULL;
+    if (kern_path(path, LOOKUP_DIRECTORY, &lookup) == 0)
+        d = lookup.dentry;
     if (!d) {
         if (vfs_mkdir(path) != 0)
             panic("mount path missing and could not be created.");
-        d = path_walk(path);
+        if (kern_path(path, LOOKUP_DIRECTORY, &lookup) == 0)
+            d = lookup.dentry;
         if (!d)
             panic("mount path still missing after creation.");
     }
@@ -158,7 +164,7 @@ int vfs_mount(const char *path, struct super_block *sb)
 /* vfs_mount_fs: Implement vfs mount fs. */
 int vfs_mount_fs(const char *path, const char *fs_name)
 {
-    struct file_system_type *fs = get_filesystem(fs_name);
+    struct file_system_type *fs = get_fs_type(fs_name);
     if (!fs)
         panic("filesystem type not found.");
 
@@ -172,7 +178,7 @@ int vfs_mount_fs(const char *path, const char *fs_name)
 /* vfs_mount_fs_dev: Implement vfs mount fs dev. */
 int vfs_mount_fs_dev(const char *path, const char *fs_name, const char *dev_name)
 {
-    struct file_system_type *fs = get_filesystem(fs_name);
+    struct file_system_type *fs = get_fs_type(fs_name);
     if (!fs)
         panic("filesystem type not found.");
 
@@ -200,5 +206,5 @@ void vfs_init(void)
     init_ramfs_fs();
 
     // 3. Mount the root filesystem
-    vfs_mount_rootfs("ramfs");
+    init_mount_tree();
 }

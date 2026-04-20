@@ -5,6 +5,6 @@
 
 struct task_struct;
 
-struct task_struct *find_task_by_pid(uint32_t pid);
+struct task_struct *find_task_by_vpid(uint32_t pid);
 
 #endif

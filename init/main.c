@@ -8,10 +8,8 @@
 #include "linux/mm.h"
 #include "linux/fs.h"
 #include "linux/ramfs.h"
-#include "linux/procfs.h"
 #include "linux/minixfs.h"
 #include "linux/blkdev.h"
-#include "linux/sysfs.h"
 #include "linux/sysfs.h"
 #include "linux/syscall.h"
 #include "linux/timer.h"
@@ -51,7 +49,7 @@ static void do_basic_setup(void)
 {
     driver_init();
     do_initcalls();
-    init_syscall();
+    syscall_init();
     printf("Syscall handler installed.\n");
 }
 
@@ -85,7 +83,7 @@ static void prepare_namespace(void)
         panic("sysfs init failed.");
     vfs_mount_fs("/proc", "proc");
     devtmpfs_mount("/dev");
-    sysfs_mount();
+    vfs_mount_fs("/sys", "sysfs");
     virtio_scsi_late_probe();
     /*
      * Linux mapping: mount explicit filesystems on explicit block devices.
@@ -128,7 +126,7 @@ static void prepare_namespace(void)
         vfs_mount_fs_dev("/mnt_nvme", "minix", "/dev/nvme0n1");
     }
 
-    const char *init = get_init_process();
+    const char *init = get_execute_command();
     if (run_init_process(init) != 0) {
         const char *fallbacks[] = {
             "/sbin/init",

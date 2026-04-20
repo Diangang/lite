@@ -27,8 +27,8 @@ void build_all_zonelists(void)
     dma_zonelist.highest_zone = dma_zonelist.nr_zones ? dma_zonelist.zones[dma_zonelist.nr_zones - 1]->type : ZONE_DMA;
 }
 
-/* refresh_zone_watermarks: Implement refresh zone watermarks. */
-void refresh_zone_watermarks(void)
+/* setup_per_zone_wmarks: Initialize Lite per-zone watermarks. */
+void setup_per_zone_wmarks(void)
 {
     uint32_t dma = contig_page_data.zone_dma.managed_pages;
     contig_page_data.zone_dma.watermark[WMARK_MIN] = dma / 64;

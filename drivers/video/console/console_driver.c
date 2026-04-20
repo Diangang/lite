@@ -65,7 +65,7 @@ static const struct platform_device_id console_platform_ids[] = {
 };
 
 static struct platform_driver console_platform_driver = {
-    .name = "console",
+    .driver = { .name = "console" },
     .id_table = console_platform_ids,
     .probe = console_platform_probe,
     .remove = NULL,

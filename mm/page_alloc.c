@@ -42,7 +42,7 @@ static void alloc_reclaim_slowpath(struct zone *zone, gfp_t gfp_mask, unsigned i
         return;
     alloc_build_scan_control(gfp_mask, &sc);
     wakeup_kswapd(zone);
-    try_to_free_pages_sc(zone, order, &sc);
+    shrink_zone(zone, order, &sc);
 }
 
 /* zone_free_pages: Implement zone free pages. */
@@ -408,8 +408,8 @@ unsigned long totalram_pages(void)
     return total_pages;
 }
 
-/* freeram_pages: Implement freeram pages. */
-unsigned long freeram_pages(void)
+/* nr_free_pages: Return the number of currently free pages. */
+unsigned long nr_free_pages(void)
 {
     unsigned long free_pages = 0;
     if (contig_page_data.zone_dma.spanned_pages)
@@ -510,7 +510,7 @@ next:
             continue;
         buddy_free_block(zone, i, 0);
     }
-    refresh_zone_watermarks();
+    setup_per_zone_wmarks();
     managed_pages_total = contig_page_data.zone_dma.managed_pages + contig_page_data.zone_normal.managed_pages;
     buddy_ready = 1;
 }

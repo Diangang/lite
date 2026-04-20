@@ -94,8 +94,8 @@ int vfs_check_access(struct inode *node, int want_read, int want_write, int want
 {
     if (!node)
         return 0;
-    uint32_t uid = task_get_uid();
-    uint32_t gid = task_get_gid();
+    uint32_t uid = current_uid();
+    uint32_t gid = current_gid();
     if (uid == 0)
         return 1;
     uint32_t mode = node->i_mode & 0777;
@@ -120,7 +120,7 @@ int vfs_chmod(const char *path, uint32_t mode)
     struct inode *node = vfs_resolve(path);
     if (!node)
         return -1;
-    uint32_t uid = task_get_uid();
+    uint32_t uid = current_uid();
     if (uid != 0 && uid != node->uid)
         return -1;
     node->i_mode = mode & 0777;

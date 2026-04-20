@@ -410,14 +410,15 @@ int device_register(struct device *dev)
 
 int device_del(struct device *dev)
 {
-    return device_unregister(dev);
+    device_unregister(dev);
+    return 0;
 }
 
 /* device_unregister: Implement device unregister. */
-int device_unregister(struct device *dev)
+void device_unregister(struct device *dev)
 {
     if (!dev)
-        return -1;
+        return;
     /* Avoid deferred-probe UAF if the device is destroyed while deferred. */
     driver_deferred_probe_remove(dev);
     device_unbind(dev);
@@ -431,7 +432,6 @@ int device_unregister(struct device *dev)
     kobject_del(&dev->kobj);
     kset_remove(&devices_subsys.kset, &dev->kobj);
     kobject_put(&dev->kobj);
-    return 0;
 }
 
 int device_for_each_child(struct device *dev, void *data, int (*fn)(struct device *child, void *data))

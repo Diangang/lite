@@ -9,14 +9,12 @@
 #include "linux/slab.h"
 #include "linux/vsprintf.h"
 
-static struct class sd_disk_class;
+static struct class sd_disk_class = {
+    .name = "scsi_disk",
+};
 
 static int sd_disk_class_init(void)
 {
-    memset(&sd_disk_class, 0, sizeof(sd_disk_class));
-    sd_disk_class.name = "scsi_disk";
-    INIT_LIST_HEAD(&sd_disk_class.list);
-    INIT_LIST_HEAD(&sd_disk_class.devices);
     return class_register(&sd_disk_class);
 }
 subsys_initcall(sd_disk_class_init);

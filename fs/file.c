@@ -1,4 +1,5 @@
 #include "linux/file.h"
+#include "linux/namei.h"
 #include "linux/slab.h"
 #include "linux/libc.h"
 #include "linux/fs.h"
@@ -8,47 +9,39 @@
 /* vfs_open: Implement vfs open. */
 struct file *vfs_open(const char *path, uint32_t flags)
 {
-    struct dentry *dentry = path_walk(path);
+    struct path lookup;
+    struct dentry *dentry = NULL;
     struct inode *node = dentry ? dentry->inode : NULL;
 
+    if (kern_path(path, 0, &lookup) == 0) {
+        dentry = lookup.dentry;
+        node = dentry ? dentry->inode : NULL;
+    }
+
     if ((!dentry || !node) && (flags & VFS_O_CREAT)) {
-        char tmp[256];
-        uint32_t len = (uint32_t)strlen(path);
-        if (len >= sizeof(tmp))
+        struct path parent;
+        char name[128];
+        int last_type;
+
+        if (filename_parentat(AT_FDCWD, path, 0, &parent, name, sizeof(name), &last_type) != 0)
             return NULL;
-        strcpy(tmp, path);
-
-        uint32_t slash = len;
-        while (slash > 0 && tmp[slash - 1] != '/') slash--;
-
-        char parent[256];
-        if (slash == 0)
-        strcpy(parent, "."); else if (slash == 1)
-        strcpy(parent, "/"); else {
-            memcpy(parent, tmp, slash);
-            parent[slash] = 0;
-        }
-        const char *name = tmp + slash;
-        if (!*name)
+        if (last_type != LAST_NORM)
+            return NULL;
+        if (!parent.dentry || !parent.dentry->inode ||
+            (parent.dentry->inode->flags & 0x7) != FS_DIRECTORY)
             return NULL;
 
-        struct dentry *pdentry = path_walk(parent);
-        if (!pdentry || !pdentry->inode || (pdentry->inode->flags & 0x7) != FS_DIRECTORY)
-            return NULL;
-
-        if (!pdentry->inode)
-            return NULL;
-        struct inode *created = create_fs(pdentry->inode, name);
+        struct inode *created = create_fs(parent.dentry->inode, name);
         if (!created)
             return NULL;
 
-        struct dentry *new_d = d_lookup(pdentry, name);
+        struct dentry *new_d = d_lookup(parent.dentry, name);
         if (new_d) {
             new_d->inode = created;
             new_d->d_flags &= ~DENTRY_NEGATIVE;
             dentry = new_d;
         } else {
-            new_d = d_alloc(pdentry, name);
+            new_d = d_alloc(parent.dentry, name);
             if (!new_d)
                 return NULL;
             new_d->inode = created;

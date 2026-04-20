@@ -29,7 +29,6 @@ struct sysfs_ops {
 };
 
 int sysfs_init(void);
-void sysfs_mount(void);
 int sysfs_create_dir(struct kobject *kobj);
 int sysfs_create_file(struct kobject *kobj, const struct attribute *attr);
 int sysfs_create_group(struct kobject *kobj, const struct attribute_group *grp);

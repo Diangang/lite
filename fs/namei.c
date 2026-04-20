@@ -1,11 +1,12 @@
 #include "linux/fs.h"
+#include "linux/namei.h"
 #include "linux/libc.h"
 #include "linux/sched.h"
 #include "linux/ramfs.h"
 #include "linux/uaccess.h"
 
 // Keep vfs_build_abs to build absolute path strings for simplicity
-// Alternatively, we could do path_walk from task cwd dentry without strings, but this is simpler
+// Alternatively, we could do path_lookup from task cwd dentry without strings, but this is simpler
 // because task struct currently stores cwd as string.
 static int vfs_append_component(char *out, uint32_t *len, uint32_t cap, const char *start, uint32_t n)
 {
@@ -61,11 +62,6 @@ static int vfs_build_dentry_path(struct dentry *d, char *out, uint32_t cap)
 {
     if (!d || !out || cap < 2)
         return 0;
-    if (!d->parent || d->parent == d) {
-        out[0] = '/';
-        out[1] = 0;
-        return 1;
-    }
 
     char tmp[512];
     if (cap > sizeof(tmp))
@@ -73,11 +69,13 @@ static int vfs_build_dentry_path(struct dentry *d, char *out, uint32_t cap)
     uint32_t pos = cap - 1;
     tmp[pos] = 0;
 
-    while (d && d->parent && d->parent != d) {
+    while (d) {
         if (d->mount && d->mount->root == d && d->mount->mountpoint) {
             d = d->mount->mountpoint;
             continue;
         }
+        if (!d->parent || d->parent == d)
+            break;
         uint32_t n = (uint32_t)strlen(d->name);
         if (n == 0 || pos < n + 1)
             return 0;
@@ -126,116 +124,155 @@ int vfs_normalize_path(const char *path, char *out, uint32_t cap)
     return 1;
 }
 
-// Removed vfs_build_abs entirely, no longer needed as path_walk now walks relative to dentry
+// Removed vfs_build_abs entirely, no longer needed as path lookup now runs
+// through a minimal Linux-shaped nameidata/path_lookupat pipeline.
 
-struct dentry *path_walk(const char *path)
+static void set_nameidata(struct nameidata *nd, int dfd, const char *name)
 {
-    if (!path || !*path)
-        return NULL;
+    memset(nd, 0, sizeof(*nd));
+    nd->dfd = dfd;
+    nd->name = name;
+    if (current) {
+        nd->saved = current->nameidata;
+        current->nameidata = nd;
+    }
+}
 
-    /* Minimal Linux-like symlink following:
-     * - supports absolute and relative targets;
-     * - follows links during path walk, including the last component;
-     * - caps restart depth to avoid loops.
-     */
+static void restore_nameidata(struct nameidata *nd)
+{
+    if (current && current->nameidata == nd)
+        current->nameidata = nd->saved;
+}
+
+static int path_init(struct nameidata *nd, const char *name, unsigned flags, const char **walk)
+{
+    struct dentry *root;
+    struct dentry *pwd;
+
+    if (!name || !walk)
+        return -1;
+    root = ((flags & LOOKUP_ROOT) && nd->root.dentry) ? nd->root.dentry : (current ? current->fs.root : NULL);
+    pwd = ((flags & LOOKUP_ROOT) && nd->root.dentry) ? nd->root.dentry : (current ? current->fs.pwd : NULL);
+    if (!root)
+        root = vfs_root_dentry;
+    if (!pwd)
+        pwd = root;
+    if (!root)
+        return -1;
+
+    nd->flags = flags;
+    nd->name = name;
+    nd->last = name;
+    nd->last_type = LAST_ROOT;
+    if (!(flags & LOOKUP_ROOT) || !nd->root.dentry) {
+        nd->root.dentry = root;
+        nd->root.mnt = root->mount ? root->mount : vfs_get_mounts();
+    }
+
+    if (name[0] == '/') {
+        nd->path = nd->root;
+        *walk = name;
+        while (**walk == '/')
+            (*walk)++;
+        return 0;
+    }
+
+    if ((flags & LOOKUP_ROOT) && nd->root.dentry) {
+        nd->path = nd->root;
+        *walk = name;
+        return 0;
+    }
+
+    if (nd->dfd != AT_FDCWD)
+        return -1;
+
+    nd->path.dentry = pwd;
+    nd->path.mnt = pwd->mount ? pwd->mount : nd->root.mnt;
+    *walk = name;
+    return 0;
+}
+
+static int link_path_walk(const char *name, struct nameidata *nd)
+{
     char cur_path[512];
-    uint32_t plen = (uint32_t)strlen(path);
+    uint32_t plen = (uint32_t)strlen(name);
     if (plen >= sizeof(cur_path))
-        return NULL;
-    memcpy(cur_path, path, plen + 1);
+        return -1;
+    memcpy(cur_path, name, plen + 1);
 
     for (int depth = 0; depth < 8; depth++) {
-        struct dentry *curr;
-        if (cur_path[0] == '/') {
-            curr = current ? current->fs.root : NULL;
-            if (!curr)
-                curr = vfs_root_dentry;
-        } else {
-            curr = current ? current->fs.pwd : NULL;
-            if (!curr)
-                curr = vfs_root_dentry;
-        }
-
-        if (!curr)
-            return NULL;
-
+        struct dentry *curr = nd->path.dentry;
+        struct vfsmount *curr_mnt = nd->path.mnt;
         const char *p = cur_path;
-        while (*p == '/') p++;
+
+        while (*p == '/')
+            p++;
+        if (!*p)
+            return 0;
 
         int restarted = 0;
         while (*p) {
             const char *s = p;
-            while (*p && *p != '/') p++;
+            while (*p && *p != '/')
+                p++;
             uint32_t len = (uint32_t)(p - s);
 
             char part[128];
             if (len >= sizeof(part))
-                return NULL;
+                return -1;
             memcpy(part, s, len);
             part[len] = 0;
 
             if (strcmp(part, ".") == 0) {
-                // curr stays the same
+                nd->last_type = LAST_DOT;
             } else if (strcmp(part, "..") == 0) {
-                /*
-                 * Linux mapping: ".." at the root of a mounted filesystem
-                 * escapes to the mountpoint's parent (mount topology), not by
-                 * rewriting dentry parent pointers.
-                 */
+                nd->last_type = LAST_DOTDOT;
                 if (curr->mount && curr->mount->root == curr && curr->mount->mountpoint) {
-                    struct dentry *mp = curr->mount->mountpoint;
-                    if (mp->parent)
-                        curr = mp->parent;
-                    else
-                        curr = mp;
+                    struct vfsmount *mnt = curr->mount;
+                    struct dentry *mp = mnt->mountpoint;
+                    curr_mnt = mnt->parent ? mnt->parent : nd->root.mnt;
+                    curr = mp->parent ? mp->parent : mp;
                 } else if (curr->parent) {
                     curr = curr->parent;
                 }
             } else {
                 struct dentry *next = d_lookup(curr, part);
-                /*
-                 * Linux mapping: mounted path traversal uses the mount tree,
-                 * not the placeholder dentry's lookup result. Lite may mount
-                 * over a negative placeholder dentry (e.g. "/dev"), so allow
-                 * mount traversal before treating the dentry as a negative miss.
-                 */
+                nd->last_type = LAST_NORM;
                 if (next && (next->d_flags & DENTRY_NEGATIVE) &&
-                    !(next->mount && next->mount->root)) {
-                    return NULL; /* negative dentry cache hit */
-                }
-                if (!next) {
-                    /* Not in cache, try underlying FS. */
-                    if (curr->inode) {
-                        struct inode *child_inode = finddir_fs(curr->inode, part);
-                        if (child_inode) {
-                            next = d_alloc(curr, part);
+                    !(next->mount && next->mount->root))
+                    return -1;
+                if (!next && curr->inode) {
+                    struct inode *child_inode = finddir_fs(curr->inode, part);
+                    if (child_inode) {
+                        next = d_alloc(curr, part);
+                        if (next)
                             next->inode = child_inode;
-                        } else {
-                            /* Cache negative lookup to avoid repeated finddir_fs. */
-                            next = d_alloc(curr, part);
-                            if (next) {
-                                next->inode = NULL;
-                                next->d_flags |= DENTRY_NEGATIVE;
-                            }
+                    } else {
+                        next = d_alloc(curr, part);
+                        if (next) {
+                            next->inode = NULL;
+                            next->d_flags |= DENTRY_NEGATIVE;
                         }
                     }
                 }
                 if (!next)
-                    return NULL; // Not found
+                    return -1;
                 curr = next;
             }
 
-            /* Traverse mount point if it's mounted over. */
             if (curr->mount && curr->mount->root) {
+                curr_mnt = curr->mount;
                 curr = curr->mount->root;
             }
 
-            /* If this component resolves to a symlink, follow it. */
-            if (curr->inode && (curr->inode->flags == FS_SYMLINK) && curr->inode->f_ops && curr->inode->f_ops->read) {
+            if (curr->inode && curr->inode->flags == FS_SYMLINK &&
+                curr->inode->f_ops && curr->inode->f_ops->read) {
                 char target[256];
-                uint32_t n = curr->inode->f_ops->read(curr->inode, 0, sizeof(target) - 1, (uint8_t *)target);
+                uint32_t n = curr->inode->f_ops->read(curr->inode, 0,
+                                                      sizeof(target) - 1,
+                                                      (uint8_t *)target);
                 if (n == 0 || n >= sizeof(target))
-                    return NULL;
+                    return -1;
                 target[n] = 0;
 
                 const char *rest = p;
@@ -247,18 +284,10 @@ struct dentry *path_walk(const char *path)
                 if (target[0] == '/') {
                     uint32_t tlen = (uint32_t)strlen(target);
                     if (tlen + 1 > sizeof(new_path))
-                        return NULL;
+                        return -1;
                     memcpy(new_path, target, tlen);
                     off = tlen;
                 } else {
-                    /*
-                     * Linux mapping: a relative symlink target is interpreted
-                     * relative to the directory containing the symlink.
-                     *
-                     * Prefer deriving that base directory from the current
-                     * string path being walked, because some pseudo filesystems
-                     * (e.g. sysfs) may not maintain stable dentry parent chains.
-                     */
                     char base_path[256];
                     uint32_t blen = 0;
                     if (cur_path[0] == '/') {
@@ -272,25 +301,27 @@ struct dentry *path_walk(const char *path)
                             while (blen > 1 && cur_path[blen - 1] == '/')
                                 blen--;
                             if (blen >= sizeof(base_path))
-                                return NULL;
+                                return -1;
                             memcpy(base_path, cur_path, blen);
                             base_path[blen] = 0;
                         }
                     } else {
                         struct dentry *base = curr->parent ? curr->parent : curr;
                         if (!vfs_build_dentry_path(base, base_path, sizeof(base_path)))
-                            return NULL;
+                            return -1;
                         blen = (uint32_t)strlen(base_path);
                     }
-                    uint32_t tlen = (uint32_t)strlen(target);
-                    if (blen + 1 + tlen + 1 > sizeof(new_path))
-                        return NULL;
-                    memcpy(new_path, base_path, blen);
-                    off = blen;
-                    if (off && new_path[off - 1] != '/')
-                        new_path[off++] = '/';
-                    memcpy(new_path + off, target, tlen);
-                    off += tlen;
+                    {
+                        uint32_t tlen = (uint32_t)strlen(target);
+                        if (blen + 1 + tlen + 1 > sizeof(new_path))
+                            return -1;
+                        memcpy(new_path, base_path, blen);
+                        off = blen;
+                        if (off && new_path[off - 1] != '/')
+                            new_path[off++] = '/';
+                        memcpy(new_path + off, target, tlen);
+                        off += tlen;
+                    }
                 }
 
                 uint32_t rlen = (uint32_t)strlen(rest);
@@ -302,65 +333,188 @@ struct dentry *path_walk(const char *path)
                 }
                 new_path[off] = 0;
                 if (!vfs_normalize_path(new_path, cur_path, sizeof(cur_path)))
-                    return NULL;
+                    return -1;
                 restarted = 1;
+                if (cur_path[0] == '/') {
+                    nd->path = nd->root;
+                } else {
+                    nd->path.dentry = curr->parent ? curr->parent : curr;
+                    nd->path.mnt = curr_mnt;
+                }
                 break;
             }
 
-            while (*p == '/') p++;
+            while (*p == '/')
+                p++;
         }
 
-        if (!restarted)
-            return curr;
+        if (!restarted) {
+            nd->path.dentry = curr;
+            nd->path.mnt = curr_mnt;
+            return 0;
+        }
     }
 
-    return NULL;
+    return -1;
+}
+
+static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path)
+{
+    const char *walk;
+
+    if (path_init(nd, nd->name, flags, &walk) != 0)
+        return -1;
+    if (*walk && link_path_walk(walk, nd) != 0)
+        return -1;
+    if ((flags & LOOKUP_DIRECTORY) &&
+        (!nd->path.dentry || !nd->path.dentry->inode ||
+         (nd->path.dentry->inode->flags & 0x7) != FS_DIRECTORY))
+        return -1;
+    *path = nd->path;
+    return 0;
+}
+
+int filename_lookup(int dfd, const char *name, unsigned flags, struct path *path)
+{
+    struct nameidata nd;
+    int ret;
+
+    if (!name || !*name || !path)
+        return -1;
+    set_nameidata(&nd, dfd, name);
+    ret = path_lookupat(&nd, flags, path);
+    restore_nameidata(&nd);
+    return ret;
+}
+
+int kern_path(const char *name, unsigned flags, struct path *path)
+{
+    return filename_lookup(AT_FDCWD, name, flags, path);
+}
+
+int vfs_path_lookup(struct dentry *dentry, struct vfsmount *mnt,
+                    const char *name, unsigned flags, struct path *path)
+{
+    struct nameidata nd;
+    int ret;
+
+    if (!dentry || !mnt || !name || !*name || !path)
+        return -1;
+    set_nameidata(&nd, AT_FDCWD, name);
+    nd.root.dentry = dentry;
+    nd.root.mnt = mnt;
+    ret = path_lookupat(&nd, flags | LOOKUP_ROOT, path);
+    restore_nameidata(&nd);
+    return ret;
+}
+
+static int path_parentat(struct nameidata *nd, const char *parent_name,
+                         unsigned flags, struct path *parent)
+{
+    const char *saved_name;
+    int ret;
+
+    if (!nd || !parent_name || !parent)
+        return -1;
+    saved_name = nd->name;
+    nd->name = parent_name;
+    ret = path_lookupat(nd, flags | LOOKUP_DIRECTORY, parent);
+    nd->name = saved_name;
+    return ret;
+}
+
+int filename_parentat(int dfd, const char *name, unsigned flags,
+                      struct path *parent, char *last, uint32_t last_cap,
+                      int *type)
+{
+    struct nameidata nd;
+    char parent_name[256];
+    uint32_t len;
+    uint32_t slash;
+    uint32_t base_len;
+    int ret;
+
+    if (!name || !*name || !parent || !last || last_cap == 0 || !type)
+        return -1;
+
+    len = (uint32_t)strlen(name);
+    while (len > 1 && name[len - 1] == '/')
+        len--;
+    if (len == 0)
+        return -1;
+
+    slash = len;
+    while (slash > 0 && name[slash - 1] != '/')
+        slash--;
+
+    if (slash == 0) {
+        strcpy(parent_name, ".");
+        base_len = len;
+        if (base_len >= last_cap)
+            return -1;
+        memcpy(last, name, base_len);
+        last[base_len] = 0;
+    } else if (slash == 1) {
+        strcpy(parent_name, "/");
+        base_len = len - 1;
+        if (base_len == 0 || base_len >= last_cap)
+            return -1;
+        memcpy(last, name + 1, base_len);
+        last[base_len] = 0;
+    } else {
+        if (slash >= sizeof(parent_name))
+            return -1;
+        memcpy(parent_name, name, slash - 1);
+        parent_name[slash - 1] = 0;
+        base_len = len - slash;
+        if (base_len == 0 || base_len >= last_cap)
+            return -1;
+        memcpy(last, name + slash, base_len);
+        last[base_len] = 0;
+    }
+
+    if (strcmp(last, ".") == 0)
+        *type = LAST_DOT;
+    else if (strcmp(last, "..") == 0)
+        *type = LAST_DOTDOT;
+    else
+        *type = LAST_NORM;
+
+    set_nameidata(&nd, dfd, name);
+    nd.last = last;
+    nd.last_type = *type;
+    ret = path_parentat(&nd, parent_name, flags, parent);
+    restore_nameidata(&nd);
+    return ret;
 }
 
 int vfs_symlink(const char *target, const char *linkpath)
 {
+    struct path parent;
+    char name[128];
+    int last_type;
+
     if (!target || !linkpath)
         return -1;
 
-    uint32_t len = (uint32_t)strlen(linkpath);
-    if (len == 0 || len >= 256)
+    if (filename_parentat(AT_FDCWD, linkpath, 0, &parent, name, sizeof(name), &last_type) != 0)
+        return -1;
+    if (last_type != LAST_NORM)
+        return -1;
+    if (!parent.dentry || !parent.dentry->inode ||
+        (parent.dentry->inode->flags & 0x7) != FS_DIRECTORY)
         return -1;
 
-    char parent[256];
-    strcpy(parent, linkpath);
-    uint32_t slash = len;
-    while (slash > 0 && parent[slash - 1] != '/')
-        slash--;
-    if (slash == 0)
-        return -1;
-
-    char name[128];
-    uint32_t name_len = len - slash;
-    if (name_len == 0 || name_len >= sizeof(name))
-        return -1;
-    memcpy(name, linkpath + slash, name_len);
-    name[name_len] = 0;
-
-    if (slash == 1) {
-        parent[1] = 0;
-    } else {
-        parent[slash - 1] = 0;
-    }
-
-    struct dentry *pdentry = path_walk(parent);
-    if (!pdentry || !pdentry->inode || (pdentry->inode->flags & 0x7) != FS_DIRECTORY)
-        return -1;
-
-    struct inode *created = symlink_fs(pdentry->inode, name, target);
+    struct inode *created = symlink_fs(parent.dentry->inode, name, target);
     if (!created)
         return -1;
 
-    struct dentry *d = d_lookup(pdentry, name);
+    struct dentry *d = d_lookup(parent.dentry, name);
     if (d) {
         d->inode = created;
         d->d_flags &= ~DENTRY_NEGATIVE;
     } else {
-        d = d_alloc(pdentry, name);
+        d = d_alloc(parent.dentry, name);
         if (!d)
             return -1;
         d->inode = created;
@@ -372,10 +526,11 @@ int vfs_symlink(const char *target, const char *linkpath)
 /* vfs_resolve: Implement vfs resolve. */
 struct inode *vfs_resolve(const char *path)
 {
-    struct dentry *d = path_walk(path);
-    if (d)
-        return d->inode;
-    return NULL;
+    struct path lookup;
+
+    if (kern_path(path, 0, &lookup) != 0)
+        return NULL;
+    return lookup.dentry ? lookup.dentry->inode : NULL;
 }
 
 static char *find_slash(char *s)
@@ -562,47 +717,18 @@ int vfs_rmdir_at(struct dentry *root, const char *path)
 /* vfs_mkdir: Implement vfs mkdir. */
 int vfs_mkdir(const char *path)
 {
+    struct path parent;
+    char name[128];
+    int last_type;
+
     if (!path || !*path)
         return -1;
-
-    char tmp[256];
-    uint32_t len = (uint32_t)strlen(path);
-    if (len >= sizeof(tmp))
+    if (filename_parentat(AT_FDCWD, path, 0, &parent, name, sizeof(name), &last_type) != 0)
         return -1;
-    strcpy(tmp, path);
-
-    uint32_t slash = len;
-    int found_slash = 0;
-    while (slash > 0) {
-        if (tmp[slash - 1] == '/') {
-            found_slash = 1;
-            break;
-        }
-        slash--;
-    }
-
-    char parent[256];
-    const char *name;
-    if (!found_slash) {
-        // e.g. "test.txt" -> parent is ".", name is "test.txt"
-        strcpy(parent, ".");
-        name = tmp;
-    } else if (slash == 1) {
-        // e.g. "/test.txt" -> parent is "/", name is "test.txt"
-        strcpy(parent, "/");
-        name = tmp + 1;
-    } else {
-        // e.g. "/bin/sh" -> parent is "/bin", name is "sh"
-        memcpy(parent, tmp, slash - 1); // Exclude the trailing slash
-        parent[slash - 1] = 0;
-        name = tmp + slash;
-    }
-    if (!*name)
-        return -1;
-    if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+    if (last_type != LAST_NORM)
         return -1;
 
-    struct inode *pnode = vfs_resolve(parent);
+    struct inode *pnode = parent.dentry ? parent.dentry->inode : NULL;
     if (!pnode || (pnode->flags & 0x7) != FS_DIRECTORY)
         return -1;
     if (!vfs_check_access(pnode, 0, 1, 1))
@@ -612,20 +738,19 @@ int vfs_mkdir(const char *path)
     if (finddir_fs(pnode, name))
         return -1;
 
-    struct dentry *pdentry = path_walk(parent);
-    if (!pdentry)
+    if (!parent.dentry)
         return -1;
 
     struct inode *created = mkdir_fs(pnode, name);
     if (!created)
         return -1;
 
-    struct dentry *d = d_lookup(pdentry, name);
+    struct dentry *d = d_lookup(parent.dentry, name);
     if (d) {
         d->inode = created;
         d->d_flags &= ~DENTRY_NEGATIVE;
     } else {
-        d = d_alloc(pdentry, name);
+        d = d_alloc(parent.dentry, name);
         if (!d)
             return -1;
         d->inode = created;
@@ -637,59 +762,28 @@ int vfs_mkdir(const char *path)
 /* vfs_unlink: Implement vfs unlink. */
 int vfs_unlink(const char *path)
 {
+    struct path parent;
+    char name[128];
+    int last_type;
+
     if (!path || !*path)
         return -1;
-
-    char tmp[256];
-    uint32_t len = (uint32_t)strlen(path);
-    if (len >= sizeof(tmp))
+    if (filename_parentat(AT_FDCWD, path, 0, &parent, name, sizeof(name), &last_type) != 0)
         return -1;
-    strcpy(tmp, path);
-
-    uint32_t slash = len;
-    int found_slash = 0;
-    while (slash > 0) {
-        if (tmp[slash - 1] == '/') {
-            found_slash = 1;
-            break;
-        }
-        slash--;
-    }
-
-    char parent[256];
-    const char *name;
-    if (!found_slash) {
-        // e.g. "test.txt" -> parent is ".", name is "test.txt"
-        strcpy(parent, ".");
-        name = tmp;
-    } else if (slash == 1) {
-        // e.g. "/test.txt" -> parent is "/", name is "test.txt"
-        strcpy(parent, "/");
-        name = tmp + 1;
-    } else {
-        // e.g. "/bin/sh" -> parent is "/bin", name is "sh"
-        memcpy(parent, tmp, slash - 1);
-        parent[slash - 1] = 0;
-        name = tmp + slash;
-    }
-    if (!*name)
+    if (last_type != LAST_NORM)
         return -1;
-    if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+    if (!parent.dentry)
         return -1;
-
-    struct dentry *pdentry = path_walk(parent);
-    if (!pdentry)
-        return -1;
-    struct inode *pnode = pdentry->inode;
+    struct inode *pnode = parent.dentry->inode;
 
     if (!pnode || (pnode->flags & 0x7) != FS_DIRECTORY)
         return -1;
     if (!vfs_check_access(pnode, 0, 1, 1))
         return -1;
 
-    int ret = unlink_fs(pdentry, name);
+    int ret = unlink_fs(parent.dentry, name);
     if (ret == 0) {
-        struct dentry *child = d_lookup(pdentry, name);
+        struct dentry *child = d_lookup(parent.dentry, name);
         if (child) {
             child->inode = NULL;
             child->d_flags |= DENTRY_NEGATIVE;
@@ -701,54 +795,28 @@ int vfs_unlink(const char *path)
 /* vfs_rmdir: Implement vfs rmdir. */
 int vfs_rmdir(const char *path)
 {
+    struct path parent;
+    char name[128];
+    int last_type;
+
     if (!path || !*path)
         return -1;
-
-    char tmp[256];
-    uint32_t len = (uint32_t)strlen(path);
-    if (len >= sizeof(tmp))
+    if (filename_parentat(AT_FDCWD, path, 0, &parent, name, sizeof(name), &last_type) != 0)
         return -1;
-    strcpy(tmp, path);
-
-    uint32_t slash = len;
-    int found_slash = 0;
-    while (slash > 0) {
-        if (tmp[slash - 1] == '/') {
-            found_slash = 1;
-            break;
-        }
-        slash--;
-    }
-
-    char parent[256];
-    const char *name;
-    if (!found_slash) {
-        strcpy(parent, ".");
-        name = tmp;
-    } else if (slash == 1) {
-        strcpy(parent, "/");
-        name = tmp + 1;
-    } else {
-        memcpy(parent, tmp, slash - 1);
-        parent[slash - 1] = 0;
-        name = tmp + slash;
-    }
-    if (!*name)
+    if (last_type != LAST_NORM)
         return -1;
-
-    struct dentry *pdentry = path_walk(parent);
-    if (!pdentry)
+    if (!parent.dentry)
         return -1;
-    struct inode *pnode = pdentry->inode;
+    struct inode *pnode = parent.dentry->inode;
 
     if (!pnode || (pnode->flags & 0x7) != FS_DIRECTORY)
         return -1;
     if (!vfs_check_access(pnode, 0, 1, 1))
         return -1;
 
-    int ret = rmdir_fs(pdentry, name);
+    int ret = rmdir_fs(parent.dentry, name);
     if (ret == 0) {
-        struct dentry *child = d_lookup(pdentry, name);
+        struct dentry *child = d_lookup(parent.dentry, name);
         if (child) {
             /* Drop stale subtree so future lookups do not observe old entries. */
             while (child->children) {

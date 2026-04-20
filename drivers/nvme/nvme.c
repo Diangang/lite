@@ -776,15 +776,15 @@ static void nvme_pci_remove(struct pci_dev *pdev)
     }
 }
 
-static struct pci_driver nvme_pci_driver = {
-    .name = "nvme",
+static struct pci_driver nvme_driver = {
+    .driver = { .name = "nvme" },
     .id_table = nvme_pci_ids,
     .probe = nvme_pci_probe,
     .remove = nvme_pci_remove,
 };
 
-static int nvme_driver_init(void)
+static int nvme_init(void)
 {
-    return pci_register_driver(&nvme_pci_driver);
+    return pci_register_driver(&nvme_driver);
 }
-module_init(nvme_driver_init);
+module_init(nvme_init);

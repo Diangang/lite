@@ -53,7 +53,7 @@ static int task_free_user_page_mapped(struct mm_struct *mm, pgd_t *dir, uint32_t
     uint32_t phys = pte_pfn(pte);
     table[pte_idx] = 0;
     if (mm)
-        rmap_remove(mm, va_page, phys);
+        page_remove_rmap(mm, va_page, phys);
     free_page((unsigned long)phys);
     return 1;
 }
@@ -393,7 +393,7 @@ struct mm_struct *dup_mm(struct mm_struct *src)
                 set_pte_flags(src->pgd, (void*)va, flags);
             }
             map_page_ex(new_dir, (void*)phys, (void*)va, flags);
-            rmap_dup(src, mm, va, phys);
+            page_dup_rmap(src, mm, va, phys);
             get_page((unsigned long)phys);
         }
         v = v->vm_next;

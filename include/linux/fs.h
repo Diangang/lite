@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "linux/kdev_t.h"
+#include "linux/path.h"
 
 #define FS_FILE        0x01
 #define FS_DIRECTORY   0x02
@@ -174,8 +175,6 @@ int ioctl_fs(struct inode *node, uint32_t request, uint32_t arg);
 
 struct dentry *d_alloc(struct dentry *parent, const char *name);
 struct dentry *d_lookup(struct dentry *parent, const char *name);
-struct dentry *path_walk(const char *path);
-
 struct dentry *vfs_dentry_get(struct inode *node, const char *name);
 void vfs_dentry_put(struct dentry *d);
 void vfs_dentry_detach(struct dentry *d);

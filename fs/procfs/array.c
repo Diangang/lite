@@ -50,7 +50,7 @@ uint32_t task_dump_stat_pid(uint32_t pid, char *buf, uint32_t len)
     if (!buf || len == 0)
         return 0;
 
-    struct task_struct *t = find_task_by_pid(pid);
+    struct task_struct *t = find_task_by_vpid(pid);
     if (!t)
         return 0;
 
@@ -85,7 +85,7 @@ uint32_t task_dump_cmdline_pid(uint32_t pid, char *buf, uint32_t len)
     if (!buf || len == 0)
         return 0;
 
-    struct task_struct *t = find_task_by_pid(pid);
+    struct task_struct *t = find_task_by_vpid(pid);
     if (!t)
         return 0;
 
@@ -107,7 +107,7 @@ uint32_t task_dump_status_pid(uint32_t pid, char *buf, uint32_t len)
     if (!buf || len == 0)
         return 0;
 
-    struct task_struct *t = find_task_by_pid(pid);
+    struct task_struct *t = find_task_by_vpid(pid);
     if (!t)
         return 0;
 

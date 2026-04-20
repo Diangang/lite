@@ -99,7 +99,7 @@ int swap_out_page(struct page *page)
     memcpy(buf, memlayout_directmap_phys_to_virt(phys), PAGE_SIZE);
 
     set_pte_raw(page->map_mm->pgd, (void*)page->map_vaddr, swap_pte_encode((uint32_t)slot));
-    rmap_remove(page->map_mm, page->map_vaddr, phys);
+    page_remove_rmap(page->map_mm, page->map_vaddr, phys);
     free_page((unsigned long)phys);
     page->flags &= ~PG_ISOLATED;
 
@@ -132,7 +132,7 @@ int swap_in_mm(struct mm_struct *mm, uint32_t vaddr)
         flags |= PTE_READ_WRITE;
     map_page_ex(mm->pgd, phys, (void*)vaddr, flags);
     memcpy((void*)vaddr, swap_slots[slot].data, PAGE_SIZE);
-    rmap_add(mm, vaddr, (uint32_t)phys);
+    page_add_anon_rmap(mm, vaddr, (uint32_t)phys);
 
     swap_free_slot(slot);
     return 1;

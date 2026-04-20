@@ -272,17 +272,20 @@ void buses_init(void)
 /* bus_default_match: Implement bus default match. */
 int bus_default_match(struct device *dev, struct device_driver *drv)
 {
+    const char *drv_name;
+
     if (!dev || !drv)
         return 0;
+    drv_name = drv->name ? drv->name : drv->kobj.name;
     if (dev->bus == &platform_bus_type) {
         struct platform_device *pdev = platform_get_platform_device(dev);
-        if (pdev && pdev->name && strcmp(pdev->name, drv->kobj.name) == 0)
+        if (pdev && pdev->name && drv_name[0] && strcmp(pdev->name, drv_name) == 0)
             return 1;
     }
-    if (drv->kobj.name[0]) {
-        if (strcmp(dev->kobj.name, drv->kobj.name) == 0)
+    if (drv_name[0]) {
+        if (strcmp(dev->kobj.name, drv_name) == 0)
             return 1;
-        if (dev->type && dev->type->name && strcmp(dev->type->name, drv->kobj.name) == 0)
+        if (dev->type && dev->type->name && strcmp(dev->type->name, drv_name) == 0)
             return 1;
     }
     return 0;
@@ -305,45 +308,7 @@ int bus_rescan_devices(struct bus_type *bus)
     return 0;
 }
 
-/* bus_register: Implement bus register. */
-struct bus_type *bus_register(const char *name, int (*match)(struct device *, struct device_driver *))
-{
-    struct bus_type *bus = (struct bus_type*)kmalloc(sizeof(struct bus_type));
-    if (!bus)
-        return NULL;
-    memset(bus, 0, sizeof(*bus));
-    bus->p = (struct subsys_private *)kmalloc(sizeof(*bus->p));
-    if (!bus->p) {
-        kfree(bus);
-        return NULL;
-    }
-    memset(bus->p, 0, sizeof(*bus->p));
-    bus->p->bus = bus;
-    bus->name = name;
-    kset_init(&bus->subsys.kset, name);
-    bus->subsys.kset.kobj.ktype = &ktype_bus;
-    bus->subsys.kset.kobj.kset = buses_kset_get();
-    bus_set_drivers_autoprobe(bus, 1);
-    bus->match = match ? match : bus_default_match;
-    INIT_LIST_HEAD(&bus->list);
-    klist_init(bus_devices_klist(bus), bus_device_klist_get, bus_device_klist_put);
-    klist_init(bus_drivers_klist(bus), bus_driver_klist_get, bus_driver_klist_put);
-    list_add_tail(&bus->list, &bus_list_head);
-    if (subsystem_register(&bus->subsys) != 0) {
-        list_del(&bus->list);
-        kobject_put(bus_kobj(bus));
-        return NULL;
-    }
-    if (bus_sysfs_register_subdirs(bus) != 0) {
-        subsystem_unregister(&bus->subsys);
-        list_del(&bus->list);
-        kobject_put(bus_kobj(bus));
-        return NULL;
-    }
-    return bus;
-}
-
-int bus_register_static(struct bus_type *bus)
+int bus_register(struct bus_type *bus)
 {
     int allocated_p = 0;
     if (!bus)

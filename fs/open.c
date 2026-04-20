@@ -1,4 +1,5 @@
 #include "linux/fs.h"
+#include "linux/namei.h"
 #include "linux/sched.h"
 #include "linux/libc.h"
 #include "linux/file.h"
@@ -24,9 +25,14 @@ void close_fs(struct inode *node)
 /* vfs_chdir: Implement vfs chdir. */
 int vfs_chdir(const char *path)
 {
+    struct path lookup;
+    struct dentry *d;
+
     if (!path || !*path)
         return -1;
-    struct dentry *d = path_walk(path);
+    if (kern_path(path, LOOKUP_DIRECTORY, &lookup) != 0)
+        return -1;
+    d = lookup.dentry;
     if (!d)
         return -1;
     struct inode *node = d->inode;

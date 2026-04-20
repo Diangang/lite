@@ -73,6 +73,7 @@ struct bus_type {
 };
 
 struct device_driver {
+    const char *name;
     struct kobject kobj;
     struct bus_type *bus;
     int (*probe)(struct device *dev);
@@ -92,18 +93,17 @@ struct class {
 
 void driver_init(void);
 void device_initialize(struct device *dev, const char *name);
-struct bus_type *bus_register(const char *name, int (*match)(struct device *, struct device_driver *));
-int bus_register_static(struct bus_type *bus);
+int bus_register(struct bus_type *bus);
 uint32_t bus_count(void);
 struct bus_type *bus_at(uint32_t index);
 struct bus_type *bus_find(const char *name);
 int bus_rescan_devices(struct bus_type *bus);
 int driver_register(struct device_driver *drv);
-int driver_unregister(struct device_driver *drv);
+void driver_unregister(struct device_driver *drv);
 int driver_probe_device(struct device_driver *drv, struct device *dev);
 int driver_attach(struct device_driver *drv);
 int device_register(struct device *dev);
-int device_unregister(struct device *dev);
+void device_unregister(struct device *dev);
 int device_add(struct device *dev);
 int device_del(struct device *dev);
 int device_for_each_child(struct device *dev, void *data, int (*fn)(struct device *child, void *data));

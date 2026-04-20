@@ -70,7 +70,7 @@ static uint32_t driver_sysfs_show(struct kobject *kobj, const struct attribute *
         return 0;
     struct device_driver *drv = container_of(kobj, struct device_driver, kobj);
     if (!strcmp(attr->name, "name"))
-        return sysfs_emit_text_line(buffer, cap, drv ? drv->kobj.name : "unknown");
+        return sysfs_emit_text_line(buffer, cap, (drv && drv->name) ? drv->name : "unknown");
     return 0;
 }
 
@@ -248,12 +248,12 @@ int driver_register(struct device_driver *drv)
     struct klist_iter iter;
     struct klist_node *node;
 
-    if (!drv || !drv->bus)
+    if (!drv || !drv->bus || !drv->name || !drv->name[0])
         return -1;
     klist_iter_init(bus_drivers_klist(drv->bus), &iter);
     while ((node = klist_next(&iter)) != NULL) {
         struct device_driver *cur = container_of(node, struct device_driver, knode_bus);
-        if (cur && !strcmp(cur->kobj.name, drv->kobj.name)) {
+        if (cur && cur->name && !strcmp(cur->name, drv->name)) {
             klist_iter_exit(&iter);
             return -1;
         }
@@ -269,10 +269,10 @@ int driver_register(struct device_driver *drv)
 }
 
 /* driver_unregister: Implement driver unregister. */
-int driver_unregister(struct device_driver *drv)
+void driver_unregister(struct device_driver *drv)
 {
     if (!drv || !drv->bus)
-        return -1;
+        return;
     struct klist_iter iter;
     struct klist_node *node;
     klist_iter_init(bus_devices_klist(drv->bus), &iter);
@@ -289,7 +289,6 @@ int driver_unregister(struct device_driver *drv)
     drv->kobj.kset = NULL;
     /* Drop the registration reference (Linux mapping: driver_unregister ends the kobject lifetime). */
     kobject_put(&drv->kobj);
-    return 0;
 }
 
 /* init_driver: Initialize driver. */
@@ -298,6 +297,7 @@ void init_driver(struct device_driver *drv, const char *name, struct bus_type *b
     if (!drv)
         return;
     memset(drv, 0, sizeof(*drv));
+    drv->name = name;
     kobject_init_with_ktype(&drv->kobj, name, &ktype_driver, NULL);
     klist_init(&drv->klist_devices, NULL, NULL);
     INIT_LIST_HEAD(&drv->knode_bus.n_node);

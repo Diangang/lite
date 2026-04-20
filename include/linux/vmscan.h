@@ -24,6 +24,6 @@ uint32_t kswapd_reclaim_count(void);
 uint32_t kswapd_anon_reclaim_count(void);
 uint32_t kswapd_file_reclaim_count(void);
 uint32_t try_to_free_pages(struct zone *zone, unsigned int order);
-uint32_t try_to_free_pages_sc(struct zone *zone, unsigned int order, struct scan_control *sc);
+uint32_t shrink_zone(struct zone *zone, unsigned int order, struct scan_control *sc);
 
 #endif

@@ -1875,12 +1875,6 @@ static struct inode_operations sys_class_root_iops = {
     .rmdir = NULL
 };
 
-/* sysfs_mount: Mount sysfs into the initial namespace. */
-void sysfs_mount(void)
-{
-    vfs_mount_fs("/sys", "sysfs");
-}
-
 /* sysfs_fill_super: Implement sysfs fill super. */
 static int sysfs_fill_super(struct super_block *sb, void *data, int silent)
 {

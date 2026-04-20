@@ -82,7 +82,7 @@ static const struct platform_device_id serial_platform_ids[] = {
 };
 
 static struct platform_driver serial_platform_driver = {
-   .name = "serial",
+   .driver = { .name = "serial" },
    .id_table = serial_platform_ids,
    .probe = serial_platform_probe,
    .remove = NULL,

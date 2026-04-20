@@ -59,7 +59,6 @@ static inline struct virtio_device *dev_to_virtio(struct device *dev)
 }
 
 struct virtio_driver {
-    const char *name; /* Lite: explicit name field like pci_driver/platform_driver */
     struct device_driver driver;
     const struct virtio_device_id *id_table;
     int (*probe)(struct virtio_device *vdev);
@@ -78,7 +77,7 @@ int register_virtio_device(struct virtio_device *dev);
 void unregister_virtio_device(struct virtio_device *dev);
 
 int register_virtio_driver(struct virtio_driver *drv);
-int unregister_virtio_driver(struct virtio_driver *drv);
+void unregister_virtio_driver(struct virtio_driver *drv);
 
 /* Linux-aligned core helpers (subset). */
 void virtio_reset_device(struct virtio_device *vdev);

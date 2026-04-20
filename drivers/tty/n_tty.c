@@ -57,7 +57,7 @@ static void n_tty_receive_char(char c)
         input_buffer[input_head] = c;
         input_head = (input_head + 1) % N_TTY_INPUT_BUF_SIZE;
         input_count++;
-        wait_queue_wake_all(&input_waitq);
+        wake_up_all(&input_waitq);
     }
     irq_restore(flags);
 }
@@ -132,7 +132,7 @@ void n_tty_init(void)
     input_head = input_tail = input_count = 0;
     tty_line_len = 0;
     tty_line_pos = 0;
-    wait_queue_init(&input_waitq);
+    init_waitqueue_head(&input_waitq);
 }
 
 const struct tty_ldisc_ops n_tty_ldisc_ops = {

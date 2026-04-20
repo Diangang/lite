@@ -433,8 +433,8 @@ static int resolve_cow(uint32_t page_base)
     memcpy(tmp, (void*)page_base, PAGE_SIZE);
     map_page_ex(page_directory, new_phys, (void*)page_base, PTE_PRESENT | PTE_USER | PTE_READ_WRITE);
     if (current && current->mm) {
-        rmap_remove(current->mm, page_base, phys);
-        rmap_add(current->mm, page_base, (uint32_t)new_phys);
+        page_remove_rmap(current->mm, page_base, phys);
+        page_add_anon_rmap(current->mm, page_base, (uint32_t)new_phys);
     }
     memcpy((void*)page_base, tmp, PAGE_SIZE);
     kfree(tmp);
@@ -512,7 +512,7 @@ static void pf_oom_dump(uint32_t faulting_address, uint32_t eip)
 {
     printf("PF OOM: addr=0x%x eip=0x%x memfree_kb=%d memtotal_kb=%d\n",
            faulting_address, eip,
-           (uint32_t)(freeram_pages() * (PAGE_SIZE / 1024)),
+           (uint32_t)(nr_free_pages() * (PAGE_SIZE / 1024)),
            (uint32_t)(totalram_pages() * (PAGE_SIZE / 1024)));
     printf("buddy_max_order=%d\n", buddy_max_order_get());
     printf("DMA: free0=%d nr0=%d free_max=%d nr_max=%d\n",
@@ -597,7 +597,7 @@ static int handle_mm_fault(struct mm_struct *mm, uint32_t page_base, int is_pres
     if (vma_allows(mm, page_base, 1, 0))
         flags |= PTE_READ_WRITE;
     map_page_ex(page_directory, phys, (void *)page_base, flags);
-    rmap_add(mm, page_base, (uint32_t)phys);
+    page_add_anon_rmap(mm, page_base, (uint32_t)phys);
     memset((void *)page_base, 0, PAGE_SIZE);
     return 1;
 }
@@ -718,7 +718,7 @@ struct pt_regs *do_page_fault(struct pt_regs *regs)
     }
     map_page_ex(page_directory, phys, (void*)page_base, flags);
     if (user_access && current && current->mm)
-        rmap_add(current->mm, page_base, (uint32_t)phys);
+        page_add_anon_rmap(current->mm, page_base, (uint32_t)phys);
 
     memset((void*)page_base, 0, PAGE_SIZE);
     return regs;

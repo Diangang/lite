@@ -10,22 +10,19 @@
  * /sys/class/scsi_device.
  */
 
-struct bus_type scsi_bus_type;
+struct bus_type scsi_bus_type = {
+    .name = "scsi",
+};
 
-static struct class sdev_class;
+static struct class sdev_class = {
+    .name = "scsi_device",
+};
 
 static int scsi_sysfs_register(void)
 {
-    memset(&scsi_bus_type, 0, sizeof(scsi_bus_type));
-    scsi_bus_type.name = "scsi";
-    INIT_LIST_HEAD(&scsi_bus_type.list);
-    if (bus_register_static(&scsi_bus_type) != 0)
+    if (bus_register(&scsi_bus_type) != 0)
         return -1;
 
-    memset(&sdev_class, 0, sizeof(sdev_class));
-    sdev_class.name = "scsi_device";
-    INIT_LIST_HEAD(&sdev_class.list);
-    INIT_LIST_HEAD(&sdev_class.devices);
     if (class_register(&sdev_class) != 0)
         return -1;
     return 0;

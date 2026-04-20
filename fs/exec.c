@@ -291,7 +291,7 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
                 return -1;
             }
             map_page_ex(user_dir, phys, (void*)va, PTE_PRESENT | PTE_READ_WRITE | PTE_USER);
-            rmap_add(current->mm, va, (uint32_t)phys);
+            page_add_anon_rmap(current->mm, va, (uint32_t)phys);
         }
     }
     mm_add_vma(current->mm, user_stack_base, USER_STACK_TOP, VMA_READ | VMA_WRITE);
@@ -306,7 +306,7 @@ int kernel_load_user_program(const char* name, uint32_t* entry, uint32_t* user_s
         }
         map_page_ex(user_dir, stack_phys, (void*)va,
                         PTE_PRESENT | PTE_READ_WRITE | PTE_USER);
-        rmap_add(current->mm, va, (uint32_t)stack_phys);
+        page_add_anon_rmap(current->mm, va, (uint32_t)stack_phys);
     }
 
     uint32_t entry_point = ehdr->e_entry;

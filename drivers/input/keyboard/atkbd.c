@@ -35,7 +35,7 @@ static int atkbd_connect(struct serio *serio)
     return 0;
 }
 
-static struct serio_driver atkbd_driver = {
+static struct serio_driver atkbd_drv = {
     .name = "atkbd",
     .connect = atkbd_connect,
     .disconnect = NULL,
@@ -44,6 +44,6 @@ static struct serio_driver atkbd_driver = {
 
 static int atkbd_init(void)
 {
-    return serio_register_driver(&atkbd_driver);
+    return serio_register_driver(&atkbd_drv);
 }
 module_init(atkbd_init);

@@ -1,8 +1,8 @@
 #include "linux/sched.h"
 #include "linux/cred.h"
 
-/* task_get_uid: Implement task get uid. */
-uint32_t task_get_uid(void)
+/* current_uid: Return the current task uid. */
+uint32_t current_uid(void)
 {
     struct task_struct *task = task_current();
     if (!task)
@@ -10,8 +10,8 @@ uint32_t task_get_uid(void)
     return task->uid;
 }
 
-/* task_get_gid: Implement task get gid. */
-uint32_t task_get_gid(void)
+/* current_gid: Return the current task gid. */
+uint32_t current_gid(void)
 {
     struct task_struct *task = task_current();
     if (!task)
@@ -19,8 +19,8 @@ uint32_t task_get_gid(void)
     return task->gid;
 }
 
-/* task_get_umask: Implement task get umask. */
-uint32_t task_get_umask(void)
+/* current_umask: Return the current task umask. */
+uint32_t current_umask(void)
 {
     struct task_struct *task = task_current();
     if (!task)
@@ -28,8 +28,8 @@ uint32_t task_get_umask(void)
     return task->umask;
 }
 
-/* task_set_umask: Implement task set umask. */
-uint32_t task_set_umask(uint32_t mask)
+/* sys_umask: Set the current task umask and return the previous value. */
+uint32_t sys_umask(uint32_t mask)
 {
     struct task_struct *task = task_current();
     if (!task)

@@ -55,8 +55,8 @@ uint32_t kswapd_file_reclaim_count(void)
     return kswapd_file_reclaims;
 }
 
-/* try_to_free_pages_sc: Implement try to free pages with reclaim knobs. */
-uint32_t try_to_free_pages_sc(struct zone *zone, unsigned int order, struct scan_control *sc)
+/* shrink_zone: Reclaim pages from a zone with explicit scan control. */
+uint32_t shrink_zone(struct zone *zone, unsigned int order, struct scan_control *sc)
 {
     if (!zone)
         return 0;
@@ -124,5 +124,5 @@ uint32_t try_to_free_pages(struct zone *zone, unsigned int order)
         .may_unmap = 1,
         .may_swap = 1,
     };
-    return try_to_free_pages_sc(zone, order, &sc);
+    return shrink_zone(zone, order, &sc);
 }

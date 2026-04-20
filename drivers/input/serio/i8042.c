@@ -61,15 +61,15 @@ static const struct platform_device_id i8042_platform_ids[] = {
     { .name = NULL, .driver_data = 0 }
 };
 
-static struct platform_driver i8042_platform_driver = {
-    .name = "i8042",
+static struct platform_driver i8042_driver = {
+    .driver = { .name = "i8042" },
     .id_table = i8042_platform_ids,
     .probe = i8042_platform_probe,
     .remove = NULL,
 };
 
-static int i8042_driver_init(void)
+static int i8042_init(void)
 {
-    return platform_driver_register(&i8042_platform_driver);
+    return platform_driver_register(&i8042_driver);
 }
-module_init(i8042_driver_init);
+module_init(i8042_init);

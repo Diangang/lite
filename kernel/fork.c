@@ -74,7 +74,7 @@ int sys_fork(struct pt_regs *regs)
         return -1;
     }
 
-    task->pid = next_task_id++;
+    task->pid = ++last_pid;
     task->parent = parent;
     task->thread.regs = copy_thread(stack, NULL, regs);
     if (!task->thread.regs) {
@@ -101,6 +101,7 @@ int sys_fork(struct pt_regs *regs)
     task->uid = parent->uid;
     task->gid = parent->gid;
     task->umask = parent->umask;
+    task->nameidata = NULL;
     files_init(task);
     files_clone(task, parent);
     task->uid = parent->uid;
@@ -133,7 +134,7 @@ static int task_create_internal(void (*entry)(void), const char *program)
         return -1;
     }
 
-    task->pid = next_task_id++;
+    task->pid = ++last_pid;
     task->parent = parent;
     task->thread.regs = copy_thread(stack, entry, NULL);
     task->thread.sp0 = (uint32_t*)((uint32_t)stack + THREAD_SIZE);
@@ -157,6 +158,7 @@ static int task_create_internal(void (*entry)(void), const char *program)
     task->gid = parent ? parent->gid : 0;
     task->umask = parent ? parent->umask : 022;
     set_task_comm(task, program);
+    task->nameidata = NULL;
     if (parent) {
         task->fs.pwd = parent->fs.pwd;
         task->fs.root = parent->fs.root;

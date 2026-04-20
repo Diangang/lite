@@ -41,7 +41,7 @@ uint32_t task_dump_maps_pid(uint32_t pid, char *buf, uint32_t len)
     if (list_empty(&task_list_head))
         return 0;
 
-    struct task_struct *t = find_task_by_pid(pid);
+    struct task_struct *t = find_task_by_vpid(pid);
     if (!t || !t->mm)
         return 0;
 

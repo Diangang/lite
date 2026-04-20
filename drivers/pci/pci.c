@@ -7,11 +7,20 @@
 #include "linux/memlayout.h"
 #include "base.h"
 
-struct bus_type pci_bus_type;
+static int pci_bus_match(struct device *dev, struct device_driver *drv);
+static const struct attribute_group *pci_dev_groups[];
+
+struct bus_type pci_bus_type = {
+    .name = "pci",
+    .match = pci_bus_match,
+    .dev_groups = pci_dev_groups,
+};
 static struct device *pci_root_dev;
 const struct device_type pci_dev_type = { .name = "pci" };
 static const struct device_type pci_bus_dev_type = { .name = "pci_bus" };
-static struct class pcibus_class;
+static struct class pcibus_class = {
+    .name = "pci_bus",
+};
 static struct pci_bus *pci_buses[256];
 static uint8_t pci_next_bus = 1;
 
@@ -154,10 +163,6 @@ static struct pci_bus *pci_bus_create(uint8_t busnr, struct device *bridge)
 
 static int pcibus_class_init(void)
 {
-    memset(&pcibus_class, 0, sizeof(pcibus_class));
-    pcibus_class.name = "pci_bus";
-    INIT_LIST_HEAD(&pcibus_class.list);
-    INIT_LIST_HEAD(&pcibus_class.devices);
     return class_register(&pcibus_class);
 }
 core_initcall(pcibus_class_init);
@@ -792,33 +797,26 @@ static void pci_driver_remove(struct device *dev)
 
 int pci_register_driver(struct pci_driver *drv)
 {
-    if (!drv || !drv->name)
+    if (!drv || !drv->driver.name)
         return -1;
     if (!pci_bus_type.name || !pci_bus_type.name[0])
         return -1;
-    init_driver(&drv->driver, drv->name, &pci_bus_type, pci_driver_probe);
+    init_driver(&drv->driver, drv->driver.name, &pci_bus_type, pci_driver_probe);
     drv->driver.remove = pci_driver_remove;
     return driver_register(&drv->driver);
 }
 
-int pci_unregister_driver(struct pci_driver *drv)
+void pci_unregister_driver(struct pci_driver *drv)
 {
     if (!drv)
-        return -1;
-    return driver_unregister(&drv->driver);
+        return;
+    driver_unregister(&drv->driver);
 }
 
 /* pci_init: Initialize PCI. */
 static int pci_init(void)
 {
-    if (pci_bus_type.name && pci_bus_type.name[0])
-        return 0;
-    memset(&pci_bus_type, 0, sizeof(pci_bus_type));
-    pci_bus_type.name = "pci";
-    pci_bus_type.match = pci_bus_match;
-    pci_bus_type.dev_groups = pci_dev_groups;
-    INIT_LIST_HEAD(&pci_bus_type.list);
-    if (bus_register_static(&pci_bus_type) != 0)
+    if (bus_register(&pci_bus_type) != 0)
         return -1;
     memset(pci_buses, 0, sizeof(pci_buses));
     pci_next_bus = 1;

@@ -1,17 +1,17 @@
 #include "linux/libc.h"
 #include "linux/params.h"
 
-/* set_init_process: Set init process. */
+/* set_execute_command: Set init command override. */
 char saved_command_line[256];
-static char init_process[64];
+static char execute_command[64];
 
-static void set_init_process(const char *value, size_t len)
+static void set_execute_command(const char *value, size_t len)
 {
-    if (len >= sizeof(init_process))
-        len = sizeof(init_process) - 1;
+    if (len >= sizeof(execute_command))
+        len = sizeof(execute_command) - 1;
     if (len)
-        memcpy(init_process, value, len);
-    init_process[len] = '\0';
+        memcpy(execute_command, value, len);
+    execute_command[len] = '\0';
 }
 
 /* parse_command_line: Parse command line. */
@@ -19,7 +19,7 @@ static void parse_command_line(void)
 {
     size_t i = 0;
 
-    strcpy(init_process, "/sbin/init");
+    strcpy(execute_command, "/sbin/init");
 
     while (saved_command_line[i]) {
         while (saved_command_line[i] == ' ')
@@ -31,7 +31,7 @@ static void parse_command_line(void)
             size_t end = start;
             while (saved_command_line[end] && saved_command_line[end] != ' ')
                 end++;
-            set_init_process(&saved_command_line[start], end - start);
+            set_execute_command(&saved_command_line[start], end - start);
             return;
         }
         while (saved_command_line[i] && saved_command_line[i] != ' ')
@@ -57,8 +57,8 @@ void setup_command_line(const char *cmdline)
     parse_command_line();
 }
 
-/* get_init_process: Get init process. */
-const char *get_init_process(void)
+/* get_execute_command: Get init command override. */
+const char *get_execute_command(void)
 {
-    return init_process;
+    return execute_command;
 }

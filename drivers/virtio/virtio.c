@@ -11,7 +11,12 @@
  *   - include/linux/virtio.h: struct virtio_device/virtio_driver
  */
 
-struct bus_type virtio_bus_type;
+static int virtio_bus_match(struct device *dev, struct device_driver *drv);
+
+struct bus_type virtio_bus_type = {
+    .name = "virtio",
+    .match = virtio_bus_match,
+};
 
 void virtio_reset_device(struct virtio_device *vdev)
 {
@@ -108,18 +113,18 @@ static void virtio_driver_remove(struct device *dev)
 
 int register_virtio_driver(struct virtio_driver *drv)
 {
-    if (!drv || !drv->name || !drv->name[0])
+    if (!drv || !drv->driver.name || !drv->driver.name[0])
         return -1;
-    init_driver(&drv->driver, drv->name, &virtio_bus_type, virtio_driver_probe);
+    init_driver(&drv->driver, drv->driver.name, &virtio_bus_type, virtio_driver_probe);
     drv->driver.remove = virtio_driver_remove;
     return driver_register(&drv->driver);
 }
 
-int unregister_virtio_driver(struct virtio_driver *drv)
+void unregister_virtio_driver(struct virtio_driver *drv)
 {
     if (!drv)
-        return -1;
-    return driver_unregister(&drv->driver);
+        return;
+    driver_unregister(&drv->driver);
 }
 
 int register_virtio_device(struct virtio_device *dev)
@@ -139,10 +144,6 @@ void unregister_virtio_device(struct virtio_device *dev)
 
 static int virtio_init(void)
 {
-    memset(&virtio_bus_type, 0, sizeof(virtio_bus_type));
-    virtio_bus_type.name = "virtio";
-    virtio_bus_type.match = virtio_bus_match;
-    INIT_LIST_HEAD(&virtio_bus_type.list);
-    return bus_register_static(&virtio_bus_type);
+    return bus_register(&virtio_bus_type);
 }
 subsys_initcall(virtio_init);

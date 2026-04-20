@@ -24,7 +24,7 @@ int platform_bus_init(void)
     platform_bus_type.name = "platform";
     platform_bus_type.match = platform_bus_match;
     INIT_LIST_HEAD(&platform_bus_type.list);
-    return bus_register_static(&platform_bus_type);
+    return bus_register(&platform_bus_type);
 }
 
 static void platform_device_release(struct device *dev)
@@ -101,18 +101,18 @@ static void platform_driver_remove(struct device *dev)
 
 int platform_driver_register(struct platform_driver *drv)
 {
-    if (!drv || !drv->name)
+    if (!drv || !drv->driver.name)
         return -1;
-    init_driver(&drv->driver, drv->name, &platform_bus_type, platform_driver_probe);
+    init_driver(&drv->driver, drv->driver.name, &platform_bus_type, platform_driver_probe);
     drv->driver.remove = platform_driver_remove;
     return driver_register(&drv->driver);
 }
 
-int platform_driver_unregister(struct platform_driver *drv)
+void platform_driver_unregister(struct platform_driver *drv)
 {
     if (!drv)
-        return -1;
-    return driver_unregister(&drv->driver);
+        return;
+    driver_unregister(&drv->driver);
 }
 
 struct platform_device *platform_device_register_simple(const char *name, int id)

@@ -5,7 +5,7 @@
 #include "linux/slab.h"
 #include "linux/memlayout.h"
 
-static int blockdev_readpage(struct inode *inode, uint32_t index, struct page_cache_entry *page)
+static int blkdev_readpage(struct inode *inode, uint32_t index, struct page_cache_entry *page)
 {
     if (!inode || !page)
         return -1;
@@ -19,7 +19,7 @@ static int blockdev_readpage(struct inode *inode, uint32_t index, struct page_ca
     return 0;
 }
 
-static int blockdev_writepage(struct inode *inode, struct page_cache_entry *page)
+static int blkdev_writepage(struct inode *inode, struct page_cache_entry *page)
 {
     if (!inode || !page)
         return -1;
@@ -33,12 +33,12 @@ static int blockdev_writepage(struct inode *inode, struct page_cache_entry *page
     return 0;
 }
 
-static struct address_space_operations blockdev_aops = {
-    .readpage = blockdev_readpage,
-    .writepage = blockdev_writepage
+static struct address_space_operations def_blk_aops = {
+    .readpage = blkdev_readpage,
+    .writepage = blkdev_writepage
 };
 
-static void blockdev_open(struct inode *inode)
+static void blkdev_open(struct inode *inode)
 {
     if (!inode || (inode->flags & 0x7) != FS_BLOCKDEVICE)
         return;
@@ -46,7 +46,7 @@ static void blockdev_open(struct inode *inode)
     (void)blkdev_get(bdev);
 }
 
-static void blockdev_close(struct inode *inode)
+static void blkdev_release(struct inode *inode)
 {
     if (!inode || (inode->flags & 0x7) != FS_BLOCKDEVICE)
         return;
@@ -54,11 +54,11 @@ static void blockdev_close(struct inode *inode)
     blkdev_put(bdev);
 }
 
-static struct file_operations blockdev_ops = {
+static struct file_operations def_blk_fops = {
     .read = generic_file_read,
     .write = generic_file_write,
-    .open = blockdev_open,
-    .close = blockdev_close,
+    .open = blkdev_open,
+    .close = blkdev_release,
     .readdir = NULL,
     .ioctl = NULL
 };
@@ -74,7 +74,7 @@ struct inode *blockdev_inode_create(struct block_device *bdev)
     }
     /* Keep bdev alive as long as the inode exists (Linux: bd_inode lifetime). */
     bdgrab(bdev);
-    struct inode *inode = alloc_special_inode(FS_BLOCKDEVICE, bdev->devt, &blockdev_ops,
+    struct inode *inode = alloc_special_inode(FS_BLOCKDEVICE, bdev->devt, &def_blk_fops,
                                               0666, 0, 0);
     if (!inode)
         return NULL;
@@ -86,7 +86,7 @@ struct inode *blockdev_inode_create(struct block_device *bdev)
         return NULL;
     }
     address_space_init(mapping, inode);
-    mapping->a_ops = &blockdev_aops;
+    mapping->a_ops = &def_blk_aops;
     inode->i_mapping = mapping;
     bdev->inode = inode;
     return inode;

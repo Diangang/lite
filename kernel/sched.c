@@ -14,7 +14,7 @@ struct list_head task_list_head = LIST_HEAD_INIT(task_list_head);
  * boot CPU scheduler state below; new core code should use helpers instead.
  */
 struct task_struct *current = NULL;
-uint32_t next_task_id = 1;
+uint32_t last_pid = 0;
 int need_resched = 0;
 uint32_t sched_switch_count = 0;
 
@@ -328,6 +328,7 @@ static void init_task(void)
     task->uid = 0;
     task->gid = 0;
     task->umask = 022;
+    task->nameidata = NULL;
     files_init(task);
     task->waitq = NULL;
     init_waitqueue_entry(&task->wait_entry, task);

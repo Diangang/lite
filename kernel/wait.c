@@ -5,7 +5,7 @@
 #include "linux/uaccess.h"
 #include "linux/wait.h"
 
-void wait_queue_init(wait_queue_t *q)
+void __init_waitqueue_head(wait_queue_head_t *q)
 {
     if (!q)
         return;
@@ -47,7 +47,7 @@ void wait_queue_block_locked(wait_queue_t *q)
     task->state = TASK_BLOCKED;
 }
 
-void wait_queue_wake_all(wait_queue_t *q)
+void __wake_up(wait_queue_head_t *q)
 {
     if (!q)
         return;

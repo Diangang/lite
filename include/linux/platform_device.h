@@ -20,7 +20,6 @@ struct platform_device {
 };
 
 struct platform_driver {
-    const char *name;
     const struct platform_device_id *id_table;
     int (*probe)(struct platform_device *pdev);
     void (*remove)(struct platform_device *pdev);
@@ -37,7 +36,7 @@ extern struct bus_type platform_bus_type;
 extern struct device platform_bus;
 
 int platform_driver_register(struct platform_driver *drv);
-int platform_driver_unregister(struct platform_driver *drv);
+void platform_driver_unregister(struct platform_driver *drv);
 
 struct platform_device *platform_device_register_simple(const char *name, int id);
 struct platform_device *platform_get_platform_device(struct device *dev);

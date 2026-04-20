@@ -1,6 +1,6 @@
-#include "linux/file.h"
-#include "linux/procfs.h"
 #include "linux/libc.h"
+#include "linux/fs.h"
+#include "linux/file.h"
 #include "linux/init.h"
 #include "linux/sched.h"
 #include "linux/fdtable.h"
@@ -22,7 +22,7 @@
 #include "asm/pgtable.h"
 
 static struct dirent proc_dirent;
-// Note: proc_root is dynamically allocated in init_procfs now
+// proc_root is allocated when procfs superblock is built.
 static struct inode proc_tasks;
 static struct inode proc_sched;
 static struct inode proc_irq;
@@ -352,7 +352,7 @@ static uint32_t proc_read_meminfo(struct inode *node, uint32_t offset, uint32_t 
     static char tmp[1536];
     uint32_t off = 0;
     uint32_t total_kb = (uint32_t)(totalram_pages() * (PAGE_SIZE / 1024));
-    uint32_t free_kb = (uint32_t)(freeram_pages() * (PAGE_SIZE / 1024));
+    uint32_t free_kb = (uint32_t)(nr_free_pages() * (PAGE_SIZE / 1024));
     uint32_t min_kb = 0;
     uint32_t low_kb = 0;
     uint32_t high_kb = 0;
@@ -1360,12 +1360,6 @@ static struct file_operations proc_mounts_ops = {
     .ioctl = NULL
 };
 
-/* init_procfs: Initialize procfs. */
-void init_procfs(void)
-{
-    vfs_mount_fs("/proc", "proc");
-}
-
 /* proc_fill_super: Implement proc fill super. */
 static int proc_fill_super(struct super_block *sb, void *data, int silent)
 {
@@ -1548,11 +1542,11 @@ static struct file_system_type proc_fs_type = {
     .next = NULL,
 };
 
-/* init_proc_fs: Initialize proc fs. */
-static int init_proc_fs(void)
+/* proc_root_init: Register the proc filesystem. */
+static int proc_root_init(void)
 {
     register_filesystem(&proc_fs_type);
     printf("proc filesystem registered.\n");
     return 0;
 }
-fs_initcall(init_proc_fs);
+fs_initcall(proc_root_init);

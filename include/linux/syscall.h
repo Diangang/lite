@@ -4,6 +4,6 @@
 #include "asm/ptrace.h"
 #include "asm/unistd.h"
 
-void init_syscall(void);
+void syscall_init(void);
 
 #endif

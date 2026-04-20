@@ -10,6 +10,7 @@
 #include "asm/processor.h"
 
 struct pt_regs;
+struct nameidata;
 
 struct task_struct {
     uint32_t pid;
@@ -31,6 +32,7 @@ struct task_struct {
     uint32_t exit_info1;
     char comm[32];
     struct fs_struct fs;
+    struct nameidata *nameidata;
     struct files_struct files;
     uint32_t uid;
     uint32_t gid;
@@ -82,7 +84,7 @@ extern struct list_head task_list_head;
  * helper accessors below instead of consuming these globals directly.
  */
 extern struct task_struct *current;
-extern uint32_t next_task_id;
+extern uint32_t last_pid;
 extern int need_resched;
 extern uint32_t sched_switch_count;
 

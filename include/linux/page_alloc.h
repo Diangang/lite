@@ -37,7 +37,7 @@ void get_page(unsigned long addr);
 unsigned int page_ref_count(unsigned long addr);
 
 unsigned long totalram_pages(void);
-unsigned long freeram_pages(void);
+unsigned long nr_free_pages(void);
 unsigned long zone_free_pages(struct zone *zone);
 
 unsigned int buddy_max_order_get(void);

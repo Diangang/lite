@@ -46,7 +46,7 @@ int sys_kill(uint32_t id, int sig)
     if (list_empty(&task_list_head))
         return -1;
     uint32_t flags = tasklist_lock();
-    struct task_struct *t = find_task_by_pid(id);
+    struct task_struct *t = find_task_by_vpid(id);
     if (!t || t->pid == 0) {
         tasklist_unlock(flags);
         return -1;

@@ -538,7 +538,7 @@ static const struct pci_device_id virtio_pci_id_table[] = {
 };
 
 static struct pci_driver virtio_pci_driver = {
-    .name = "virtio-pci",
+    .driver = { .name = "virtio-pci" },
     .id_table = virtio_pci_id_table,
     .probe = virtio_pci_probe,
     .remove = virtio_pci_remove,
