@@ -5,7 +5,8 @@
 #include "linux/libc.h"
 #include "linux/sysfs.h"
 
-static struct subsystem bus_subsys;
+/* Linux mapping: linux2.6/drivers/base/bus.c uses bus_kset as /sys/bus root. */
+static struct kset bus_kset;
 static LIST_HEAD(bus_list_head);
 
 #define to_bus_attr(_attr) container_of(_attr, struct bus_attribute, attr)
@@ -260,13 +261,14 @@ static int bus_sysfs_register_subdirs(struct bus_type *bus)
 
 struct kset *buses_kset_get(void)
 {
-    return &bus_subsys.kset;
+    return &bus_kset;
 }
 
 void buses_init(void)
 {
-    kset_init(&bus_subsys.kset, "bus");
-    (void)subsystem_register(&bus_subsys);
+    kset_init(&bus_kset, "bus");
+    /* Linux mapping: kset_create_and_add("bus", ...) */
+    (void)kobject_add(&bus_kset.kobj);
 }
 
 /* bus_default_match: Implement bus default match. */

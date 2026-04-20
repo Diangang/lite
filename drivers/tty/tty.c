@@ -9,7 +9,6 @@
 #include "linux/console.h"
 #include "linux/serial.h"
 #include "linux/tty_ldisc.h"
-#include "base.h"
 
 static const char *tty_devnode(struct device *dev, uint32_t *mode, uint32_t *uid, uint32_t *gid)
 {
@@ -38,27 +37,6 @@ static struct list_head tty_drivers;
 extern void n_tty_init(void);
 static const struct tty_ldisc_ops *tty_ldisc = &n_tty_ldisc_ops;
 
-static struct device *tty_virtual_root(void)
-{
-    struct device *vroot = virtual_root_device();
-    if (!vroot)
-        return NULL;
-    struct device *child = virtual_child_device(vroot, "tty");
-    if (child)
-        return child;
-    struct device *dev = (struct device *)kmalloc(sizeof(*dev));
-    if (!dev)
-        return NULL;
-    memset(dev, 0, sizeof(*dev));
-    device_initialize(dev, "tty");
-    device_set_parent(dev, vroot);
-    if (device_register(dev) != 0) {
-        kobject_put(&dev->kobj);
-        return NULL;
-    }
-    return dev;
-}
-
 int tty_register_driver(struct tty_driver *drv, const char *name, uint32_t num)
 {
     if (!drv || !name || num == 0)
@@ -84,8 +62,7 @@ struct device *tty_register_device(struct tty_driver *drv, uint32_t index, struc
 {
     if (!drv || !name || index >= drv->num)
         return NULL;
-    struct class *cls = class_find("tty");
-    if (!cls)
+    if (!tty_class.name)
         return NULL;
     struct tty_port *ttydev = (struct tty_port *)kmalloc(sizeof(*ttydev));
     if (!ttydev)
@@ -113,7 +90,7 @@ struct device *tty_register_device(struct tty_driver *drv, uint32_t index, struc
     memset(dev, 0, sizeof(*dev));
     device_initialize(dev, name);
     dev->type = &tty_dev_type;
-    dev->class = cls;
+    dev->class = &tty_class;
     dev->driver_data = ttydev;
     if (parent)
         device_set_parent(dev, parent);
@@ -239,9 +216,7 @@ core_initcall(tty_class_init);
 
 static int tty_device_init(void)
 {
-    struct class *cls = class_find("tty");
-    struct device *parent = tty_virtual_root();
-    if (!cls || !parent)
+    if (!tty_class.name)
         return -1;
     /* Linux-like: /dev/tty is a class device (no bus). */
     struct device *dev = (struct device *)kmalloc(sizeof(*dev));
@@ -250,8 +225,7 @@ static int tty_device_init(void)
     memset(dev, 0, sizeof(*dev));
     device_initialize(dev, "tty");
     dev->type = &tty_dev_type;
-    dev->class = cls;
-    device_set_parent(dev, parent);
+    dev->class = &tty_class;
     /* Provide a stable devtmpfs key: /dev/tty (Linux uses 5:0). */
     dev->devt = MKDEV(5, 0);
     if (device_add(dev) != 0) {

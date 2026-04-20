@@ -27,19 +27,27 @@ static void atkbd_interrupt(struct serio *serio, uint8_t data)
         tty_receive_char((char)c);
 }
 
-static int atkbd_connect(struct serio *serio)
+static int atkbd_connect(struct serio *serio, struct serio_driver *drv)
 {
+    (void)drv;
     if (!serio)
         return -1;
-    /* Minimal: accept the first i8042-like serio port. */
+    /* Minimal: accept i8042-like serio ports only. */
     return 0;
 }
 
+static const struct serio_device_id atkbd_serio_ids[] = {
+    { .type = SERIO_8042, .proto = SERIO_ANY, .id = SERIO_ANY, .extra = SERIO_ANY },
+    { 0 }
+};
+
 static struct serio_driver atkbd_drv = {
-    .name = "atkbd",
+    .description = "AT keyboard",
+    .id_table = atkbd_serio_ids,
     .connect = atkbd_connect,
     .disconnect = NULL,
     .interrupt = atkbd_interrupt,
+    .driver = { .name = "atkbd" },
 };
 
 static int atkbd_init(void)

@@ -29,9 +29,6 @@ static uint32_t pf_null = 0;
 static uint32_t pf_kernel_addr = 0;
 static uint32_t pf_out_of_range = 0;
 
-extern void load_page_directory(uint32_t*);
-extern void enable_paging(void);
-
 /* map_page_ex: Map page ex. */
 void map_page_ex(pgd_t* pgd, void* phys_addr, void* virt_addr, pteval_t flags)
 {

@@ -8,11 +8,12 @@
 #include "linux/vsprintf.h"
 #include "base.h"
 
-static struct subsystem devices_subsys;
+/* Linux mapping: linux2.6/drivers/base/core.c uses devices_kset as /sys/devices root. */
+static struct kset devices_kset;
 
 struct kset *devices_kset_get(void)
 {
-    return &devices_subsys.kset;
+    return &devices_kset;
 }
 
 /* device_release_kobj: Implement device release kobj. */
@@ -430,7 +431,7 @@ void device_unregister(struct device *dev)
     devtmpfs_delete_node(dev);
     device_uevent_emit("remove", dev);
     kobject_del(&dev->kobj);
-    kset_remove(&devices_subsys.kset, &dev->kobj);
+    kset_remove(&devices_kset, &dev->kobj);
     kobject_put(&dev->kobj);
 }
 
@@ -491,6 +492,6 @@ struct device *find_device_by_name(const char *name)
 void devices_init(void)
 {
     device_sysfs_init_ktype();
-    kset_init(&devices_subsys.kset, "devices");
-    (void)subsystem_register(&devices_subsys);
+    kset_init(&devices_kset, "devices");
+    (void)kobject_add(&devices_kset.kobj);
 }

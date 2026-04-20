@@ -46,15 +46,12 @@ int nvme_ctrl_register(struct nvme_dev *dev)
     if (dev->ctrl_registered)
         return 0;
 
-    struct class *cls = class_find("nvme");
-    if (!cls)
-        return -1;
-
     char name[16];
     nvme_make_ctrl_name(name, dev->instance);
     device_initialize(&dev->ctrl_dev, name);
     dev->ctrl_dev.release = nvme_ctrl_release;
-    dev->ctrl_dev.class = cls;
+    /* Avoid global string lookup; nvme_core owns the class object. */
+    dev->ctrl_dev.class = &nvme_class;
     device_set_parent(&dev->ctrl_dev, &dev->pdev->dev);
     if (device_add(&dev->ctrl_dev) != 0)
         return -1;

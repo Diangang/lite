@@ -420,9 +420,7 @@ struct device *block_register_disk(struct gendisk *disk, struct device *parent)
 {
     if (!disk)
         return NULL;
-    struct class *cls = class_find("block");
-    if (!cls)
-        return NULL;
+    struct class *cls = &block_class;
 
     struct device *dev = (struct device *)kmalloc(sizeof(*dev));
     if (!dev)

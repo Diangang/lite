@@ -5,6 +5,12 @@
 #include "linux/platform_device.h"
 
 static struct serio i8042_port;
+static int i8042_initialized;
+
+static void i8042_port_release(struct device *dev)
+{
+    (void)dev;
+}
 
 static struct pt_regs *i8042_irq(struct pt_regs *regs)
 {
@@ -14,8 +20,10 @@ static struct pt_regs *i8042_irq(struct pt_regs *regs)
     return regs;
 }
 
-static int i8042_hw_init(void)
+static int i8042_hw_init(struct device *parent)
 {
+    if (i8042_initialized)
+        return 0;
     register_irq_handler(IRQ_KEYBOARD, i8042_irq);
 
     /* Clear output buffer. */
@@ -44,16 +52,39 @@ static int i8042_hw_init(void)
     outb(0x60, 0xF4);
 
     i8042_port.name = "i8042";
+    i8042_port.id.type = SERIO_8042;
+    i8042_port.id.proto = SERIO_ANY;
+    i8042_port.id.id = SERIO_ANY;
+    i8042_port.id.extra = SERIO_ANY;
+    /* Provider responsibilities: set parent + release + id, then register. */
+    i8042_port.parent = parent;
+    i8042_port.dev.release = i8042_port_release; /* static port */
     serio_register_port(&i8042_port);
 
+    i8042_initialized = 1;
     printf("i8042 initialized.\n");
     return 0;
 }
 
+static void i8042_hw_exit(void)
+{
+    if (!i8042_initialized)
+        return;
+    serio_unregister_port(&i8042_port);
+    /* Best-effort: drop handler to avoid stale pointer use. */
+    register_irq_handler(IRQ_KEYBOARD, 0);
+    i8042_initialized = 0;
+}
+
 static int i8042_platform_probe(struct platform_device *pdev)
 {
+    return i8042_hw_init(pdev ? &pdev->dev : NULL);
+}
+
+static void i8042_platform_remove(struct platform_device *pdev)
+{
     (void)pdev;
-    return i8042_hw_init();
+    i8042_hw_exit();
 }
 
 static const struct platform_device_id i8042_platform_ids[] = {
@@ -65,7 +96,7 @@ static struct platform_driver i8042_driver = {
     .driver = { .name = "i8042" },
     .id_table = i8042_platform_ids,
     .probe = i8042_platform_probe,
-    .remove = NULL,
+    .remove = i8042_platform_remove,
 };
 
 static int i8042_init(void)

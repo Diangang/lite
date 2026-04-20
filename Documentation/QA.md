@@ -376,6 +376,37 @@ VGA 参考（保留用于后续重做）：
 
 TTY 输入逻辑在 [tty.c](file:///data25/lidg/lite/drivers/tty/tty.c#L97-L186)，设备节点与 `/dev` 挂载逻辑在 [devtmpfs.c](file:///data25/lidg/lite/drivers/base/devtmpfs.c)。
 
+### Q5.3B: `serio` / `i8042` / `atkbd` 三者在当前系统里的关系是什么？和 Linux 一样吗？
+**回答**：
+当前 Lite 里这三者的分工与 Linux2.6 的 “i8042 -> serio core/bus -> atkbd driver” 模型一致，但实现是最小子集。
+
+为什么不把键盘逻辑全写进 `i8042`：
+- Linux 语义里 `i8042` 是控制器/传输层（serio port provider），不是“键盘协议驱动”。它负责从硬件读出字节并发布端口；端口上可能挂键盘、也可能挂 PS/2 鼠标（aux port）等设备。
+- `atkbd` 的角色是协议层：消费 serio 字节流并把 AT 键盘扫描码解释为更高层的输入语义。把协议层放在 `atkbd` 而不是 `i8042`，可以避免把控制器代码变成“键盘+鼠标+…的大杂烩”，也更贴近 Linux 的分层（未来要支持鼠标时应新增另一个 serio driver，而不是继续堆在 `i8042`）。
+
+“真硬件”和“抽象层”怎么理解：
+- 真正的硬件链路通常是：PS/2 键盘（设备本体） -> i8042 控制器接口/寄存器（主机侧控制器逻辑） -> IRQ1 -> CPU。
+- `i8042` 驱动做的是“硬件接口层”：响应 IRQ，从 i8042 数据端口读出一个字节（扫描码/协议字节），然后交给 serio core（Linux 对应路径里也是 `serio_interrupt()`）。
+- `serio bus` / `serio port` / `atkbd` 都是软件抽象（虚拟概念），但它们承载的是 Linux driver model 的分层：把“控制器/传输层（产出字节流）”与“协议层（解释字节流）”解耦，使一个控制器可以有多个 port（kbd/aux），一个 port 上可以绑定不同的协议驱动（例如键盘/鼠标）。
+
+职责分层（对齐 Linux 的概念边界）：
+1. `i8042`：控制器/port provider
+   - 负责初始化 8042 硬件与 IRQ1，并把读取到的扫描码字节送进 serio core：`serio_interrupt(&i8042_port, scancode)`（见 [i8042.c](file:///data25/lidg/lite/drivers/input/serio/i8042.c#L15-L22)）。
+   - 负责填好端口静态属性：`i8042_port.id`、`i8042_port.parent`、必要时 `i8042_port.dev.release`，然后只调用 `serio_register_port()` 发布端口（见 [i8042.c](file:///data25/lidg/lite/drivers/input/serio/i8042.c#L54-L67)）。
+2. `serio`：serio core + serio_bus（driver core 接入点）
+   - 提供 `serio_bus.match/probe/remove`，通过 `id_table` 完成匹配绑定；probe 成功后缓存 `serio->drv`，IRQ 快路径直接分发到 `drv->interrupt()`（见 [serio.c](file:///data25/lidg/lite/drivers/input/serio/serio.c#L38-L155)）。
+   - 对外只暴露 “发布端口”入口：`serio_register_port()`。`serio_init_port()` 是内部 helper，不再作为公共 API（避免外部代码把 init/register 拆开到处调用）（见 [serio.c](file:///data25/lidg/lite/drivers/input/serio/serio.c#L90-L120)、[serio.h](file:///data25/lidg/lite/include/linux/serio.h#L29-L59)）。
+3. `atkbd`：serio driver consumer
+   - 注册 `struct serio_driver atkbd_drv`，带 `id_table` 仅匹配 `SERIO_8042` 端口；匹配后由 driver core 调用 connect，再由 `serio_interrupt()` 分发字节到 `atkbd_interrupt()`（见 [atkbd.c](file:///data25/lidg/lite/drivers/input/keyboard/atkbd.c#L38-L63)）。
+
+与 Linux 的一致点：
+- 模型关系一致：controller/provider 发布 port，serio 作为 bus/core 做匹配绑定，atkbd 作为 serio driver 绑定并消费数据。
+- 匹配语义一致：`serio_device_id` + `SERIO_ANY` 通配 + `{0}` 终止表。
+
+仍然简化/不一致的点（Lite 是“少实现”，不是发明新模型）：
+- Linux 的 `atkbd` 会上报到 Linux input subsystem（`input_dev` 事件）；Lite 目前是把扫描码转字符后直接喂给 `tty_receive_char()`，因此没有完整 input event 层。
+- Linux 的 i8042 通常会注册多个 port（kbd/aux）并支持更多 port ops；Lite 目前只实现满足串口控制台交互的最小闭环。
+
 ### Q5.4: `/dev/console` 和 `/dev/tty` 在当前系统里是什么关系？
 **回答**：
 当前两者都存在于 devtmpfs，但语义不同：
@@ -460,14 +491,41 @@ TTY 输入逻辑在 [tty.c](file:///data25/lidg/lite/drivers/tty/tty.c#L97-L186)
 - 简单匹配绑定
 - `/sys/devices`、`/sys/bus`、`/sys/class` 的可见化
 
-### Q7.3: PCI 和 NVMe 在当前系统里走的是什么路径？
+### Q7.3: 为什么当前有 `platform_device_register_simple()`，却没有非 `simple` 的 `platform_device_register()`？
+**回答**：
+当前 Lite 里只有 [`platform_device_register_simple()`](file:///data25/lidg/lite/drivers/base/platform.c#L118-L158)，没有实现非 `simple` 的 [`platform_device_register()`](file:///data25/lidg/lite/Documentation/archived/Kernel-QA.md#L1597-L1597)。
+
+它之所以叫 `simple`，是因为它只覆盖“最小平台设备注册”这条路径：
+- 分配 `struct platform_device`
+- 填 `name` 和 `id`
+- 拼实例名，例如 `serial0`
+- 调 `device_initialize()` / `device_add()`
+- 把设备挂到 `platform_bus`
+
+这和当前 Lite 的平台设备模型是匹配的，因为 [`struct platform_device`](file:///data25/lidg/lite/include/linux/platform_device.h#L16-L20) 目前只有：
+- `name`
+- `id`
+- `dev`
+
+也就是说，当前还没有 Linux 里更完整的那套资源、platform data、DMA/firmware 节点等需求，因此“只给 `name + id` 就注册”的 `simple` helper 已经足够覆盖现有场景。
+
+如果对照 Linux 语义，可以这样理解：
+- `platform_device_register_simple()`：帮调用者分配对象并填最小字段，适合“快速注册一个简单平台设备”
+- `platform_device_register()`：通常要求调用者先准备好完整 `struct platform_device`，再做注册，灵活性更高
+
+所以当前仓库里的真实状态是：
+- **有** `platform_device_register_simple()`
+- **没有** 非 `simple` 的 `platform_device_register()`
+- 这反映的是 **平台设备基础设施仍是最小子集**，而不是遗漏了一个已经被广泛依赖的接口
+
+### Q7.4: PCI 和 NVMe 在当前系统里走的是什么路径？
 **回答**：
 1.  PCI 总线通过 initcall 初始化并扫描 bus 0，枚举 `pci_dev` 并注册进 device model（见 [pci.c](file:///data25/lidg/lite/drivers/pci/pci.c#L709-L747)、[pci_register_function](file:///data25/lidg/lite/drivers/pci/pci.c#L423-L597)）。
 2.  PCI driver core 通过 `id_table` + `pci_bus_match()` 完成匹配，然后进入“桥接 probe”（`device_driver.probe` -> `pci_driver.probe`）（见 [pci_bus_match](file:///data25/lidg/lite/drivers/pci/pci.c#L640-L657)、[pci_driver_probe](file:///data25/lidg/lite/drivers/pci/pci.c#L659-L676)）。
 3.  NVMe 驱动注册到 PCI bus，按 class code `0x01/0x08` 匹配（见 [nvme_pci_ids](file:///data25/lidg/lite/drivers/nvme/nvme.c#L645-L649)、[nvme_pci_probe](file:///data25/lidg/lite/drivers/nvme/nvme.c#L651-L705)）。
 4.  当前 NVMe 仍是“打通链路”的简化实现：重点在把 PCI 枚举、MMIO、队列、gendisk 注册、devtmpfs/sysfs 暴露串成闭环，还不是完整 NVMe 协议栈。
 
-### Q7.4: devtmpfs 在当前系统里起什么作用？
+### Q7.5: devtmpfs 在当前系统里起什么作用？
 **回答**：
 devtmpfs 负责把抽象设备节点暴露到 `/dev`，当前至少包含：
 - `/dev/console`
@@ -476,7 +534,7 @@ devtmpfs 负责把抽象设备节点暴露到 `/dev`，当前至少包含：
 
 这样用户态不需要自己手动创建设备节点，就能访问 tty/console/ramdisk/NVMe 等设备。当前 devtmpfs 已收敛到 [devtmpfs.c](file:///data25/lidg/lite/drivers/base/devtmpfs.c)，底层承载使用 ramfs。
 
-### Q7.5: 为什么会有 “driver core 的 probe” 和 “PCI/NVMe 自己的 probe” 两层？
+### Q7.6: 为什么会有 “driver core 的 probe” 和 “PCI/NVMe 自己的 probe” 两层？
 **回答**：
 Linux 也是两层分工，Lite 当前做法与其一致。
 1.  driver core 的 `device_driver.probe(struct device *)` 是通用入口：负责绑定关系（`dev->driver`）、sysfs link、uevent（bind/unbind）等共性动作（见 [driver_probe_device](file:///data25/lidg/lite/drivers/base/driver.c#L173-L196)）。

@@ -1720,15 +1720,21 @@ static struct inode *sys_class_finddir(struct inode *node, const char *name)
     (void)node;
     if (!name)
         return NULL;
-    struct class *cls = class_find(name);
-    if (!cls)
+    struct kset *kset = classes_kset_get();
+    if (!kset)
         return NULL;
-    struct inode *ino = sysfs_get_kobj_dir_inode(&cls->subsys.kset.kobj);
-    if (!ino)
-        return NULL;
-    ino->i_op = &sys_class_dir_iops;
-    ino->f_ops = &sys_class_dir_ops;
-    return ino;
+    struct kobject *cur;
+    list_for_each_entry(cur, &kset->list, entry) {
+        if (strcmp(cur->name, name) != 0)
+            continue;
+        struct inode *ino = sysfs_get_kobj_dir_inode(cur);
+        if (!ino)
+            return NULL;
+        ino->i_op = &sys_class_dir_iops;
+        ino->f_ops = &sys_class_dir_ops;
+        return ino;
+    }
+    return NULL;
 }
 
 /* sys_class_dir_readdir: Implement sys class dir readdir. */

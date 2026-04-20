@@ -55,7 +55,7 @@ int scsi_add_host(struct Scsi_Host *shost, struct device *parent)
         return -1;
     snprintf(shost->name, sizeof(shost->name), "host%u", shost->host_no);
     device_initialize(&shost->shost_gendev, shost->name);
-    shost->shost_gendev.class = class_find("scsi_host");
+    shost->shost_gendev.class = &shost_class;
     shost->shost_gendev.bus = &scsi_bus_type;
     if (parent)
         device_set_parent(&shost->shost_gendev, parent);
@@ -90,7 +90,7 @@ int scsi_add_device(struct scsi_device *sdev)
     snprintf(sdev->name, sizeof(sdev->name), "%u:%u:%u:%u",
              sdev->host->host_no, sdev->channel, sdev->id, (uint32_t)sdev->lun);
     device_initialize(&sdev->sdev_gendev, sdev->name);
-    sdev->sdev_gendev.class = class_find("scsi_device");
+    sdev->sdev_gendev.class = &sdev_class;
     sdev->sdev_gendev.bus = &scsi_bus_type;
     device_set_parent(&sdev->sdev_gendev, &starget->dev);
     if (device_add(&sdev->sdev_gendev) != 0) {

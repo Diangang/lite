@@ -1,6 +1,7 @@
 #include "linux/device.h"
 #include "linux/libc.h"
 #include "linux/pci.h"
+#include "linux/serio.h"
 #include "linux/virtio.h"
 #include "linux/vsprintf.h"
 
@@ -188,6 +189,16 @@ int device_get_modalias(struct device *dev, char *buf, uint32_t cap)
         u32_to_hex_fixed(vdev->id.vendor, hx, 8);
         if (!buf_append(buf, &off, cap, hx))
             return -1;
+        return 0;
+    }
+    if (dev->bus && !strcmp(dev->bus->subsys.kset.kobj.name, "serio")) {
+        /*
+         * Linux mapping: linux2.6/drivers/input/serio/serio.c modalias_show():
+         *   "serio:ty%02Xpr%02Xid%02Xex%02X\n"
+         */
+        struct serio *serio = to_serio_port(dev);
+        snprintf(buf, cap, "serio:ty%02Xpr%02Xid%02Xex%02X",
+                 serio->id.type, serio->id.proto, serio->id.id, serio->id.extra);
         return 0;
     }
     if (dev->bus) {

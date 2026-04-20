@@ -9,7 +9,7 @@
  * Lite keeps a minimal class registration to build /sys/class/scsi_host.
  */
 
-static struct class shost_class = {
+struct class shost_class = {
     .name = "scsi_host",
 };
 

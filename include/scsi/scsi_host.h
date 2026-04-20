@@ -21,6 +21,8 @@ struct scsi_disk;
 
 /* Linux mapping: drivers/scsi/scsi_sysfs.c exports scsi_bus_type. */
 extern struct bus_type scsi_bus_type;
+extern struct class shost_class;
+extern struct class sdev_class;
 
 struct scsi_host_template {
     const char *name;

@@ -14,7 +14,7 @@ struct bus_type scsi_bus_type = {
     .name = "scsi",
 };
 
-static struct class sdev_class = {
+struct class sdev_class = {
     .name = "scsi_device",
 };
 

@@ -34,6 +34,7 @@ static struct console serial_console = {
 };
 
 static struct tty_driver tty_serial_driver;
+static struct device *serial_tty_dev;
 
 /* serial_callback: Implement serial callback. */
 struct pt_regs *serial_callback(struct pt_regs *regs) {
@@ -73,7 +74,23 @@ static int serial_platform_probe(struct platform_device *pdev)
 {
    if (!pdev)
       return -1;
-   return serial_probe(&pdev->dev);
+   if (serial_probe(&pdev->dev) != 0)
+      return -1;
+   if (!serial_tty_dev) {
+      serial_tty_dev = tty_register_device(&tty_serial_driver, 0, &pdev->dev, "ttyS0", NULL);
+      if (!serial_tty_dev)
+         return -1;
+   }
+   return 0;
+}
+
+static void serial_platform_remove(struct platform_device *pdev)
+{
+   (void)pdev;
+   if (!serial_tty_dev)
+      return;
+   device_unregister(serial_tty_dev);
+   serial_tty_dev = NULL;
 }
 
 static const struct platform_device_id serial_platform_ids[] = {
@@ -85,7 +102,7 @@ static struct platform_driver serial_platform_driver = {
    .driver = { .name = "serial" },
    .id_table = serial_platform_ids,
    .probe = serial_platform_probe,
-   .remove = NULL,
+   .remove = serial_platform_remove,
 };
 
 /* Full Serial Driver Initialization */
@@ -93,11 +110,6 @@ static int serial_driver_init(void) {
    if (tty_register_driver(&tty_serial_driver, "serial", 1) != 0)
       return -1;
    if (platform_driver_register(&serial_platform_driver) != 0)
-      return -1;
-   struct device *parent = find_device_by_name("serial0");
-   if (!parent)
-      return -1;
-   if (!tty_register_device(&tty_serial_driver, 0, parent, "ttyS0", NULL))
       return -1;
    return 0;
 }

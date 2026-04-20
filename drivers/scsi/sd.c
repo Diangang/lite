@@ -89,7 +89,7 @@ int scsi_add_disk(struct scsi_disk *sdkp)
              sdkp->device->id, (uint32_t)sdkp->device->lun);
 
     device_initialize(&sdkp->dev, sdkp->name);
-    sdkp->dev.class = class_find("scsi_disk");
+    sdkp->dev.class = &sd_disk_class;
     device_set_parent(&sdkp->dev, &sdkp->device->sdev_gendev);
     if (device_add(&sdkp->dev) != 0)
         return -1;

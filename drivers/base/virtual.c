@@ -3,6 +3,8 @@
 #include "linux/libc.h"
 #include "base.h"
 
+static struct device *virtual_root;
+
 struct child_name_match {
     const char *name;
     struct device *match;
@@ -19,12 +21,6 @@ static int match_child_name(struct device *child, void *data)
     return 1;
 }
 
-static struct device *find_virtual_root_device(void)
-{
-    struct device *vroot = find_device_by_name("virtual");
-    return (vroot && !vroot->kobj.parent) ? vroot : NULL;
-}
-
 struct device *virtual_child_device(struct device *vroot, const char *name)
 {
     if (!vroot || !name)
@@ -39,19 +35,19 @@ struct device *virtual_child_device(struct device *vroot, const char *name)
 
 static struct device *ensure_virtual_root_device(void)
 {
-    struct device *vroot = find_virtual_root_device();
-    if (vroot)
-        return vroot;
-    vroot = (struct device*)kmalloc(sizeof(struct device));
-    if (!vroot)
+    if (virtual_root)
+        return virtual_root;
+    virtual_root = (struct device*)kmalloc(sizeof(struct device));
+    if (!virtual_root)
         return NULL;
-    memset(vroot, 0, sizeof(*vroot));
-    device_initialize(vroot, "virtual");
-    if (device_register(vroot) != 0) {
-        kobject_put(&vroot->kobj);
+    memset(virtual_root, 0, sizeof(*virtual_root));
+    device_initialize(virtual_root, "virtual");
+    if (device_register(virtual_root) != 0) {
+        kobject_put(&virtual_root->kobj);
+        virtual_root = NULL;
         return NULL;
     }
-    return vroot;
+    return virtual_root;
 }
 
 struct device *virtual_root_device(void)

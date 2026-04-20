@@ -42,8 +42,6 @@ struct subsystem {
     struct kset kset;
 };
 
-extern struct subsystem kernel_subsys;
-
 void kobject_init(struct kobject *kobj, const char *name, void (*release)(struct kobject *));
 void kobject_init_with_ktype(struct kobject *kobj, const char *name, struct kobj_type *ktype,
                              void (*release)(struct kobject *));

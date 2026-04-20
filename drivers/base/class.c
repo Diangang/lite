@@ -2,7 +2,8 @@
 #include "base.h"
 #include "linux/libc.h"
 
-static struct subsystem class_subsys;
+/* Linux mapping: linux2.6/drivers/base/class.c uses class_kset as /sys/class root. */
+static struct kset class_kset;
 
 static uint32_t class_attr_show(struct kobject *kobj, const struct attribute *attr, char *buffer, uint32_t cap)
 {
@@ -88,14 +89,14 @@ static void remove_class_attrs(struct class *cls)
 
 struct kset *classes_kset_get(void)
 {
-    return &class_subsys.kset;
+    return &class_kset;
 }
 
 void classes_init(void)
 {
-    kset_init(&class_subsys.kset, "class");
-    class_subsys.kset.kobj.ktype = &ktype_class;
-    (void)subsystem_register(&class_subsys);
+    kset_init(&class_kset, "class");
+    class_kset.kobj.ktype = &ktype_class;
+    (void)kobject_add(&class_kset.kobj);
 }
 
 int class_register(struct class *cls)
@@ -133,14 +134,4 @@ void class_unregister(struct class *cls)
     kobject_put(&cls->subsys.kset.kobj);
 }
 
-struct class *class_find(const char *name)
-{
-    if (!name)
-        return NULL;
-    struct kobject *cur;
-    list_for_each_entry(cur, &classes_kset_get()->list, entry) {
-        if (!strcmp(cur->name, name))
-            return container_of(cur, struct class, subsys.kset.kobj);
-    }
-    return NULL;
-}
+/* Linux alignment: do not provide a global "find class by name" helper. */
