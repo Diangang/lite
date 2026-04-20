@@ -13,8 +13,6 @@ struct tty_driver {
     struct list_head list;
 };
 
-extern const struct device_type tty_dev_type;
-
 /* Linux-compatible naming: per-line port/device representation. */
 struct tty_port {
     struct tty_driver *driver;
@@ -25,6 +23,17 @@ struct tty_port {
     void *driver_data;
 };
 
+/*
+ * Minimal tty_struct for Linux-aligned ldisc signatures.
+ *
+ * Linux mapping: include/linux/tty.h struct tty_struct.
+ * Lite simplification: single global tty_struct is sufficient for n_tty.
+ */
+struct tty_struct {
+    struct tty_port *port;
+    void *disc_data;
+};
+
 #define TTY_FLAG_ECHO  0x1
 #define TTY_FLAG_CANON 0x2
 
@@ -33,7 +42,6 @@ enum tty_output_target {
     TTY_OUTPUT_ALL = TTY_OUTPUT_SERIAL
 };
 
-void tty_init(void);
 void tty_set_user_exit_hook(void (*hook)(void));
 void tty_user_exit_hook_call(void);
 void tty_set_foreground_pid(uint32_t pid);

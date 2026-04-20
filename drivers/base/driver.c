@@ -117,7 +117,7 @@ static const struct sysfs_ops driver_sysfs_ops = {
     .store = driver_sysfs_store,
 };
 
-static struct kobj_type ktype_driver = {
+static struct kobj_type driver_ktype = {
     .release = NULL,
     .sysfs_ops = &driver_sysfs_ops,
     .default_attrs = NULL,
@@ -298,7 +298,7 @@ void init_driver(struct device_driver *drv, const char *name, struct bus_type *b
         return;
     memset(drv, 0, sizeof(*drv));
     drv->name = name;
-    kobject_init_with_ktype(&drv->kobj, name, &ktype_driver, NULL);
+    kobject_init_with_ktype(&drv->kobj, name, &driver_ktype, NULL);
     klist_init(&drv->klist_devices, NULL, NULL);
     INIT_LIST_HEAD(&drv->knode_bus.n_node);
     drv->knode_bus.n_klist = NULL;
@@ -307,7 +307,4 @@ void init_driver(struct device_driver *drv, const char *name, struct bus_type *b
     drv->probe = probe;
 }
 
-struct kobj_type *ktype_driver_get(void)
-{
-    return &ktype_driver;
-}
+/* kobj_type is internal; sysfs should not need driver-type checks. */

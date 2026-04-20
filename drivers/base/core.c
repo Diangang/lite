@@ -9,12 +9,7 @@
 #include "base.h"
 
 /* Linux mapping: linux2.6/drivers/base/core.c uses devices_kset as /sys/devices root. */
-static struct kset devices_kset;
-
-struct kset *devices_kset_get(void)
-{
-    return &devices_kset;
-}
+struct kset *devices_kset;
 
 /* device_release_kobj: Implement device release kobj. */
 static void device_release_kobj(struct kobject *kobj)
@@ -26,17 +21,12 @@ static void device_release_kobj(struct kobject *kobj)
         kfree(dev);
 }
 
-static struct kobj_type ktype_device = {
+static struct kobj_type device_ktype = {
     .release = device_release_kobj,
     .sysfs_ops = NULL,
     .default_attrs = NULL,
     .default_groups = NULL,
 };
-
-struct kobj_type *ktype_device_get(void)
-{
-    return &ktype_device;
-}
 
 static void device_default_release(struct device *dev)
 {
@@ -47,7 +37,7 @@ void device_initialize(struct device *dev, const char *name)
 {
     if (!dev)
         return;
-    kobject_init_with_ktype(&dev->kobj, name, &ktype_device, NULL);
+    kobject_init_with_ktype(&dev->kobj, name, &device_ktype, NULL);
     INIT_LIST_HEAD(&dev->knode_bus.n_node);
     dev->knode_bus.n_klist = NULL;
     kref_init(&dev->knode_bus.n_ref);
@@ -66,9 +56,43 @@ void device_initialize(struct device *dev, const char *name)
 
 const char *device_get_devnode(struct device *dev, uint32_t *mode, uint32_t *uid, uint32_t *gid)
 {
-    if (!dev || !dev->type || !dev->type->devnode)
+    if (!dev)
         return NULL;
-    return dev->type->devnode(dev, mode, uid, gid);
+    if (dev->type && dev->type->devnode)
+        return dev->type->devnode(dev, mode, uid, gid);
+    /* Linux mapping: for class devices, class->devnode provides the policy. */
+    if (dev->class && dev->class->devnode)
+        return dev->class->devnode(dev, mode, uid, gid);
+    return NULL;
+}
+
+struct device *device_create(struct class *cls, struct device *parent, dev_t devt, void *drvdata, const char *fmt, ...)
+{
+    if (!cls || !fmt || !fmt[0])
+        return NULL;
+
+    char name[64];
+    __builtin_va_list args;
+    __builtin_va_start(args, fmt);
+    (void)vsnprintf(name, sizeof(name), fmt, args);
+    __builtin_va_end(args);
+    name[sizeof(name) - 1] = 0;
+
+    struct device *dev = (struct device *)kmalloc(sizeof(*dev));
+    if (!dev)
+        return NULL;
+    memset(dev, 0, sizeof(*dev));
+    device_initialize(dev, name);
+    dev->class = cls;
+    dev->devt = devt;
+    dev->driver_data = drvdata;
+    if (parent)
+        device_set_parent(dev, parent);
+    if (device_add(dev) != 0) {
+        kobject_put(&dev->kobj);
+        return NULL;
+    }
+    return dev;
 }
 
 static uint32_t sysfs_emit_text_line(char *buffer, uint32_t cap, const char *text)
@@ -200,8 +224,8 @@ static const struct sysfs_ops dev_sysfs_ops = {
 
 static void device_sysfs_init_ktype(void)
 {
-    ktype_device.sysfs_ops = &dev_sysfs_ops;
-    ktype_device.default_groups = device_default_groups;
+    device_ktype.sysfs_ops = &dev_sysfs_ops;
+    device_ktype.default_groups = device_default_groups;
 }
 
 /* kobject_child_add: Implement kobject child add. */
@@ -386,7 +410,7 @@ int device_add(struct device *dev)
      */
     if (!dev)
         return -1;
-    kset_add(devices_kset_get(), &dev->kobj);
+    kset_add(devices_kset, &dev->kobj);
     INIT_LIST_HEAD(&dev->knode_bus.n_node);
     dev->knode_bus.n_klist = NULL;
     kref_init(&dev->knode_bus.n_ref);
@@ -431,7 +455,7 @@ void device_unregister(struct device *dev)
     devtmpfs_delete_node(dev);
     device_uevent_emit("remove", dev);
     kobject_del(&dev->kobj);
-    kset_remove(&devices_kset, &dev->kobj);
+    kset_remove(devices_kset, &dev->kobj);
     kobject_put(&dev->kobj);
 }
 
@@ -450,48 +474,12 @@ int device_for_each_child(struct device *dev, void *data, int (*fn)(struct devic
     return 0;
 }
 
-/* device_model_device_count: Implement device model device count. */
-uint32_t registered_device_count(void)
-{
-    uint32_t n = 0;
-    struct kset *kset = devices_kset_get();
-    struct kobject *kobj;
-    list_for_each_entry(kobj, &kset->list, entry)
-        n++;
-    return n;
-}
-
-/* device_model_device_at: Implement device model device at. */
-struct device *registered_device_at(uint32_t index)
-{
-    struct kset *kset = devices_kset_get();
-    uint32_t i = 0;
-    struct kobject *kobj;
-    list_for_each_entry(kobj, &kset->list, entry) {
-        if (i == index)
-            return container_of(kobj, struct device, kobj);
-        i++;
-    }
-    return NULL;
-}
-
-/* device_model_find_device: Implement device model find device. */
-struct device *find_device_by_name(const char *name)
-{
-    if (!name)
-        return NULL;
-    struct kset *kset = devices_kset_get();
-    struct kobject *kobj;
-    list_for_each_entry(kobj, &kset->list, entry)
-        if (!strcmp(kobj->name, name))
-            return container_of(kobj, struct device, kobj);
-    return NULL;
-}
-
 /* devices_init: Initialize driver-core device anchors. */
 void devices_init(void)
 {
+    static struct kset devices_kset_storage;
     device_sysfs_init_ktype();
-    kset_init(&devices_kset, "devices");
-    (void)kobject_add(&devices_kset.kobj);
+    devices_kset = &devices_kset_storage;
+    kset_init(devices_kset, "devices");
+    (void)kobject_add(&devices_kset->kobj);
 }

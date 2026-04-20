@@ -1,0 +1,1383 @@
+{
+  "/data25/lidg/lite/drivers/base/class.c": {
+    "function": [
+      {
+        "name": "add_class_attrs",
+        "line": 57,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/class.c",
+            "line": 112
+          }
+        ]
+      },
+      {
+        "name": "class_attr_show",
+        "line": 8,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/class.c",
+            "line": 16
+          }
+        ]
+      },
+      {
+        "name": "class_attr_store",
+        "line": 19,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/class.c",
+            "line": 28
+          }
+        ]
+      },
+      {
+        "name": "class_create_file",
+        "line": 43,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/include/linux/device.h",
+            "line": 302
+          }
+        ]
+      },
+      {
+        "name": "class_register",
+        "line": 102,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/include/linux/device.h",
+            "line": 260
+          }
+        ]
+      },
+      {
+        "name": "class_remove_file",
+        "line": 50,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/include/linux/device.h",
+            "line": 321
+          }
+        ]
+      },
+      {
+        "name": "class_unregister",
+        "line": 128,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/class.c",
+            "line": 202
+          }
+        ]
+      },
+      {
+        "name": "classes_init",
+        "line": 95,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/class.c",
+            "line": 467
+          }
+        ]
+      },
+      {
+        "name": "classes_kset_get",
+        "line": 90,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "remove_class_attrs",
+        "line": 77,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/class.c",
+            "line": 132
+          }
+        ]
+      }
+    ],
+    "struct": [],
+    "global": [
+      {
+        "name": "class_kset",
+        "line": 6,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/class.c",
+            "line": 76
+          }
+        ]
+      }
+    ]
+  },
+  "/data25/lidg/lite/drivers/base/uevent.c": {
+    "function": [
+      {
+        "name": "buf_append",
+        "line": 12,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "buf_append_ch",
+        "line": 25,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "buf_append_u32_dec",
+        "line": 36,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "buf_append_u32_oct",
+        "line": 43,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_get_devpath",
+        "line": 106,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_get_modalias",
+        "line": 129,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_get_sysfs_path",
+        "line": 113,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_uevent_emit",
+        "line": 218,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_uevent_read",
+        "line": 319,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_uevent_seqnum",
+        "line": 331,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "kobject_build_path",
+        "line": 74,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "u32_to_hex_fixed",
+        "line": 64,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      }
+    ],
+    "struct": [],
+    "global": [
+      {
+        "name": "uevent_buf",
+        "line": 8,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "uevent_len",
+        "line": 9,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "uevent_seqnum",
+        "line": 10,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/include/linux/kobject.h",
+            "line": 28
+          },
+          {
+            "file": "/data25/lidg/lite/linux2.6/lib/kobject_uevent.c",
+            "line": 16
+          }
+        ]
+      }
+    ]
+  },
+  "/data25/lidg/lite/drivers/base/bus.c": {
+    "function": [
+      {
+        "name": "bus_at",
+        "line": 373,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_attr_show_drivers_autoprobe",
+        "line": 90,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_attr_store_drivers_autoprobe",
+        "line": 97,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_attr_store_drivers_probe",
+        "line": 162,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_count",
+        "line": 364,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_default_match",
+        "line": 275,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_device_from_node",
+        "line": 14,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_device_klist_get",
+        "line": 24,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_device_klist_put",
+        "line": 31,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_driver_from_node",
+        "line": 19,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_driver_klist_get",
+        "line": 38,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_driver_klist_put",
+        "line": 45,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_emit_text_line",
+        "line": 65,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_find",
+        "line": 385,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_kobj",
+        "line": 52,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_probe_device_modalias",
+        "line": 137,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_probe_device_name",
+        "line": 116,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_register",
+        "line": 313,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/bus.c",
+            "line": 741
+          }
+        ]
+      },
+      {
+        "name": "bus_release_kobj",
+        "line": 82,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_rescan_devices",
+        "line": 296,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/bus.c",
+            "line": 672
+          }
+        ]
+      },
+      {
+        "name": "bus_sysfs_register_subdirs",
+        "line": 241,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_sysfs_show",
+        "line": 206,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_sysfs_store",
+        "line": 217,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_sysfs_unregister_subdirs",
+        "line": 57,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "buses_init",
+        "line": 267,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/bus.c",
+            "line": 1064
+          }
+        ]
+      },
+      {
+        "name": "buses_kset_get",
+        "line": 262,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      }
+    ],
+    "struct": [],
+    "global": [
+      {
+        "name": "bus_kset",
+        "line": 9,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/bus.c",
+            "line": 164
+          }
+        ]
+      }
+    ]
+  },
+  "/data25/lidg/lite/drivers/base/base.h": {
+    "function": [
+      {
+        "name": "bus_devices_klist",
+        "line": 16,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_devices_kobj",
+        "line": 36,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_devices_kset",
+        "line": 21,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_drivers_autoprobe",
+        "line": 48,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_drivers_klist",
+        "line": 31,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_drivers_kobj",
+        "line": 42,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_drivers_kset",
+        "line": 26,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "bus_set_drivers_autoprobe",
+        "line": 53,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      }
+    ],
+    "struct": [
+      {
+        "name": "subsys_private",
+        "line": 7,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/base.h",
+            "line": 4
+          }
+        ]
+      }
+    ],
+    "global": []
+  },
+  "/data25/lidg/lite/drivers/base/devtmpfs.c": {
+    "function": [
+      {
+        "name": "create_path",
+        "line": 79,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/devtmpfs.c",
+            "line": 156
+          }
+        ]
+      },
+      {
+        "name": "delete_path",
+        "line": 168,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/devtmpfs.c",
+            "line": 240
+          }
+        ]
+      },
+      {
+        "name": "dev_mynode",
+        "line": 156,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/devtmpfs.c",
+            "line": 265
+          }
+        ]
+      },
+      {
+        "name": "dev_rmdir",
+        "line": 147,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/devtmpfs.c",
+            "line": 217
+          }
+        ]
+      },
+      {
+        "name": "devtmpfs_create_node",
+        "line": 323,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/devtmpfs.c",
+            "line": 70
+          },
+          {
+            "file": "/data25/lidg/lite/linux2.6/include/linux/device.h",
+            "line": 791
+          }
+        ]
+      },
+      {
+        "name": "devtmpfs_delete_node",
+        "line": 343,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/devtmpfs.c",
+            "line": 109
+          },
+          {
+            "file": "/data25/lidg/lite/linux2.6/include/linux/device.h",
+            "line": 823
+          }
+        ]
+      },
+      {
+        "name": "devtmpfs_fill_super",
+        "line": 361,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "devtmpfs_get_console",
+        "line": 304,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "devtmpfs_get_sb",
+        "line": 232,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "devtmpfs_get_tty",
+        "line": 309,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "devtmpfs_init",
+        "line": 386,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/devtmpfs.c",
+            "line": 397
+          },
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/base.h",
+            "line": 112
+          }
+        ]
+      },
+      {
+        "name": "devtmpfs_mount",
+        "line": 314,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/devtmpfs.c",
+            "line": 329
+          },
+          {
+            "file": "/data25/lidg/lite/linux2.6/include/linux/device.h",
+            "line": 824
+          }
+        ]
+      },
+      {
+        "name": "devtmpfs_submit_req",
+        "line": 286,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "devtmpfsd",
+        "line": 246,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/devtmpfs.c",
+            "line": 358
+          }
+        ]
+      },
+      {
+        "name": "find_last_slash",
+        "line": 45,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "find_slash",
+        "line": 35,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "handle",
+        "line": 206,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/devtmpfs.c",
+            "line": 349
+          }
+        ]
+      },
+      {
+        "name": "handle_create",
+        "line": 120,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/devtmpfs.c",
+            "line": 183
+          }
+        ]
+      },
+      {
+        "name": "handle_remove",
+        "line": 191,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/devtmpfs.c",
+            "line": 286
+          }
+        ]
+      },
+      {
+        "name": "lookup_child",
+        "line": 57,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      }
+    ],
+    "struct": [
+      {
+        "name": "req",
+        "line": 22,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      }
+    ],
+    "global": [
+      {
+        "name": "dev_fs_type",
+        "line": 20,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "devtmpfs_console_inode",
+        "line": 15,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "devtmpfs_root",
+        "line": 13,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "devtmpfs_sb",
+        "line": 14,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "devtmpfs_tty_inode",
+        "line": 16,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "requests",
+        "line": 33,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/arch/powerpc/kvm/trace.h",
+            "line": 110
+          }
+        ]
+      },
+      {
+        "name": "setup_done",
+        "line": 18,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/scsi/u14-34f.c",
+            "line": 236
+          },
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/scsi/eata.c",
+            "line": 405
+          }
+        ]
+      },
+      {
+        "name": "thread",
+        "line": 17,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/devtmpfs.c",
+            "line": 17
+          }
+        ]
+      }
+    ]
+  },
+  "/data25/lidg/lite/drivers/base/core.c": {
+    "function": [
+      {
+        "name": "device_add",
+        "line": 415,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/core.c",
+            "line": 898
+          }
+        ]
+      },
+      {
+        "name": "device_attach",
+        "line": 372,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/dd.c",
+            "line": 436
+          }
+        ]
+      },
+      {
+        "name": "device_attr_is_visible",
+        "line": 186,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_attr_show_dev",
+        "line": 142,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_attr_show_modalias",
+        "line": 148,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_attr_show_type",
+        "line": 136,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_create",
+        "line": 79,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/core.c",
+            "line": 1449
+          }
+        ]
+      },
+      {
+        "name": "device_default_release",
+        "line": 41,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_del",
+        "line": 443,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/core.c",
+            "line": 1060
+          }
+        ]
+      },
+      {
+        "name": "device_get_devnode",
+        "line": 67,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/core.c",
+            "line": 1145
+          }
+        ]
+      },
+      {
+        "name": "device_initialize",
+        "line": 46,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/core.c",
+            "line": 612
+          }
+        ]
+      },
+      {
+        "name": "device_is_bus_view_hidden",
+        "line": 282,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_kobj_parent",
+        "line": 271,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_rebind",
+        "line": 410,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_register",
+        "line": 438,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/core.c",
+            "line": 1036
+          }
+        ]
+      },
+      {
+        "name": "device_release_driver",
+        "line": 367,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/dd.c",
+            "line": 516
+          }
+        ]
+      },
+      {
+        "name": "device_release_kobj",
+        "line": 20,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_reprobe",
+        "line": 401,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/bus.c",
+            "line": 679
+          }
+        ]
+      },
+      {
+        "name": "device_set_parent",
+        "line": 330,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_sysfs_add_links",
+        "line": 287,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_sysfs_init_ktype",
+        "line": 235,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_sysfs_remove_links",
+        "line": 308,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_sysfs_show",
+        "line": 214,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_sysfs_store",
+        "line": 223,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_unbind",
+        "line": 349,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "device_unregister",
+        "line": 450,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/core.c",
+            "line": 1110
+          }
+        ]
+      },
+      {
+        "name": "devices_init",
+        "line": 523,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/core.c",
+            "line": 1234
+          }
+        ]
+      },
+      {
+        "name": "devices_kset_get",
+        "line": 14,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "find_device_by_name",
+        "line": 510,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "int",
+        "line": 469,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/arch/sh/include/asm/mutex-llsc.h",
+            "line": 67
+          },
+          {
+            "file": "/data25/lidg/lite/linux2.6/arch/sh/math-emu/math.c",
+            "line": 383
+          },
+          {
+            "file": "/data25/lidg/lite/linux2.6/arch/powerpc/include/asm/spu_priv1.h",
+            "line": 173
+          },
+          {
+            "file": "/data25/lidg/lite/linux2.6/arch/powerpc/include/asm/mutex.h",
+            "line": 91
+          },
+          {
+            "file": "/data25/lidg/lite/linux2.6/arch/powerpc/lib/sstep.c",
+            "line": 309
+          }
+        ]
+      },
+      {
+        "name": "kobject_child_add",
+        "line": 242,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "kobject_child_del",
+        "line": 251,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "ktype_device_get",
+        "line": 36,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "registered_device_at",
+        "line": 496,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "registered_device_count",
+        "line": 485,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "sysfs_emit_devno_line",
+        "line": 123,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "sysfs_emit_text_line",
+        "line": 108,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      }
+    ],
+    "struct": [],
+    "global": [
+      {
+        "name": "devices_kset",
+        "line": 12,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/base.h",
+            "line": 97
+          }
+        ]
+      }
+    ]
+  },
+  "/data25/lidg/lite/drivers/base/driver.c": {
+    "function": [
+      {
+        "name": "driver_attach",
+        "line": 222,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/dd.c",
+            "line": 469
+          }
+        ]
+      },
+      {
+        "name": "driver_attr_is_visible",
+        "line": 17,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "driver_bind_device",
+        "line": 217,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "driver_deferred_probe_add",
+        "line": 132,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/dd.c",
+            "line": 56
+          }
+        ]
+      },
+      {
+        "name": "driver_deferred_probe_remove",
+        "line": 144,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "driver_deferred_probe_remove_index",
+        "line": 158,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "driver_deferred_probe_trigger",
+        "line": 167,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/dd.c",
+            "line": 78
+          }
+        ]
+      },
+      {
+        "name": "driver_probe_device",
+        "line": 185,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/dd.c",
+            "line": 285
+          }
+        ]
+      },
+      {
+        "name": "driver_register",
+        "line": 242,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/driver.c",
+            "line": 101
+          }
+        ]
+      },
+      {
+        "name": "driver_sysfs_show",
+        "line": 67,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "driver_sysfs_store",
+        "line": 77,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "driver_unregister",
+        "line": 268,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/driver.c",
+            "line": 136
+          }
+        ]
+      },
+      {
+        "name": "ktype_driver_get",
+        "line": 306,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "sysfs_find_driver_bus_device",
+        "line": 50,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      }
+    ],
+    "struct": [],
+    "global": [
+      {
+        "name": "deferred_devs",
+        "line": 127,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "deferred_devs_count",
+        "line": 128,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "drv_attr_bind",
+        "line": 7,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "drv_attr_name",
+        "line": 6,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "drv_attr_unbind",
+        "line": 8,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      }
+    ]
+  },
+  "/data25/lidg/lite/drivers/base/init.c": {
+    "function": [
+      {
+        "name": "driver_init",
+        "line": 5,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/init.c",
+            "line": 11
+          }
+        ]
+      }
+    ],
+    "struct": [],
+    "global": []
+  },
+  "/data25/lidg/lite/drivers/base/virtual.c": {
+    "function": [
+      {
+        "name": "ensure_virtual_root_device",
+        "line": 36,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "match_child_name",
+        "line": 13,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "virtual_child_device",
+        "line": 24,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "virtual_root_device",
+        "line": 53,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      }
+    ],
+    "struct": [
+      {
+        "name": "child_name_match",
+        "line": 8,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      }
+    ],
+    "global": [
+      {
+        "name": "virtual_root",
+        "line": 6,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      }
+    ]
+  },
+  "/data25/lidg/lite/drivers/base/platform.c": {
+    "function": [
+      {
+        "name": "platform_bus_init",
+        "line": 16,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/platform.c",
+            "line": 867
+          }
+        ]
+      },
+      {
+        "name": "platform_bus_match",
+        "line": 53,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "platform_bus_release",
+        "line": 11,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "platform_device_register_simple",
+        "line": 118,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/include/linux/platform_device.h",
+            "line": 90
+          }
+        ]
+      },
+      {
+        "name": "platform_device_release",
+        "line": 30,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/platform.c",
+            "line": 150
+          }
+        ]
+      },
+      {
+        "name": "platform_driver_probe",
+        "line": 77,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "platform_driver_register",
+        "line": 102,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "platform_driver_remove",
+        "line": 90,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "platform_driver_unregister",
+        "line": 111,
+        "status": "OK",
+        "linux_hits": [
+          {
+            "file": "/data25/lidg/lite/linux2.6/drivers/base/platform.c",
+            "line": 452
+          }
+        ]
+      },
+      {
+        "name": "platform_get_platform_device",
+        "line": 36,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      },
+      {
+        "name": "platform_match_one",
+        "line": 46,
+        "status": "NO_DIRECT_LINUX_MATCH",
+        "linux_hits": []
+      }
+    ],
+    "struct": [],
+    "global": []
+  }
+}

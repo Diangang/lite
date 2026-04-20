@@ -3,7 +3,7 @@
 #include "linux/libc.h"
 
 /* Linux mapping: linux2.6/drivers/base/class.c uses class_kset as /sys/class root. */
-static struct kset class_kset;
+struct kset *class_kset;
 
 static uint32_t class_attr_show(struct kobject *kobj, const struct attribute *attr, char *buffer, uint32_t cap)
 {
@@ -87,16 +87,13 @@ static void remove_class_attrs(struct class *cls)
     }
 }
 
-struct kset *classes_kset_get(void)
-{
-    return &class_kset;
-}
-
 void classes_init(void)
 {
-    kset_init(&class_kset, "class");
-    class_kset.kobj.ktype = &ktype_class;
-    (void)kobject_add(&class_kset.kobj);
+    static struct kset class_kset_storage;
+    class_kset = &class_kset_storage;
+    kset_init(class_kset, "class");
+    class_kset->kobj.ktype = &ktype_class;
+    (void)kobject_add(&class_kset->kobj);
 }
 
 int class_register(struct class *cls)
@@ -109,7 +106,7 @@ int class_register(struct class *cls)
         return -1;
     kset_init(&cls->subsys.kset, cls->name);
     cls->subsys.kset.kobj.ktype = &ktype_class;
-    cls->subsys.kset.kobj.kset = classes_kset_get();
+    cls->subsys.kset.kobj.kset = class_kset;
     if (!cls->devices.next || !cls->devices.prev)
         INIT_LIST_HEAD(&cls->devices);
     if (!cls->list.next || !cls->list.prev)

@@ -363,7 +363,7 @@ VGA 参考（保留用于后续重做）：
 
 关键路径：
 - console 输出分发：[printk.c](file:///data25/lidg/lite/kernel/printk.c#L8-L45)
-- tty 输出分发：[tty.c](file:///data25/lidg/lite/drivers/tty/tty.c#L79-L86)
+- tty 输出分发：[tty_io.c](file:///data25/lidg/lite/drivers/tty/tty_io.c)
 - 串口硬件（8250/16550A）：[8250.c](file:///data25/lidg/lite/drivers/tty/serial/8250.c#L1-L33)
 
 ### Q5.3: 键盘输入是怎么进到用户态程序的？
@@ -374,7 +374,7 @@ VGA 参考（保留用于后续重做）：
 - TTY 写入输入缓冲，必要时唤醒等待者
 - 用户程序从 `/dev/tty` 或标准输入读取
 
-TTY 输入逻辑在 [tty.c](file:///data25/lidg/lite/drivers/tty/tty.c#L97-L186)，设备节点与 `/dev` 挂载逻辑在 [devtmpfs.c](file:///data25/lidg/lite/drivers/base/devtmpfs.c)。
+TTY 输入逻辑在 [tty_io.c](file:///data25/lidg/lite/drivers/tty/tty_io.c)，设备节点与 `/dev` 挂载逻辑在 [devtmpfs.c](file:///data25/lidg/lite/drivers/base/devtmpfs.c)。
 
 ### Q5.3B: `serio` / `i8042` / `atkbd` 三者在当前系统里的关系是什么？和 Linux 一样吗？
 **回答**：

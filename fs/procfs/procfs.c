@@ -671,9 +671,11 @@ static uint32_t proc_read_diskstats(struct inode *node, uint32_t offset, uint32_
     static char tmp[768];
     uint32_t off = 0;
 
-    uint32_t n = registered_device_count();
-    for (uint32_t i = 0; i < n; i++) {
-        struct device *dev = registered_device_at(i);
+    if (!devices_kset)
+        return 0;
+    struct kobject *kobj;
+    list_for_each_entry(kobj, &devices_kset->list, entry) {
+        struct device *dev = container_of(kobj, struct device, kobj);
         if (!dev || dev->type != &disk_type)
             continue;
         struct gendisk *disk = gendisk_from_dev(dev);

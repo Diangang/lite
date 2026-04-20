@@ -6,7 +6,7 @@
 #include "linux/sysfs.h"
 
 /* Linux mapping: linux2.6/drivers/base/bus.c uses bus_kset as /sys/bus root. */
-static struct kset bus_kset;
+struct kset *bus_kset;
 static LIST_HEAD(bus_list_head);
 
 #define to_bus_attr(_attr) container_of(_attr, struct bus_attribute, attr)
@@ -84,7 +84,7 @@ static void bus_release_kobj(struct kobject *kobj)
     struct bus_type *bus = container_of(kobj, struct bus_type, subsys.kset.kobj);
     bus_sysfs_unregister_subdirs(bus);
     kfree(bus->p);
-    kfree(bus);
+    bus->p = NULL;
 }
 
 static uint32_t bus_attr_show_drivers_autoprobe(struct bus_type *bus, struct bus_attribute *attr,
@@ -259,16 +259,13 @@ static int bus_sysfs_register_subdirs(struct bus_type *bus)
     return 0;
 }
 
-struct kset *buses_kset_get(void)
-{
-    return &bus_kset;
-}
-
 void buses_init(void)
 {
-    kset_init(&bus_kset, "bus");
+    static struct kset bus_kset_storage;
+    bus_kset = &bus_kset_storage;
+    kset_init(bus_kset, "bus");
     /* Linux mapping: kset_create_and_add("bus", ...) */
-    (void)kobject_add(&bus_kset.kobj);
+    (void)kobject_add(&bus_kset->kobj);
 }
 
 /* bus_default_match: Implement bus default match. */
@@ -335,7 +332,7 @@ int bus_register(struct bus_type *bus)
     bus_set_drivers_autoprobe(bus, 1);
     kset_init(&bus->subsys.kset, bus->name);
     bus->subsys.kset.kobj.ktype = &ktype_bus;
-    bus->subsys.kset.kobj.kset = buses_kset_get();
+    bus->subsys.kset.kobj.kset = bus_kset;
     klist_init(bus_devices_klist(bus), bus_device_klist_get, bus_device_klist_put);
     klist_init(bus_drivers_klist(bus), bus_driver_klist_get, bus_driver_klist_put);
     if (!bus->list.next || !bus->list.prev)
@@ -361,35 +358,4 @@ int bus_register(struct bus_type *bus)
     return 0;
 }
 
-uint32_t bus_count(void)
-{
-    uint32_t n = 0;
-    struct bus_type *cur;
-    list_for_each_entry(cur, &bus_list_head, list)
-        n++;
-    return n;
-}
-
-struct bus_type *bus_at(uint32_t index)
-{
-    uint32_t i = 0;
-    struct bus_type *cur;
-    list_for_each_entry(cur, &bus_list_head, list) {
-        if (i == index)
-            return cur;
-        i++;
-    }
-    return NULL;
-}
-
-struct bus_type *bus_find(const char *name)
-{
-    if (!name)
-        return NULL;
-    struct bus_type *cur;
-    list_for_each_entry(cur, &bus_list_head, list) {
-        if (!strcmp(cur->name, name))
-            return cur;
-    }
-    return NULL;
-}
+/* Linux alignment: do not provide global bus enumeration helpers. */

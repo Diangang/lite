@@ -47,7 +47,7 @@
 
 - Lite：`/dev/tty` 的 `.write` -> `tty_write` -> `tty_put_char` ->（按 targets）serial
   - [devtmpfs.c](file:///data25/lidg/lite/drivers/base/devtmpfs.c)
-  - [tty_put_char](file:///data25/lidg/lite/drivers/tty/tty.c#L79-L87)
+  - [tty_put_char](file:///data25/lidg/lite/drivers/tty/tty_io.c)
 
 #### 2.1.4 串口输出是否依赖中断
 
@@ -62,13 +62,13 @@
 
 - Lite：IRQ4 -> `uart8250_irq()` -> `tty_receive_char()` -> `input_buffer` -> 唤醒等待队列
   - [uart8250_irq](file:///data25/lidg/lite/drivers/tty/serial/8250.c#L64-L73)
-  - [tty_receive_char](file:///data25/lidg/lite/drivers/tty/tty.c#L116-L132)
+  - [tty_receive_char](file:///data25/lidg/lite/drivers/tty/tty_io.c)
 
 #### 2.2.2 读取路径（用户态 read）
 
 Lite 的 `/dev/console` read 和 `/dev/tty` read 都复用 `tty_read_blocking()`：
 - `/dev/console` / `/dev/tty` 节点与字符设备分发：[devtmpfs.c](file:///data25/lidg/lite/drivers/base/devtmpfs.c)
-- 阻塞读取与行规程（最小版）：[tty_read_blocking](file:///data25/lidg/lite/drivers/tty/tty.c#L153-L218)
+- 阻塞读取与行规程（最小版）：[tty_read_blocking](file:///data25/lidg/lite/drivers/tty/tty_io.c)
 
 #### 2.2.3 为什么“init_serial 能输出，但可能不响应输入”
 
@@ -118,7 +118,7 @@ Linux 2.6 的串口输入链路（简化表达）：
 - 串口 IRQ 处理：[serial8250_interrupt](file:///data25/lidg/bsk/drivers/serial/8250.c#L1216-L1274)
 - 串口收包与 push：[8250.c](file:///data25/lidg/bsk/drivers/serial/8250.c#L1080-L1142)
 - flip push：[tty_flip_buffer_push](file:///data25/lidg/bsk/drivers/char/tty_io.c#L2614-L2620)
-- ldisc receive：[n_tty_receive_buf](file:///data25/lidg/bsk/drivers/char/n_tty.c#L892-L980)
+- ldisc receive：[n_tty_receive_buf](file:///data25/lidg/lite/drivers/tty/n_tty.c)
 - 用户 read 入口：[tty_read](file:///data25/lidg/bsk/drivers/char/tty_io.c#L995-L1023)
 
 关键语义：

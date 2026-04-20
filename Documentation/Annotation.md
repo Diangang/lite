@@ -327,7 +327,7 @@ bootmem 阶段的目标不是“高效分配”，而是：
 
 相关文件：
 - [signal.c](file:///data25/lidg/lite/kernel/signal.c)
-- [tty.c](file:///data25/lidg/lite/drivers/tty/tty.c)
+- [tty_io.c](file:///data25/lidg/lite/drivers/tty/tty_io.c)
 
 当前已经实现了：
 - `SIGCHLD`
@@ -402,7 +402,7 @@ bootmem 阶段的目标不是“高效分配”，而是：
 
 核心文件：
 - [printk.c](file:///data25/lidg/lite/kernel/printk.c)
-- [tty.c](file:///data25/lidg/lite/drivers/tty/tty.c)
+- [tty_io.c](file:///data25/lidg/lite/drivers/tty/tty_io.c)
 - [8250.c](file:///data25/lidg/lite/drivers/tty/serial/8250.c)
 
 可以这样理解：
@@ -422,7 +422,7 @@ VGA 参考（保留用于后续重做）：
 
 相关文件：
 - [keyboard.c](file:///data25/lidg/lite/drivers/input/keyboard.c)
-- [tty.c](file:///data25/lidg/lite/drivers/tty/tty.c)
+- [tty_io.c](file:///data25/lidg/lite/drivers/tty/tty_io.c)
 
 主线是：
 - 键盘 IRQ
@@ -576,7 +576,7 @@ VGA 参考（保留用于后续重做）：
 - 任务主线：[sched.c](file:///data25/lidg/lite/kernel/sched.c) -> [fork.c](file:///data25/lidg/lite/kernel/fork.c) -> [exec.c](file:///data25/lidg/lite/fs/exec.c)
 - 文件系统主线：[namespace.c](file:///data25/lidg/lite/fs/namespace.c) -> [namei.c](file:///data25/lidg/lite/fs/namei.c) -> [open.c](file:///data25/lidg/lite/fs/open.c) -> [minixfs.c](file:///data25/lidg/lite/fs/minixfs/minixfs.c)
 - 设备主线：[drivers/base/init.c](file:///data25/lidg/lite/drivers/base/init.c) -> [core.c](file:///data25/lidg/lite/drivers/base/core.c) -> [pci.c](file:///data25/lidg/lite/drivers/pci/pci.c) -> [nvme.c](file:///data25/lidg/lite/drivers/nvme/nvme.c)
-- I/O 交互主线：[tty.c](file:///data25/lidg/lite/drivers/tty/tty.c) -> [8250.c](file:///data25/lidg/lite/drivers/tty/serial/8250.c)
+- I/O 交互主线：[tty_io.c](file:///data25/lidg/lite/drivers/tty/tty_io.c) -> [8250.c](file:///data25/lidg/lite/drivers/tty/serial/8250.c)
 
 如果只是想验证系统现状，可以直接看：
 - [QA.md](file:///data25/lidg/lite/Documentation/QA.md)

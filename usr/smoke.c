@@ -940,9 +940,10 @@ void test_sysfs_layout() {
     } else
         close(fd);
 
-    n = read_file("/sys/class/tty/ttyS0/type", buf, sizeof(buf));
-    if (n <= 0 || !contains(buf, n, "tty")) {
-        fail("/sys/class/tty/ttyS0/type");
+    /* Linux mapping: class tty devices expose "dev" (major:minor) and uevent. */
+    n = read_file("/sys/class/tty/ttyS0/dev", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, ":")) {
+        fail("/sys/class/tty/ttyS0/dev");
         ok = 0;
     }
 

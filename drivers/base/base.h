@@ -61,14 +61,19 @@ void set_pci_root_device(struct device *dev);
 struct device *virtual_root_device(void);
 struct device *virtual_child_device(struct device *vroot, const char *name);
 
-uint32_t registered_device_count(void);
-struct device *registered_device_at(uint32_t index);
-struct device *find_device_by_name(const char *name);
-struct kset *devices_kset_get(void);
-struct kset *classes_kset_get(void);
-struct kset *buses_kset_get(void);
-struct kobj_type *ktype_device_get(void);
-struct kobj_type *ktype_driver_get(void);
+/*
+ * Linux mapping:
+ * - drivers/base/core.c: devices_kset (/sys/devices)
+ * - drivers/base/bus.c:  bus_kset     (/sys/bus)
+ * - drivers/base/class.c: class_kset  (/sys/class)
+ *
+ * Lite keeps them as pointers so sysfs can mount after driver_init() without
+ * needing extra non-Linux *_get() helper APIs.
+ */
+extern struct kset *devices_kset;
+extern struct kset *bus_kset;
+extern struct kset *class_kset;
+
 int devtmpfs_init(void);
 void devices_init(void);
 void buses_init(void);

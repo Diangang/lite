@@ -18,6 +18,21 @@ static char tty_linebuf[256];
 static uint32_t tty_line_len;
 static uint32_t tty_line_pos;
 
+static int n_tty_open(struct tty_struct *tty)
+{
+    (void)tty;
+    input_head = input_tail = input_count = 0;
+    tty_line_len = 0;
+    tty_line_pos = 0;
+    init_waitqueue_head(&input_waitq);
+    return 0;
+}
+
+static void n_tty_close(struct tty_struct *tty)
+{
+    (void)tty;
+}
+
 static char n_tty_getchar_blocking(void)
 {
     for (;;) {
@@ -47,18 +62,23 @@ static int n_tty_handle_ctrl_c(void)
     return 1;
 }
 
-static void n_tty_receive_char(char c)
+static void n_tty_receive_buf(const uint8_t *buf, uint32_t len)
 {
-    if (c == '\r')
-        c = '\n';
+    if (!buf || len == 0)
+        return;
 
     uint32_t flags = irq_save();
-    if (input_count < N_TTY_INPUT_BUF_SIZE) {
-        input_buffer[input_head] = c;
-        input_head = (input_head + 1) % N_TTY_INPUT_BUF_SIZE;
-        input_count++;
-        wake_up_all(&input_waitq);
+    for (uint32_t i = 0; i < len; i++) {
+        char c = (char)buf[i];
+        if (c == '\r')
+            c = '\n';
+        if (input_count < N_TTY_INPUT_BUF_SIZE) {
+            input_buffer[input_head] = c;
+            input_head = (input_head + 1) % N_TTY_INPUT_BUF_SIZE;
+            input_count++;
+        }
     }
+    wake_up_all(&input_waitq);
     irq_restore(flags);
 }
 
@@ -127,16 +147,10 @@ static uint32_t n_tty_read(char *buf, uint32_t len)
     }
 }
 
-void n_tty_init(void)
-{
-    input_head = input_tail = input_count = 0;
-    tty_line_len = 0;
-    tty_line_pos = 0;
-    init_waitqueue_head(&input_waitq);
-}
-
 const struct tty_ldisc_ops n_tty_ldisc_ops = {
     .name = "n_tty",
-    .receive_char = n_tty_receive_char,
+    .open = n_tty_open,
+    .close = n_tty_close,
+    .receive_buf = n_tty_receive_buf,
     .read = n_tty_read,
 };

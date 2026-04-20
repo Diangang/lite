@@ -88,15 +88,14 @@ struct class {
     struct list_head list;
     struct list_head devices;
     const struct attribute_group **dev_groups;
+    /* Linux mapping: class->devnode controls devtmpfs node name/mode/uid/gid. */
+    const char *(*devnode)(struct device *dev, uint32_t *mode, uint32_t *uid, uint32_t *gid);
     struct class_attribute *class_attrs;
 };
 
 void driver_init(void);
 void device_initialize(struct device *dev, const char *name);
 int bus_register(struct bus_type *bus);
-uint32_t bus_count(void);
-struct bus_type *bus_at(uint32_t index);
-struct bus_type *bus_find(const char *name);
 int bus_rescan_devices(struct bus_type *bus);
 int driver_register(struct device_driver *drv);
 void driver_unregister(struct device_driver *drv);
@@ -132,5 +131,8 @@ void driver_deferred_probe_add(struct device *dev);
 void driver_deferred_probe_remove(struct device *dev);
 void driver_deferred_probe_trigger(void);
 int bus_default_match(struct device *dev, struct device_driver *drv);
+
+/* Linux mapping: drivers/base/core.c:device_create() */
+struct device *device_create(struct class *cls, struct device *parent, dev_t devt, void *drvdata, const char *fmt, ...);
 
 #endif
