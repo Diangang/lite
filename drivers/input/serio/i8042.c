@@ -6,6 +6,7 @@
 
 static struct serio i8042_port;
 static int i8042_initialized;
+static struct platform_device *i8042_pdev;
 
 static void i8042_port_release(struct device *dev)
 {
@@ -101,6 +102,18 @@ static struct platform_driver i8042_driver = {
 
 static int i8042_init(void)
 {
-    return platform_driver_register(&i8042_driver);
+    /*
+     * Linux mapping: linux2.6 i8042 uses platform_create_bundle() which
+     * registers both the platform_driver and its platform_device.
+     * Keep board code minimal by instantiating the i8042 platform device here.
+     */
+    if (platform_driver_register(&i8042_driver) != 0)
+        return -1;
+    i8042_pdev = platform_device_register_simple("i8042", 0);
+    if (!i8042_pdev) {
+        platform_driver_unregister(&i8042_driver);
+        return -1;
+    }
+    return 0;
 }
 module_init(i8042_init);

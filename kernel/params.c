@@ -62,3 +62,49 @@ const char *get_execute_command(void)
 {
     return execute_command;
 }
+
+/*
+ * get_cmdline_param: Return 0 and copy value when key=value exists.
+ * If key appears without "=value", returns 0 with empty value string.
+ * Returns -1 when key is absent.
+ */
+int get_cmdline_param(const char *key, char *value, size_t cap)
+{
+    if (!key || !key[0] || !value || cap == 0)
+        return -1;
+
+    value[0] = '\0';
+
+    size_t key_len = strlen(key);
+    size_t i = 0;
+    while (saved_command_line[i]) {
+        while (saved_command_line[i] == ' ')
+            i++;
+        if (!saved_command_line[i])
+            break;
+
+        size_t start = i;
+        while (saved_command_line[i] && saved_command_line[i] != ' ')
+            i++;
+        size_t end = i;
+
+        if (end > start + key_len &&
+            !strncmp(&saved_command_line[start], key, key_len) &&
+            saved_command_line[start + key_len] == '=') {
+            size_t vstart = start + key_len + 1;
+            size_t vlen = end - vstart;
+            if (vlen >= cap)
+                vlen = cap - 1;
+            if (vlen)
+                memcpy(value, &saved_command_line[vstart], vlen);
+            value[vlen] = '\0';
+            return 0;
+        }
+        if (end == start + key_len &&
+            !strncmp(&saved_command_line[start], key, key_len)) {
+            value[0] = '\0';
+            return 0;
+        }
+    }
+    return -1;
+}

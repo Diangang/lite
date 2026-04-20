@@ -403,7 +403,7 @@ bootmem 阶段的目标不是“高效分配”，而是：
 核心文件：
 - [console.c](file:///data25/lidg/lite/drivers/video/console/console.c)
 - [tty.c](file:///data25/lidg/lite/drivers/tty/tty.c)
-- [serial.c](file:///data25/lidg/lite/drivers/tty/serial/serial.c)
+- [8250.c](file:///data25/lidg/lite/drivers/tty/serial/8250.c)
 
 可以这样理解：
 - `serial`：具体硬件端
@@ -576,7 +576,7 @@ VGA 参考（保留用于后续重做）：
 - 任务主线：[sched.c](file:///data25/lidg/lite/kernel/sched.c) -> [fork.c](file:///data25/lidg/lite/kernel/fork.c) -> [exec.c](file:///data25/lidg/lite/fs/exec.c)
 - 文件系统主线：[namespace.c](file:///data25/lidg/lite/fs/namespace.c) -> [namei.c](file:///data25/lidg/lite/fs/namei.c) -> [open.c](file:///data25/lidg/lite/fs/open.c) -> [minixfs.c](file:///data25/lidg/lite/fs/minixfs/minixfs.c)
 - 设备主线：[drivers/base/init.c](file:///data25/lidg/lite/drivers/base/init.c) -> [core.c](file:///data25/lidg/lite/drivers/base/core.c) -> [pci.c](file:///data25/lidg/lite/drivers/pci/pci.c) -> [nvme.c](file:///data25/lidg/lite/drivers/nvme/nvme.c)
-- I/O 交互主线：[tty.c](file:///data25/lidg/lite/drivers/tty/tty.c) -> [serial.c](file:///data25/lidg/lite/drivers/tty/serial/serial.c)
+- I/O 交互主线：[tty.c](file:///data25/lidg/lite/drivers/tty/tty.c) -> [8250.c](file:///data25/lidg/lite/drivers/tty/serial/8250.c)
 
 如果只是想验证系统现状，可以直接看：
 - [QA.md](file:///data25/lidg/lite/Documentation/QA.md)

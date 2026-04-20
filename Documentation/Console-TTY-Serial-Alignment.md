@@ -52,7 +52,7 @@
 #### 2.1.4 串口输出是否依赖中断
 
 不依赖。`serial_put_char()` 采用轮询 THRE（LSR bit5）后写 UART_TX：
-- [serial_put_char](file:///data25/lidg/lite/drivers/tty/serial/serial.c#L13-L16)
+- [serial_put_char](file:///data25/lidg/lite/drivers/tty/serial/8250.c#L30-L36)
 
 因此只要 `init_serial()` 配置了 COM1，且把输出目标打开，就能输出。
 
@@ -60,8 +60,8 @@
 
 #### 2.2.1 串口输入路径（IRQ4）
 
-- Lite：IRQ4 -> `serial_callback()` -> `tty_receive_char()` -> `input_buffer` -> 唤醒等待队列
-  - [serial_callback](file:///data25/lidg/lite/drivers/tty/serial/serial.c#L19-L28)
+- Lite：IRQ4 -> `uart8250_irq()` -> `tty_receive_char()` -> `input_buffer` -> 唤醒等待队列
+  - [uart8250_irq](file:///data25/lidg/lite/drivers/tty/serial/8250.c#L64-L73)
   - [tty_receive_char](file:///data25/lidg/lite/drivers/tty/tty.c#L116-L132)
 
 #### 2.2.2 读取路径（用户态 read）
@@ -72,8 +72,8 @@ Lite 的 `/dev/console` read 和 `/dev/tty` read 都复用 `tty_read_blocking()`
 
 #### 2.2.3 为什么“init_serial 能输出，但可能不响应输入”
 
-- `init_serial()` 只做基本 UART 配置，并且把 `IER` 置 0，不启用串口 RX 中断（见 [serial.c](file:///data25/lidg/lite/drivers/tty/serial/serial.c#L31-L41)）。
-- `serial_driver_init()` 才注册 IRQ4 handler，并设置 `MCR=0x0B`、`IER=0x01` 使能串口中断（见 [serial_driver_init](file:///data25/lidg/lite/drivers/tty/serial/serial.c#L44-L51)）。
+- `init_serial()` 只做基本 UART 配置，并且把 `IER` 置 0，不启用串口 RX 中断（见 [8250.c](file:///data25/lidg/lite/drivers/tty/serial/8250.c#L75-L94)）。
+- `serial8250_driver_init()` 才注册 IRQ4 handler，并设置 `MCR=0x0B`、`IER=0x01` 使能串口中断（见 [8250.c](file:///data25/lidg/lite/drivers/tty/serial/8250.c#L129-L153)）。
 
 结论：
 - 输出可用（轮询），不依赖中断；

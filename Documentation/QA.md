@@ -346,7 +346,7 @@
 是的。**当前仅保留串口作为输出通道**，VGA 相关代码已暂时移除，后续会按 Linux 2.6 风格重做 VGA/vt 支持。
 
 - `start_kernel()` 只初始化串口 `init_serial()`（见 [main.c](file:///data25/lidg/lite/init/main.c#L115-L125)）
-- `init_serial()` 把 console/tty 输出目标加入 SERIAL（见 [serial.c](file:///data25/lidg/lite/drivers/tty/serial/serial.c#L30-L41)）
+- `init_serial()` 把 console/tty 输出目标加入 SERIAL（见 [8250.c](file:///data25/lidg/lite/drivers/tty/serial/8250.c#L73-L94)）
 
 VGA 参考（保留用于后续重做）：
 - VGA 文本模式本质是对物理地址 `0xB8000` 的显存窗口写入字符与属性字节（80x25，每字符 2 字节）
@@ -364,7 +364,7 @@ VGA 参考（保留用于后续重做）：
 关键路径：
 - console 输出分发：[console.c](file:///data25/lidg/lite/drivers/video/console/console.c#L17-L28)
 - tty 输出分发：[tty.c](file:///data25/lidg/lite/drivers/tty/tty.c#L79-L86)
-- 串口硬件：[serial.c](file:///data25/lidg/lite/drivers/tty/serial/serial.c#L7-L24)
+- 串口硬件（8250/16550A）：[8250.c](file:///data25/lidg/lite/drivers/tty/serial/8250.c#L1-L33)
 
 ### Q5.3: 键盘输入是怎么进到用户态程序的？
 **回答**：
@@ -498,7 +498,7 @@ TTY 输入逻辑在 [tty.c](file:///data25/lidg/lite/drivers/tty/tty.c#L97-L186)
 它之所以叫 `simple`，是因为它只覆盖“最小平台设备注册”这条路径：
 - 分配 `struct platform_device`
 - 填 `name` 和 `id`
-- 拼实例名，例如 `serial0`
+- 拼实例名，例如 `serial8250`
 - 调 `device_initialize()` / `device_add()`
 - 把设备挂到 `platform_bus`
 

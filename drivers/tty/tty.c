@@ -7,7 +7,7 @@
 #include "linux/sched.h"
 #include "linux/signal.h"
 #include "linux/console.h"
-#include "linux/serial.h"
+#include "linux/serial_core.h"
 #include "linux/tty_ldisc.h"
 
 static const char *tty_devnode(struct device *dev, uint32_t *mode, uint32_t *uid, uint32_t *gid)
@@ -169,7 +169,7 @@ uint32_t tty_get_output_targets(void)
 void tty_put_char(char c)
 {
     if (tty_output_targets & TTY_OUTPUT_SERIAL)
-        serial_put_char(c);
+        uart_default_put_char(c);
 }
 
 /* tty_write: Implement TTY write. */

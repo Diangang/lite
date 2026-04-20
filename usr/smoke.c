@@ -772,12 +772,12 @@ void test_pci_uevent() {
      * Validate uevent path is live by triggering a bind/unbind via driver sysfs.
      * Linux mapping: /sys/bus/<bus>/drivers/<driver>/{bind,unbind} + /sys/kernel/uevent_seqnum.
      */
-    int w = write_file("/sys/bus/platform/drivers/console/unbind", "console0\n", 9);
+    int w = write_file("/sys/bus/platform/drivers/serial8250/unbind", "serial8250\n", 11);
     if (w <= 0)
-        fail("console unbind");
-    w = write_file("/sys/bus/platform/drivers_probe", "platform:console0\n", 18);
+        fail("serial unbind");
+    w = write_file("/sys/bus/platform/drivers_probe", "platform:serial8250\n", 21);
     if (w <= 0)
-        fail("drivers_probe console");
+        fail("drivers_probe serial");
 
     n = read_file("/sys/kernel/uevent_seqnum", buf, sizeof(buf));
     if (n <= 0) {
@@ -927,9 +927,9 @@ void test_sysfs_layout() {
         ok = 0;
     }
 
-    n = read_file("/sys/bus/platform/drivers/console/name", buf, sizeof(buf));
-    if (n <= 0 || !contains(buf, n, "console")) {
-        fail("/sys/bus/platform/drivers/console/name");
+    n = read_file("/sys/bus/platform/drivers/serial8250/name", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "serial8250")) {
+        fail("/sys/bus/platform/drivers/serial8250/name");
         ok = 0;
     }
 
@@ -1007,19 +1007,19 @@ void test_sysfs_layout() {
         print("sysfs layout OK.\n");
 }
 
-/* test_sysfs_bind_unbind_console: Implement test sysfs bind unbind console. */
-void test_sysfs_bind_unbind_console() {
+/* test_sysfs_bind_unbind_platform_serial: sysfs bind/unbind must work for platform devices. */
+void test_sysfs_bind_unbind_platform_serial() {
     print("\n--- Test 14: sysfs bind/unbind ---\n");
     int ok = 1;
     char buf[128];
     int w;
-    int n = read_file("/sys/devices/platform/console0/driver/name", buf, sizeof(buf));
+    int n = read_file("/sys/devices/platform/serial8250/driver/name", buf, sizeof(buf));
     if (n <= 0) {
-        fail("read console driver");
+        fail("read serial driver");
         return;
     }
-    if (!contains(buf, n, "console"))
-        print("WARN: console not bound initially\n");
+    if (!contains(buf, n, "serial8250"))
+        print("WARN: serial not bound initially\n");
 
     n = read_file("/sys/bus/platform/drivers_autoprobe", buf, sizeof(buf));
     if (n <= 0 || !contains(buf, n, "1")) {
@@ -1038,49 +1038,49 @@ void test_sysfs_bind_unbind_console() {
         ok = 0;
     }
 
-    w = write_file("/sys/bus/platform/drivers/console/unbind", "console0\n", 9);
+    w = write_file("/sys/bus/platform/drivers/serial8250/unbind", "serial8250\n", 11);
     if (w <= 0) {
-        fail("unbind console");
+        fail("unbind serial");
         return;
     }
-    n = read_file("/sys/devices/platform/console0/driver/name", buf, sizeof(buf));
-    if (n > 0 && contains(buf, n, "console")) {
-        fail("console driver should be unbound");
+    n = read_file("/sys/devices/platform/serial8250/driver/name", buf, sizeof(buf));
+    if (n > 0 && contains(buf, n, "serial8250")) {
+        fail("serial driver should be unbound");
         ok = 0;
     }
     /* Regression: stale sysfs dentries must not keep /driver reachable after unbind. */
-    int fd = open("/sys/devices/platform/console0/driver/name", 0);
+    int fd = open("/sys/devices/platform/serial8250/driver/name", 0);
     if (fd >= 0) {
         close(fd);
         fail("sysfs driver link should be unreachable after unbind");
         ok = 0;
     }
 
-    w = write_file("/sys/bus/platform/drivers_probe", "platform:console0\n", 18);
+    w = write_file("/sys/bus/platform/drivers_probe", "platform:serial8250\n", 21);
     if (w <= 0) {
-        fail("drivers_probe console modalias");
+        fail("drivers_probe serial modalias");
         return;
     }
-    n = read_file("/sys/devices/platform/console0/driver/name", buf, sizeof(buf));
-    if (n <= 0 || !contains(buf, n, "console")) {
-        fail("console driver should be probed");
+    n = read_file("/sys/devices/platform/serial8250/driver/name", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "serial8250")) {
+        fail("serial driver should be probed");
         ok = 0;
     }
 
-    w = write_file("/sys/bus/platform/drivers_probe", "platform:console0\n", 18);
+    w = write_file("/sys/bus/platform/drivers_probe", "platform:serial8250\n", 21);
     if (w > 0) {
-        fail("drivers_probe should reject already-bound console0");
+        fail("drivers_probe should reject already-bound serial8250");
         ok = 0;
     }
 
-    w = write_file("/sys/bus/platform/drivers/serial/bind", "console0\n", 9);
+    w = write_file("/sys/bus/platform/drivers/i8042/bind", "serial8250\n", 11);
     if (w > 0) {
-        fail("serial bind should not steal console0");
+        fail("i8042 bind should not steal serial8250");
         ok = 0;
     }
-    n = read_file("/sys/devices/platform/console0/driver/name", buf, sizeof(buf));
-    if (n <= 0 || !contains(buf, n, "console")) {
-        fail("console driver should remain bound after foreign bind");
+    n = read_file("/sys/devices/platform/serial8250/driver/name", buf, sizeof(buf));
+    if (n <= 0 || !contains(buf, n, "serial8250")) {
+        fail("serial driver should remain bound after foreign bind");
         ok = 0;
     }
 
@@ -2448,7 +2448,7 @@ int main() {
     test_large_mmap_touch();
     test_pci_uevent();
     test_sysfs_layout();
-    test_sysfs_bind_unbind_console();
+    test_sysfs_bind_unbind_platform_serial();
     test_fork_blast();
     test_sleep_interrupt_sigchld();
     test_kill_sigterm();
