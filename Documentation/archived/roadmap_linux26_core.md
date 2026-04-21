@@ -148,7 +148,7 @@ drivers/tty/{tty,serial/serial}.c
 drivers/video/console/{vga,console,console_driver}.c
 drivers/clocksource/timer.c
 drivers/input/keyboard.c
-drivers/nvme/nvme.c
+drivers/nvme/host/pci.c
 usr/{crt0,ulib,init,shell,smoke}.c
 usr/ulinker.ld
 ```

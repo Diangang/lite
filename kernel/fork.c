@@ -8,6 +8,7 @@
 #include "linux/fs.h"
 #include "linux/console.h"
 #include "linux/irqflags.h"
+#include "linux/panic.h"
 
 /* copy_thread: Copy thread. */
 struct pt_regs *copy_thread(uint32_t *stack, void (*entry)(void), struct pt_regs *parent_regs)
@@ -53,6 +54,19 @@ void set_task_comm(struct task_struct *task, const char *program)
     task->comm[i] = 0;
 }
 
+void __put_task_struct(struct task_struct *task)
+{
+    if (!task)
+        return;
+    if (!task_release_invariant_holds(task))
+        panic("__put_task_struct invariant violated");
+    if (atomic_read(&task->usage) != 0)
+        panic("__put_task_struct with non-zero usage");
+    if (task->thread.sp0)
+        kfree((void *)((uint32_t)task->thread.sp0 - THREAD_SIZE));
+    kfree(task);
+}
+
 /* sys_fork: Implement sys fork. */
 int sys_fork(struct pt_regs *regs)
 {
@@ -74,6 +88,7 @@ int sys_fork(struct pt_regs *regs)
         return -1;
     }
 
+    atomic_set(&task->usage, 1);
     task->pid = ++last_pid;
     task->parent = parent;
     task->thread.regs = copy_thread(stack, NULL, regs);
@@ -134,6 +149,7 @@ static int task_create_internal(void (*entry)(void), const char *program)
         return -1;
     }
 
+    atomic_set(&task->usage, 1);
     task->pid = ++last_pid;
     task->parent = parent;
     task->thread.regs = copy_thread(stack, entry, NULL);

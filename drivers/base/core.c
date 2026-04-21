@@ -89,7 +89,7 @@ struct device *device_create(struct class *cls, struct device *parent, dev_t dev
     if (parent)
         device_set_parent(dev, parent);
     if (device_add(dev) != 0) {
-        kobject_put(&dev->kobj);
+        put_device(dev);
         return NULL;
     }
     return dev;
@@ -404,11 +404,17 @@ int device_rebind(struct device *dev)
 
 int device_add(struct device *dev)
 {
+    struct device *held;
+    int ret;
+
     /*
      * Linux allows devices without an associated bus (bus == NULL),
      * e.g. many class devices. Keep this for learning parity.
      */
     if (!dev)
+        return -1;
+    held = get_device(dev);
+    if (!held)
         return -1;
     kset_add(devices_kset, &dev->kobj);
     INIT_LIST_HEAD(&dev->knode_bus.n_node);
@@ -420,11 +426,25 @@ int device_add(struct device *dev)
     if (dev->class)
         list_add_tail(&dev->class_list, &dev->class->devices);
     device_sysfs_add_links(dev);
-    devtmpfs_create_node(dev);
+    ret = devtmpfs_create_node(dev);
+    if (ret != 0)
+        goto err_links;
     device_uevent_emit("add", dev);
     if (dev->bus && bus_drivers_autoprobe(dev->bus))
         device_attach(dev);
+    put_device(held);
     return 0;
+
+err_links:
+    device_sysfs_remove_links(dev);
+    if (dev->class && dev->class_list.next && dev->class_list.prev)
+        list_del_init(&dev->class_list);
+    if (dev->bus && klist_node_attached(&dev->knode_bus))
+        klist_remove(&dev->knode_bus);
+    kset_remove(devices_kset, &dev->kobj);
+    kobject_del(&dev->kobj);
+    put_device(held);
+    return ret;
 }
 
 /* device_register: Implement device register. */
@@ -435,16 +455,8 @@ int device_register(struct device *dev)
 
 int device_del(struct device *dev)
 {
-    device_unregister(dev);
-    return 0;
-}
-
-/* device_unregister: Implement device unregister. */
-void device_unregister(struct device *dev)
-{
     if (!dev)
-        return;
-    /* Avoid deferred-probe UAF if the device is destroyed while deferred. */
+        return -1;
     driver_deferred_probe_remove(dev);
     device_unbind(dev);
     if (dev->bus && klist_node_attached(&dev->knode_bus))
@@ -456,7 +468,16 @@ void device_unregister(struct device *dev)
     device_uevent_emit("remove", dev);
     kobject_del(&dev->kobj);
     kset_remove(devices_kset, &dev->kobj);
-    kobject_put(&dev->kobj);
+    return 0;
+}
+
+/* device_unregister: Implement device unregister. */
+void device_unregister(struct device *dev)
+{
+    if (!dev)
+        return;
+    device_del(dev);
+    put_device(dev);
 }
 
 int device_for_each_child(struct device *dev, void *data, int (*fn)(struct device *child, void *data))

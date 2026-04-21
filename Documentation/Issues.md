@@ -231,7 +231,7 @@
     - `/dev/nvme0n1`
     - `/sys/kernel/uevent` 中 `ACTION=nvmeinit` 与 `ACTION=add .../nvme0n1`
 - **相关代码**：
-  - `drivers/nvme/nvme.c`（Create Queue、probe uevent、日志）
+  - `drivers/nvme/host/pci.c`（Create Queue、probe uevent、日志）
   - `include/linux/nvme.h`（最小 NVMe command/completion 定义）
   2. **用户态硬编码 syscall 号漂移**：新增 `SYS_MPROTECT/SYS_MREMAP` 后，`ush` 中硬编码的 `SYS_GETDENTS/SYS_CHDIR/SYS_MKDIR` 编号错位，错误 syscall 调用打乱了执行流并放大异常。
 - **解决**：

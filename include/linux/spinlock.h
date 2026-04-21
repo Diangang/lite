@@ -3,25 +3,170 @@
 
 #include <stdint.h>
 #include "linux/irqflags.h"
+#include "asm/barrier.h"
+
+typedef struct raw_spinlock {
+    uint32_t irqflags;
+    uint32_t locked;
+} raw_spinlock_t;
 
 typedef struct spinlock {
-    uint32_t irqflags;
+    raw_spinlock_t raw_lock;
 } spinlock_t;
 
-#define DEFINE_SPINLOCK(name) spinlock_t name = { 0 }
+#define __RAW_SPIN_LOCK_UNLOCKED(lockname) { 0, 0 }
+#define __SPIN_LOCK_UNLOCKED(lockname) { .raw_lock = __RAW_SPIN_LOCK_UNLOCKED(lockname) }
+
+#define DEFINE_SPINLOCK(name) spinlock_t name = __SPIN_LOCK_UNLOCKED(name)
+#define DEFINE_RAW_SPINLOCK(name) raw_spinlock_t name = __RAW_SPIN_LOCK_UNLOCKED(name)
+
+static inline void raw_spin_lock_init(raw_spinlock_t *lock)
+{
+    if (!lock)
+        return;
+    lock->irqflags = 0;
+    lock->locked = 0;
+}
+
+static inline void spin_lock_init(spinlock_t *lock)
+{
+    if (!lock)
+        return;
+    raw_spin_lock_init(&lock->raw_lock);
+}
+
+static inline void raw_spin_lock(raw_spinlock_t *lock)
+{
+    if (!lock)
+        return;
+    lock->irqflags = irq_save();
+    lock->locked = 1;
+    barrier();
+}
+
+static inline void raw_spin_unlock(raw_spinlock_t *lock)
+{
+    if (!lock)
+        return;
+    barrier();
+    lock->locked = 0;
+    irq_restore(lock->irqflags);
+}
+
+static inline int raw_spin_is_locked(raw_spinlock_t *lock)
+{
+    return lock ? (int)lock->locked : 0;
+}
+
+static inline int raw_spin_trylock(raw_spinlock_t *lock)
+{
+    raw_spin_lock(lock);
+    return 1;
+}
+
+static inline void raw_spin_lock_irq(raw_spinlock_t *lock)
+{
+    raw_spin_lock(lock);
+}
+
+static inline void raw_spin_unlock_irq(raw_spinlock_t *lock)
+{
+    raw_spin_unlock(lock);
+}
+
+static inline void raw_spin_lock_bh(raw_spinlock_t *lock)
+{
+    raw_spin_lock(lock);
+}
+
+static inline void raw_spin_unlock_bh(raw_spinlock_t *lock)
+{
+    raw_spin_unlock(lock);
+}
+
+static inline void raw_spin_lock_irqsave_impl(raw_spinlock_t *lock, unsigned long *flags)
+{
+    if (!flags)
+        return;
+    *flags = irq_save();
+    if (!lock)
+        return;
+    lock->irqflags = (uint32_t)(*flags);
+    lock->locked = 1;
+    barrier();
+}
+
+static inline void raw_spin_unlock_irqrestore_impl(raw_spinlock_t *lock, unsigned long flags)
+{
+    if (lock) {
+        barrier();
+        lock->locked = 0;
+    }
+    irq_restore((uint32_t)flags);
+}
+
+#define raw_spin_lock_irqsave(lock, flags) \
+    do { raw_spin_lock_irqsave_impl((lock), &(flags)); } while (0)
+
+#define raw_spin_unlock_irqrestore(lock, flags) \
+    do { raw_spin_unlock_irqrestore_impl((lock), (flags)); } while (0)
 
 static inline void spin_lock(spinlock_t *lock)
 {
     if (!lock)
         return;
-    lock->irqflags = irq_save();
+    raw_spin_lock(&lock->raw_lock);
 }
 
 static inline void spin_unlock(spinlock_t *lock)
 {
     if (!lock)
         return;
-    irq_restore(lock->irqflags);
+    raw_spin_unlock(&lock->raw_lock);
 }
+
+static inline int spin_trylock(spinlock_t *lock)
+{
+    return lock ? raw_spin_trylock(&lock->raw_lock) : 0;
+}
+
+static inline int spin_is_locked(spinlock_t *lock)
+{
+    return lock ? raw_spin_is_locked(&lock->raw_lock) : 0;
+}
+
+static inline void spin_lock_irq(spinlock_t *lock)
+{
+    if (!lock)
+        return;
+    raw_spin_lock_irq(&lock->raw_lock);
+}
+
+static inline void spin_unlock_irq(spinlock_t *lock)
+{
+    if (!lock)
+        return;
+    raw_spin_unlock_irq(&lock->raw_lock);
+}
+
+static inline void spin_lock_bh(spinlock_t *lock)
+{
+    if (!lock)
+        return;
+    raw_spin_lock_bh(&lock->raw_lock);
+}
+
+static inline void spin_unlock_bh(spinlock_t *lock)
+{
+    if (!lock)
+        return;
+    raw_spin_unlock_bh(&lock->raw_lock);
+}
+
+#define spin_lock_irqsave(lock, flags) \
+    do { raw_spin_lock_irqsave(&(lock)->raw_lock, flags); } while (0)
+
+#define spin_unlock_irqrestore(lock, flags) \
+    do { raw_spin_unlock_irqrestore(&(lock)->raw_lock, flags); } while (0)
 
 #endif

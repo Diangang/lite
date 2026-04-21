@@ -1,0 +1,43 @@
+#ifndef _LINUX_RADIX_TREE_H
+#define _LINUX_RADIX_TREE_H
+
+#include "linux/page_alloc.h"
+#include "linux/types.h"
+
+/*
+ * Linux mapping: radix-tree objects live in include/linux/radix-tree.h.
+ * Lite implements a minimal non-RCU subset sufficient for IDR backing.
+ */
+
+#define RADIX_TREE_MAP_SHIFT 6
+#define RADIX_TREE_MAP_SIZE (1UL << RADIX_TREE_MAP_SHIFT)
+#define RADIX_TREE_MAP_MASK (RADIX_TREE_MAP_SIZE - 1)
+
+struct radix_tree_node {
+    unsigned int height;
+    unsigned int count;
+    void *slots[RADIX_TREE_MAP_SIZE];
+};
+
+struct radix_tree_root {
+    unsigned int height;
+    gfp_t gfp_mask;
+    struct radix_tree_node *rnode;
+};
+
+#define RADIX_TREE_INIT(mask) { .height = 0, .gfp_mask = (mask), .rnode = NULL }
+#define RADIX_TREE(name, mask) struct radix_tree_root name = RADIX_TREE_INIT(mask)
+
+#define INIT_RADIX_TREE(root, mask)      \
+    do {                                 \
+        (root)->height = 0;              \
+        (root)->gfp_mask = (mask);       \
+        (root)->rnode = NULL;            \
+    } while (0)
+
+int radix_tree_insert(struct radix_tree_root *root, unsigned long index, void *item);
+void *radix_tree_lookup(struct radix_tree_root *root, unsigned long index);
+void *radix_tree_delete(struct radix_tree_root *root, unsigned long index);
+void radix_tree_destroy(struct radix_tree_root *root);
+
+#endif

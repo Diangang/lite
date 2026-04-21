@@ -41,6 +41,9 @@ struct vring {
     struct vring_used *used;
 };
 
+struct virtio_device;
+struct virtqueue;
+
 static inline void vring_init(struct vring *vr, unsigned int num, void *p, unsigned long align)
 {
     vr->num = num;
@@ -57,5 +60,14 @@ static inline unsigned int vring_size(unsigned int num, unsigned long align)
     size += sizeof(uint16_t) * 3 + num * sizeof(struct vring_used_elem);
     return size;
 }
+
+struct virtqueue *vring_new_virtqueue(unsigned int index, unsigned int num,
+                                      unsigned int vring_align,
+                                      struct virtio_device *vdev,
+                                      void *pages, uint32_t ring_phys,
+                                      unsigned int ring_order,
+                                      void (*notify)(struct virtqueue *vq),
+                                      void *notify_addr);
+void vring_del_virtqueue(struct virtqueue *vq);
 
 #endif

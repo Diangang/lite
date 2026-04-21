@@ -3,7 +3,9 @@
 #include "linux/blk_queue.h"
 #include "linux/blk_request.h"
 #include "linux/errno.h"
+#include "linux/list.h"
 #include "linux/slab.h"
+#include "linux/string.h"
 #include <stdint.h>
 
 static inline int blk_irqs_enabled(void)
@@ -52,7 +54,25 @@ int blk_update_nr_requests(struct request_queue *q, unsigned int nr)
     return 0;
 }
 
-struct request_queue *blk_init_queue(request_fn_t request_fn, void *queuedata)
+void blk_queue_make_request(struct request_queue *q, make_request_fn *mfn)
+{
+    if (!q)
+        return;
+    q->make_request_fn = mfn;
+    if (mfn)
+        q->request_fn = NULL;
+}
+
+void blk_rq_init(struct request_queue *q, struct request *rq)
+{
+    if (!rq)
+        return;
+    memset(rq, 0, sizeof(*rq));
+    INIT_LIST_HEAD(&rq->queuelist);
+    rq->q = q;
+}
+
+struct request_queue *blk_init_queue(request_fn_proc *request_fn, void *queuedata)
 {
     if (!request_fn)
         return NULL;
@@ -61,8 +81,8 @@ struct request_queue *blk_init_queue(request_fn_t request_fn, void *queuedata)
         return NULL;
     q->make_request_fn = NULL;
     q->request_fn = request_fn;
-    q->head = NULL;
-    q->tail = NULL;
+    INIT_LIST_HEAD(&q->queue_head);
+    q->last_merge = NULL;
     q->queuedata = queuedata;
     q->running = 0;
     q->nr_requests = 128;
@@ -122,15 +142,10 @@ int generic_make_request(struct bio *bio)
             bio_endio(bio, -1);
             return -1;
         }
+        blk_rq_init(q, rq);
         rq->bio = bio;
-        rq->next = NULL;
-        if (!q->head) {
-            q->head = rq;
-            q->tail = rq;
-        } else {
-            q->tail->next = rq;
-            q->tail = rq;
-        }
+        list_add_tail(&rq->queuelist, &q->queue_head);
+        q->last_merge = rq;
         q->queued++;
         /*
          * Run the queue synchronously in the submitter context (simplest single-queue).
@@ -150,16 +165,22 @@ int generic_make_request(struct bio *bio)
     return q->make_request_fn(q, bio);
 }
 
+struct request *blk_peek_request(struct request_queue *q)
+{
+    if (!q || list_empty(&q->queue_head))
+        return NULL;
+    return list_first_entry(&q->queue_head, struct request, queuelist);
+}
+
 /* blk_fetch_request: Implement block fetch request. */
 struct request *blk_fetch_request(struct request_queue *q)
 {
-    if (!q || !q->head)
+    struct request *rq = blk_peek_request(q);
+    if (!rq)
         return NULL;
-    struct request *rq = q->head;
-    q->head = rq->next;
-    if (!q->head)
-        q->tail = NULL;
-    rq->next = NULL;
+    list_del_init(&rq->queuelist);
+    if (q->last_merge == rq)
+        q->last_merge = NULL;
     if (q->queued)
         q->queued--;
     q->in_flight++;
@@ -173,6 +194,8 @@ void blk_complete_request(struct request_queue *q, struct request *rq, int error
         return;
     if (q && q->in_flight)
         q->in_flight--;
+    if (q && q->last_merge == rq)
+        q->last_merge = NULL;
     bio_endio(rq->bio, error);
     kfree(rq);
 }

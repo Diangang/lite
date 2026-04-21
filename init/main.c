@@ -33,15 +33,50 @@
 #include "linux/slab.h"
 
 extern initcall_t __initcall_start[];
+extern initcall_t __initcall0_start[];
+extern initcall_t __initcall1_start[];
+extern initcall_t __initcall2_start[];
+extern initcall_t __initcall3_start[];
+extern initcall_t __initcall4_start[];
+extern initcall_t __initcall5_start[];
+extern initcall_t __initcall6_start[];
+extern initcall_t __initcall7_start[];
 extern initcall_t __initcall_end[];
 
-/* do_initcalls: Perform initcalls. */
-static void do_initcalls(void)
+static initcall_t *initcall_levels[] = {
+    __initcall0_start,
+    __initcall1_start,
+    __initcall2_start,
+    __initcall3_start,
+    __initcall4_start,
+    __initcall5_start,
+    __initcall6_start,
+    __initcall7_start,
+    __initcall_end
+};
+
+/* do_pre_smp_initcalls: Lite subset runs early initcalls before driver_init. */
+static void do_pre_smp_initcalls(void)
 {
     initcall_t *call;
-    for (call = __initcall_start; call < __initcall_end; call++) {
+    for (call = __initcall_start; call < __initcall0_start; call++)
         (*call)();
-    }
+}
+
+static void do_initcall_level(int level)
+{
+    initcall_t *call;
+    if (level < 0 || level >= (int)(sizeof(initcall_levels) / sizeof(initcall_levels[0])) - 1)
+        return;
+    for (call = initcall_levels[level]; call < initcall_levels[level + 1]; call++)
+        (*call)();
+}
+
+/* do_initcalls: Perform initcalls by Linux-shaped level (0..7). */
+static void do_initcalls(void)
+{
+    for (int level = 0; level < (int)(sizeof(initcall_levels) / sizeof(initcall_levels[0])) - 1; level++)
+        do_initcall_level(level);
 }
 
 /* do_basic_setup: Perform basic setup. */
@@ -84,7 +119,6 @@ static void prepare_namespace(void)
     vfs_mount_fs("/proc", "proc");
     devtmpfs_mount("/dev");
     vfs_mount_fs("/sys", "sysfs");
-    virtio_scsi_late_probe();
     /*
      * Linux mapping: mount explicit filesystems on explicit block devices.
      * Keep the legacy /mnt mount on the virtio-scsi disk when present so SCSI
@@ -222,6 +256,12 @@ void start_kernel(void)
     printf("This is a minimal kernel running on QEMU.\n");
     printf("Console output uses the serial port (COM1).\n");
     printf("Enjoy your OS development journey!\n");
+
+    /*
+     * Linux mapping: run early initcalls before starting PID 1 (kernel_init).
+     * Lite is single-core, but we keep the phase boundary aligned.
+     */
+    do_pre_smp_initcalls();
 
     /* Transition to rest_init and spawn PID 1 */
     rest_init();

@@ -447,6 +447,13 @@ int del_gendisk(struct gendisk *disk)
     return 0;
 }
 
+void put_disk(struct gendisk *disk)
+{
+    if (!disk)
+        return;
+    kfree(disk);
+}
+
 struct gendisk *gendisk_from_dev(struct device *dev)
 {
     if (!dev || dev->type != &disk_type)

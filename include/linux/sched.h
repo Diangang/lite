@@ -2,6 +2,7 @@
 #define LINUX_SCHED_H
 
 #include <stdint.h>
+#include "linux/atomic.h"
 #include "linux/list.h"
 #include "linux/wait.h"
 #include "linux/mm.h"
@@ -13,6 +14,7 @@ struct pt_regs;
 struct nameidata;
 
 struct task_struct {
+    atomic_t usage;
     uint32_t pid;
     struct task_struct *parent;
     struct thread_struct thread;
@@ -80,7 +82,7 @@ extern struct list_head task_list_head;
 /*
  * Linux mapping: Lite still exports `current` and `need_resched` as
  * compatibility mirrors for existing call sites, but scheduler ownership lives
- * in `boot_cpu_sched.*` inside `kernel/sched.c`. New core code should prefer
+ * in `boot_cpu_sched.*` inside `kernel/sched/core.c`. New core code should prefer
  * helper accessors below instead of consuming these globals directly.
  */
 extern struct task_struct *current;
@@ -115,5 +117,22 @@ const char *task_get_current_comm(void);
 uint32_t task_get_current_id(void);
 int task_current_is_user(void);
 int task_should_resched(void);
+
+void __put_task_struct(struct task_struct *task);
+
+static inline void get_task_struct(struct task_struct *task)
+{
+    if (!task)
+        return;
+    atomic_inc(&task->usage);
+}
+
+static inline void put_task_struct(struct task_struct *task)
+{
+    if (!task)
+        return;
+    if (atomic_dec_and_test(&task->usage))
+        __put_task_struct(task);
+}
 
 #endif

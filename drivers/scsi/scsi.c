@@ -22,6 +22,16 @@ static struct scsi_target *scsi_alloc_or_lookup_target(struct Scsi_Host *shost, 
 static void scsi_target_reap(struct Scsi_Host *shost, struct scsi_target *starget);
 static void scsi_sync_done(struct scsi_cmnd *cmd);
 
+static void scsi_host_dev_release(struct device *dev)
+{
+    struct Scsi_Host *shost;
+
+    if (!dev)
+        return;
+    shost = container_of(dev, struct Scsi_Host, shost_gendev);
+    kfree(shost);
+}
+
 static void scsi_copy_trim(char *dst, uint32_t dlen, const uint8_t *src, uint32_t slen)
 {
     uint32_t n = slen < dlen - 1 ? slen : dlen - 1;
@@ -55,6 +65,7 @@ int scsi_add_host(struct Scsi_Host *shost, struct device *parent)
         return -1;
     snprintf(shost->name, sizeof(shost->name), "host%u", shost->host_no);
     device_initialize(&shost->shost_gendev, shost->name);
+    shost->shost_gendev.release = scsi_host_dev_release;
     shost->shost_gendev.class = &shost_class;
     shost->shost_gendev.bus = &scsi_bus_type;
     if (parent)
@@ -669,4 +680,12 @@ void scsi_remove_host(struct Scsi_Host *shost)
         scsi_release_target(shost->stargets[shost->nr_targets]);
         shost->stargets[shost->nr_targets] = NULL;
     }
+    device_del(&shost->shost_gendev);
+}
+
+void scsi_host_put(struct Scsi_Host *shost)
+{
+    if (!shost)
+        return;
+    put_device(&shost->shost_gendev);
 }

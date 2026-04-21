@@ -470,7 +470,7 @@ VGA 参考（保留用于后续重做）：
 
 ### 8.3 NVMe 的当前实现定位
 
-[nvme.c](file:///data25/lidg/lite/drivers/nvme/nvme.c) 当前的定位不是完整 NVMe 协议栈，而是：
+[pci.c](file:///data25/lidg/lite/drivers/nvme/host/pci.c) 当前的定位不是完整 NVMe 协议栈，而是：
 - 验证 PCIe 设备枚举
 - BAR 映射
 - 通过设备模型注册 namespace
@@ -575,7 +575,7 @@ VGA 参考（保留用于后续重做）：
 - 内存主线：[bootmem.c](file:///data25/lidg/lite/mm/bootmem.c) -> [mmzone.c](file:///data25/lidg/lite/mm/mmzone.c) -> [page_alloc.c](file:///data25/lidg/lite/mm/page_alloc.c) -> [memory.c](file:///data25/lidg/lite/mm/memory.c)
 - 任务主线：[sched.c](file:///data25/lidg/lite/kernel/sched.c) -> [fork.c](file:///data25/lidg/lite/kernel/fork.c) -> [exec.c](file:///data25/lidg/lite/fs/exec.c)
 - 文件系统主线：[namespace.c](file:///data25/lidg/lite/fs/namespace.c) -> [namei.c](file:///data25/lidg/lite/fs/namei.c) -> [open.c](file:///data25/lidg/lite/fs/open.c) -> [minixfs.c](file:///data25/lidg/lite/fs/minixfs/minixfs.c)
-- 设备主线：[drivers/base/init.c](file:///data25/lidg/lite/drivers/base/init.c) -> [core.c](file:///data25/lidg/lite/drivers/base/core.c) -> [pci.c](file:///data25/lidg/lite/drivers/pci/pci.c) -> [nvme.c](file:///data25/lidg/lite/drivers/nvme/nvme.c)
+- 设备主线：[drivers/base/init.c](file:///data25/lidg/lite/drivers/base/init.c) -> [core.c](file:///data25/lidg/lite/drivers/base/core.c) -> [pci.c](file:///data25/lidg/lite/drivers/pci/pci.c) -> [pci.c](file:///data25/lidg/lite/drivers/nvme/host/pci.c)
 - I/O 交互主线：[tty_io.c](file:///data25/lidg/lite/drivers/tty/tty_io.c) -> [8250.c](file:///data25/lidg/lite/drivers/tty/serial/8250.c)
 
 如果只是想验证系统现状，可以直接看：

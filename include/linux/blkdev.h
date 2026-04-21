@@ -2,6 +2,8 @@
 #define LINUX_BLKDEV_H
 
 #include <stdint.h>
+#include "linux/list.h"
+#include "linux/blk_types.h"
 
 /*
  * Linux mapping: include/linux/blkdev.h defines BLKDEV_MIN_RQ and enforces it
@@ -14,6 +16,30 @@ struct device;
 struct device_type;
 struct request_queue;
 struct attribute_group;
+struct request;
+
+typedef void (request_fn_proc)(struct request_queue *q);
+typedef int (make_request_fn)(struct request_queue *q, struct bio *bio);
+typedef void (*request_fn_t)(struct request_queue *q);
+typedef int (*make_request_fn_t)(struct request_queue *q, struct bio *bio);
+
+struct request {
+    struct list_head queuelist;
+    struct request_queue *q;
+    struct bio *bio;
+};
+
+struct request_queue {
+    struct list_head queue_head;
+    struct request *last_merge;
+    make_request_fn *make_request_fn;
+    request_fn_proc *request_fn;
+    void *queuedata;
+    int running;             /* prevent recursive request_fn entry */
+    unsigned int nr_requests;/* Linux mapping: queue depth limit */
+    unsigned int queued;     /* pending requests linked on queue_head */
+    unsigned int in_flight;  /* requests fetched by driver, not yet completed */
+};
 
 struct gendisk {
     char disk_name[32];
@@ -74,6 +100,23 @@ void bdput(struct block_device *bdev);
 int blkdev_get(struct block_device *bdev);
 void blkdev_put(struct block_device *bdev);
 int del_gendisk(struct gendisk *disk);
+void put_disk(struct gendisk *disk);
 extern const struct attribute_group queue_attr_group;
+
+static inline struct request_queue *bdev_get_queue(struct block_device *bdev)
+{
+    return (bdev && bdev->disk) ? bdev->disk->queue : (struct request_queue *)0;
+}
+
+/* Linux-aligned helpers (single-queue, non-blk-mq). */
+struct request_queue *blk_init_queue(request_fn_proc *request_fn, void *queuedata);
+void blk_cleanup_queue(struct request_queue *q);
+int blk_update_nr_requests(struct request_queue *q, unsigned int nr);
+int generic_make_request(struct bio *bio);
+void blk_queue_make_request(struct request_queue *q, make_request_fn *mfn);
+void blk_rq_init(struct request_queue *q, struct request *rq);
+struct request *blk_peek_request(struct request_queue *q);
+struct request *blk_fetch_request(struct request_queue *q);
+void blk_complete_request(struct request_queue *q, struct request *rq, int error);
 
 #endif

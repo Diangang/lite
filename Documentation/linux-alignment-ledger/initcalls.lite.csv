@@ -1,6 +1,6 @@
 macro,name,file,line
 subsys_initcall,genhd_device_init,/data25/lidg/lite/block/blkdev.c,557
-module_init,virtio_pci_init,/data25/lidg/lite/drivers/virtio/virtio_pci.c,541
+module_init,virtio_pci_init,/data25/lidg/lite/drivers/virtio/virtio_pci_common.c,100
 subsys_initcall,virtio_init,/data25/lidg/lite/drivers/virtio/virtio.c,140
 core_initcall,pcibus_class_init,/data25/lidg/lite/drivers/pci/pci.c,164
 subsys_initcall,pci_init,/data25/lidg/lite/drivers/pci/pci.c,835
@@ -12,8 +12,8 @@ subsys_initcall,scsi_init_hosts,/data25/lidg/lite/drivers/scsi/hosts.c,16
 module_init,virtio_scsi_init,/data25/lidg/lite/drivers/scsi/virtio_scsi.c,267
 subsys_initcall,sd_disk_class_init,/data25/lidg/lite/drivers/scsi/sd.c,20
 subsys_initcall,scsi_sysfs_register,/data25/lidg/lite/drivers/scsi/scsi_sysfs.c,25
-core_initcall,nvme_class_init,/data25/lidg/lite/drivers/nvme/nvme-core.c,18
-module_init,nvme_init,/data25/lidg/lite/drivers/nvme/nvme.c,752
+core_initcall,nvme_class_init,/data25/lidg/lite/drivers/nvme/host/pci.c,1005
+module_init,nvme_init,/data25/lidg/lite/drivers/nvme/host/pci.c,995
 module_init,atkbd_init,/data25/lidg/lite/drivers/input/keyboard/atkbd.c,57
 module_init,i8042_init,/data25/lidg/lite/drivers/input/serio/i8042.c,115
 subsys_initcall,serio_core_init,/data25/lidg/lite/drivers/input/serio/serio.c,151

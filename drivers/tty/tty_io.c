@@ -30,8 +30,14 @@ static struct class tty_class;
 static struct list_head tty_drivers;
 
 static const struct tty_ldisc_ops *tty_ldisc = &n_tty_ldisc_ops;
-static struct tty_struct tty0;
-static int tty_ldisc_opened;
+static struct tty_struct *tty_active;
+
+static int tty_ldisc_enable(struct tty_struct *tty)
+{
+    if (!tty || !tty_ldisc || !tty_ldisc->open)
+        return 0;
+    return tty_ldisc->open(tty);
+}
 
 int tty_register_driver(struct tty_driver *drv, const char *name, uint32_t num)
 {
@@ -42,12 +48,11 @@ int tty_register_driver(struct tty_driver *drv, const char *name, uint32_t num)
         if (!strcmp(cur->name, name))
             return -1;
     }
-    memset(drv, 0, sizeof(*drv));
     uint32_t len = (uint32_t)strlen(name);
     if (len >= sizeof(drv->name))
         len = sizeof(drv->name) - 1;
+    memset(drv->name, 0, sizeof(drv->name));
     memcpy(drv->name, name, len);
-    drv->name[len] = 0;
     drv->num = num;
     INIT_LIST_HEAD(&drv->list);
     list_add_tail(&drv->list, &tty_drivers);
@@ -74,6 +79,8 @@ struct device *tty_register_device(struct tty_driver *drv, uint32_t index, struc
     ttydev->major = 4;
     ttydev->minor = 64 + index;
     ttydev->driver_data = data;
+    ttydev->tty.port = ttydev;
+    ttydev->tty.disc_data = NULL;
 
     /* Linux mapping: tty_io.c uses device_create(tty_class, ..., "ttyS%d"). */
     struct device *dev = device_create(&tty_class, parent, MKDEV(ttydev->major, ttydev->minor), ttydev, "%s", name);
@@ -81,7 +88,42 @@ struct device *tty_register_device(struct tty_driver *drv, uint32_t index, struc
         kfree(ttydev);
         return NULL;
     }
+    if (tty_ldisc_enable(&ttydev->tty) != 0) {
+        device_unregister(dev);
+        return NULL;
+    }
+    if (!tty_active)
+        tty_active = &ttydev->tty;
     return dev;
+}
+
+void tty_unregister_device(struct tty_driver *drv, uint32_t index)
+{
+    struct device *dev;
+    struct device *n;
+
+    if (!drv)
+        return;
+
+    list_for_each_entry_safe(dev, n, &tty_class.devices, class_list) {
+        struct tty_port *port;
+
+        if (dev->class != &tty_class)
+            continue;
+        port = tty_port_from_dev(dev);
+        if (!port)
+            continue;
+        if (port->driver != drv || port->index != index)
+            continue;
+
+        if (tty_active == &port->tty)
+            tty_active = NULL;
+        if (tty_ldisc && tty_ldisc->close)
+            tty_ldisc->close(&port->tty);
+        device_unregister(dev);
+        kfree(port);
+        return;
+    }
 }
 
 struct tty_port *tty_port_from_dev(struct device *dev)
@@ -154,22 +196,27 @@ void tty_set_flags(uint32_t flags)
 
 void tty_receive_char(char c)
 {
+    struct tty_struct *tty;
+
     if (!tty_ldisc)
+        return;
+    tty = tty_active;
+    if (!tty)
         return;
     if (tty_ldisc->receive_buf) {
         uint8_t b = (uint8_t)c;
-        tty_ldisc->receive_buf(&b, 1);
+        tty_ldisc->receive_buf(tty, &b, 1);
         return;
     }
     if (tty_ldisc->receive_char)
-        tty_ldisc->receive_char(c);
+        tty_ldisc->receive_char(tty, c);
 }
 
 uint32_t tty_read_blocking(char *buf, uint32_t len)
 {
-    if (!tty_ldisc || !tty_ldisc->read)
+    if (!tty_ldisc || !tty_ldisc->read || !tty_active)
         return 0;
-    return tty_ldisc->read(buf, len);
+    return tty_ldisc->read(tty_active, buf, len);
 }
 
 static int tty_class_init(void)
@@ -196,14 +243,7 @@ static int tty_init(void)
 
     tty_flags = (TTY_FLAG_ECHO | TTY_FLAG_CANON);
     foreground_pid = 0;
-    /* Linux mapping: ldisc is opened when attached; Lite opens once at init. */
-    tty0.port = NULL;
-    tty0.disc_data = NULL;
-    tty_ldisc_opened = 0;
-    if (tty_ldisc && tty_ldisc->open) {
-        if (tty_ldisc->open(&tty0) == 0)
-            tty_ldisc_opened = 1;
-    }
+    tty_active = NULL;
 
     if (!device_create(&tty_class, NULL, MKDEV(5, 0), NULL, "tty"))
         return -1;

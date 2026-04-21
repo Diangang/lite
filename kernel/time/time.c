@@ -35,3 +35,4 @@ uint32_t time_get_uptime(void)
 {
     return jiffies / HZ;
 }
+

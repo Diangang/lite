@@ -535,8 +535,8 @@ PCIe 是可枚举的物理协议互连：
 
 Lite 已具备最小路径：
 - PCI 扫描、配置空间读取、sysfs 可见化与 bind/unbind（见 [pci.c](file:///data25/lidg/lite/drivers/pci/pci.c)、[sysfs.c](file:///data25/lidg/lite/fs/sysfs/sysfs.c)）
-- NVMe 驱动在 PCI bus 上按 class code 匹配并 probe（见 [nvme.c](file:///data25/lidg/lite/drivers/nvme/nvme.c#L48-L56)）
-- 当前 NVMe “testing mode”：不实现完整 admin/io queue 协议收发，直接注册一个测试 namespace 并暴露成块设备节点 `/dev/nvme0n1`（见 [nvme.c](file:///data25/lidg/lite/drivers/nvme/nvme.c#L74-L127)）
+- NVMe 驱动在 PCI bus 上按 class code 匹配并 probe（见 [pci.c](file:///data25/lidg/lite/drivers/nvme/host/pci.c#L877-L944)）
+- 当前 NVMe 仍是“打通链路”的简化实现：重点在把 PCI 枚举、MMIO、队列、gendisk 注册、devtmpfs/sysfs 暴露串成闭环，还不是完整 NVMe 协议栈（见 [pci.c](file:///data25/lidg/lite/drivers/nvme/host/pci.c#L651-L984)）
 
 这条链路验证的是：
 - 可枚举总线（PCI）→ 驱动绑定（NVMe）→ 块设备注册 → devtmpfs `/dev` 节点

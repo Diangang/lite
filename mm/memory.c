@@ -659,7 +659,10 @@ struct pt_regs *do_page_fault(struct pt_regs *regs)
 
     if (faulting_address < PAGE_SIZE) {
         if (user_access) {
-            printf("User Page Fault: null access.\n");
+            printf("User Page Fault: null access at 0x%x - EIP: 0x%x pid=%u comm=%s\n",
+                   faulting_address, regs->eip,
+                   current ? current->pid : 0u,
+                   current ? current->comm : "?");
             pf_null++;
             do_exit_reason(1, TASK_EXIT_PAGEFAULT, faulting_address, regs->eip);
             struct pt_regs *task_schedule(struct pt_regs *r);

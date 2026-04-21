@@ -129,7 +129,6 @@ static void task_idle(void)
         __asm__ volatile ("hlt");
 }
 
-
 /* task_tick: Implement task tick. */
 void task_tick(void)
 {
@@ -302,6 +301,7 @@ static void init_task(void)
     if (!task || !stack)
         panic("TASK: Failed to initialize tasking.");
 
+    atomic_set(&task->usage, 1);
     task->pid = 0;
     task->parent = NULL;
     task->thread.regs = copy_thread(stack, task_idle, NULL);
@@ -345,3 +345,4 @@ void sched_init(void)
 {
     init_task();
 }
+

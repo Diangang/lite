@@ -5,6 +5,7 @@
 
 struct block_device;
 struct buffer_head;
+struct address_space;
 
 enum {
     BH_Uptodate = 1u << 0,
@@ -28,6 +29,7 @@ void brelse(struct buffer_head *bh);
 void mark_buffer_dirty(struct buffer_head *bh);
 int sync_dirty_buffer(struct buffer_head *bh);
 int sync_dirty_buffers_all(void);
+int sync_mapping_buffers(struct address_space *mapping);
 void invalidate_buffer(struct block_device *bdev, uint32_t block, uint32_t size);
 
 #endif

@@ -522,7 +522,7 @@ TTY 输入逻辑在 [tty_io.c](file:///data25/lidg/lite/drivers/tty/tty_io.c)，
 **回答**：
 1.  PCI 总线通过 initcall 初始化并扫描 bus 0，枚举 `pci_dev` 并注册进 device model（见 [pci.c](file:///data25/lidg/lite/drivers/pci/pci.c#L709-L747)、[pci_register_function](file:///data25/lidg/lite/drivers/pci/pci.c#L423-L597)）。
 2.  PCI driver core 通过 `id_table` + `pci_bus_match()` 完成匹配，然后进入“桥接 probe”（`device_driver.probe` -> `pci_driver.probe`）（见 [pci_bus_match](file:///data25/lidg/lite/drivers/pci/pci.c#L640-L657)、[pci_driver_probe](file:///data25/lidg/lite/drivers/pci/pci.c#L659-L676)）。
-3.  NVMe 驱动注册到 PCI bus，按 class code `0x01/0x08` 匹配（见 [nvme_pci_ids](file:///data25/lidg/lite/drivers/nvme/nvme.c#L645-L649)、[nvme_pci_probe](file:///data25/lidg/lite/drivers/nvme/nvme.c#L651-L705)）。
+3.  NVMe 驱动注册到 PCI bus，按 class code `0x01/0x08` 匹配（见 [nvme_pci_ids](file:///data25/lidg/lite/drivers/nvme/host/pci.c#L884-L887)、[nvme_probe](file:///data25/lidg/lite/drivers/nvme/host/pci.c#L877-L944)）。
 4.  当前 NVMe 仍是“打通链路”的简化实现：重点在把 PCI 枚举、MMIO、队列、gendisk 注册、devtmpfs/sysfs 暴露串成闭环，还不是完整 NVMe 协议栈。
 
 ### Q7.5: devtmpfs 在当前系统里起什么作用？
@@ -539,7 +539,7 @@ devtmpfs 负责把抽象设备节点暴露到 `/dev`，当前至少包含：
 Linux 也是两层分工，Lite 当前做法与其一致。
 1.  driver core 的 `device_driver.probe(struct device *)` 是通用入口：负责绑定关系（`dev->driver`）、sysfs link、uevent（bind/unbind）等共性动作（见 [driver_probe_device](file:///data25/lidg/lite/drivers/base/driver.c#L173-L196)）。
 2.  PCI 子系统的 `pci_driver.probe(struct pci_dev *, const struct pci_device_id *)` 是总线专用入口：负责把抽象 `device` 转成 `pci_dev`，并把命中的 `id_table` 条目传给具体驱动（见 [pci_driver_probe](file:///data25/lidg/lite/drivers/pci/pci.c#L659-L676)）。
-3.  具体驱动（例如 NVMe）只实现它关心的硬件语义（队列、MMIO、命令等），不需要重复实现通用绑定流程（见 [nvme_pci_probe](file:///data25/lidg/lite/drivers/nvme/nvme.c#L651-L705)）。
+3.  具体驱动（例如 NVMe）只实现它关心的硬件语义（队列、MMIO、命令等），不需要重复实现通用绑定流程（见 [nvme_probe](file:///data25/lidg/lite/drivers/nvme/host/pci.c#L877-L944)）。
 
 ### Q7.6: “设备注册后自动匹配驱动、驱动注册后自动匹配设备”，Linux 也是这样吗？
 **回答**：
@@ -686,8 +686,8 @@ Linux 也是两层分工，Lite 当前做法与其一致。
     - `include/scsi/scsi_host.h` / `scsi_device` / `sd`：SCSI host、device、disk 三层模型
 2.  Lite 现状（按 Linux 术语的最小闭环）：
     - `drivers/virtio/virtio.c`：最小 `virtio` 总线（`virtio_bus_type`）与 `virtio_driver/virtio_device` 注册路径
-    - `drivers/virtio/virtio_pci.c`：最小 `virtio-pci` transport（`pci_driver`），负责把 PCI 上的 virtio 设备实例化为 `virtio_device`，并提供 `find_vqs/del_vqs` 以创建/销毁 virtqueue
-    - `drivers/virtio/virtqueue.c`：最小 virtqueue/vring helper（对应 Linux `drivers/virtio/virtio_ring.c` 的一小部分）
+    - `drivers/virtio/virtio_pci_common.c`：最小 `virtio-pci` transport（`pci_driver`），负责把 PCI 上的 virtio 设备实例化为 `virtio_device`，并提供 legacy/modern 的 `find_vqs/del_vqs`
+    - `drivers/virtio/virtio_ring.c`：最小 virtqueue/vring helper（对应 Linux `drivers/virtio/virtio_ring.c` 的一小部分）
     - `drivers/scsi/virtio_scsi.c`：前端 `virtio_driver`（不是 `pci_driver`），在 virtio 总线上探测 `VIRTIO_ID_SCSI`，并通过 virtqueue 提交 SCSI 命令
     - `drivers/scsi/scsi.c` 提供 `Scsi_Host`、`scsi_target`、`scsi_device`、`scsi_disk` 的最小对象模型与 class 视图
     - Lite 现在新增了最小 `scsi_scan_target()` / `scsi_scan_host_selected()` 接口，把 host 边界校验与 target/LUN 遍历下沉到 SCSI 层，而不是留在 `virtio_scsi.c` 里做启发式停扫

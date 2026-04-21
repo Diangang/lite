@@ -23,9 +23,8 @@ drivers/clocksource/timer.c
 drivers/input/keyboard/atkbd.c
 drivers/input/serio/i8042.c
 drivers/input/serio/serio.c
-drivers/nvme/nvme-core.c
-drivers/nvme/nvme.c
-drivers/nvme/nvme_internal.h
+drivers/nvme/host/nvme.h
+drivers/nvme/host/pci.c
 drivers/pci/pci.c
 drivers/pci/pcie/pcie.c
 drivers/scsi/hosts.c
@@ -38,8 +37,11 @@ drivers/tty/serial/8250.c
 drivers/tty/serial/serial_core.c
 drivers/tty/tty_io.c
 drivers/virtio/virtio.c
-drivers/virtio/virtio_pci.c
-drivers/virtio/virtqueue.c
+drivers/virtio/virtio_pci_common.c
+drivers/virtio/virtio_pci_common.h
+drivers/virtio/virtio_pci_legacy.c
+drivers/virtio/virtio_pci_modern.c
+drivers/virtio/virtio_ring.c
 fs/block_dev.c
 fs/buffer.c
 fs/chrdev.c

@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "linux/list.h"
+#include "linux/writeback.h"
 
 struct inode;
 struct file;
@@ -38,14 +39,14 @@ struct address_space {
     struct address_space *next;
 };
 
+extern struct address_space *mapping_list;
+
 void address_space_init(struct address_space *mapping, struct inode *host);
 void address_space_release(struct address_space *mapping);
 uint32_t generic_file_read(struct inode *node, uint32_t offset, uint32_t size, uint8_t *buffer);
 uint32_t generic_file_write(struct inode *node, uint32_t offset, uint32_t size, const uint8_t *buffer);
 void truncate_inode_pages(struct address_space *mapping, uint32_t lstart);
 int page_cache_reclaim_one(void);
-int writeback_flush_all(void);
-void get_writeback_stats(uint32_t *dirty, uint32_t *cleaned, uint32_t *discarded, uint32_t *throttled);
 void get_pagecache_stats(uint32_t *hits, uint32_t *misses);
 
 struct dirent *generic_readdir(struct file *file, uint32_t index);

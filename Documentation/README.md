@@ -14,6 +14,10 @@
 - [Linux26-Subsystem-Alignment.md](file:///data25/lidg/lite/Documentation/Linux26-Subsystem-Alignment.md)
 - 用途：跟踪仍在推进的子系统、阶段状态和显式 DIFF。
 
+### 固定执行清单
+- [Linux26-Fixed-Execution-Checklist.md](file:///data25/lidg/lite/Documentation/Linux26-Fixed-Execution-Checklist.md)
+- 用途：固定后续 Linux 2.6 对齐的执行顺序、已完成基线、当前主线与禁止跑偏规则。
+
 ### 设备驱动模型
 - [device_driver_model.md](file:///data25/lidg/lite/Documentation/device_driver_model.md)
 - 用途：解释 `device / driver / bus / class / kobject / sysfs / devtmpfs` 在当前代码中的语义。

@@ -234,7 +234,7 @@ int vprintk(const char *format, va_list args)
                 break;
             }
             case 'p': {
-                uintptr_t p = (uintptr_t)va_arg(args, void*);
+                uintptr_t p = (uintptr_t)va_arg(args, void *);
                 printk_puts("0x", &printed);
                 printk_u32_hex((uint32_t)p, (width > 0) ? width : 8, 0, '0', &printed);
                 break;
@@ -245,7 +245,7 @@ int vprintk(const char *format, va_list args)
                 break;
             }
             case 's': {
-                const char *s = va_arg(args, const char*);
+                const char *s = va_arg(args, const char *);
                 int slen = printk_strlen(s);
                 if (width > slen)
                     printk_pad(width - slen, pad, &printed);

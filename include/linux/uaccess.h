@@ -3,6 +3,33 @@
 
 #include <stdint.h>
 #include "asm/pgtable.h"
+#include "asm/barrier.h"
+
+/*
+ * Linux mapping: pagefault_disable()/enable() control whether user accesses
+ * may fault and sleep. Lite currently keeps a UP-only no-op subset, but the
+ * interface is exposed so later subsystems can converge on the same contract.
+ */
+
+static inline void pagefault_disable(void)
+{
+    barrier();
+}
+
+static inline void pagefault_enable(void)
+{
+    barrier();
+}
+
+static inline int pagefault_disabled(void)
+{
+    return 0;
+}
+
+static inline int faulthandler_disabled(void)
+{
+    return pagefault_disabled();
+}
 
 static inline int copy_from_user(void *to, const void *from, uint32_t n)
 {

@@ -49,6 +49,7 @@ struct virtio_device {
     struct device dev;
     struct virtio_device_id id;
     const struct virtio_config_ops *config;
+    uint32_t index;
     uint64_t features;
     void *priv; /* driver private */
 };
@@ -113,6 +114,8 @@ struct virtqueue {
 };
 
 int virtqueue_add_buf(struct virtqueue *vq, const struct virtqueue_buf *bufs, uint16_t nbufs, uint16_t *head);
+int virtqueue_kick_prepare(struct virtqueue *vq);
+int virtqueue_notify(struct virtqueue *vq);
 void virtqueue_kick(struct virtqueue *vq);
 int virtqueue_get_buf(struct virtqueue *vq, uint16_t *used_head, uint32_t *len);
 int virtqueue_enable_cb(struct virtqueue *vq);

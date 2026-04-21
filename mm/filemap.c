@@ -6,28 +6,9 @@
 #include "linux/memlayout.h"
 #include "asm/page.h"
 
-static struct address_space *mapping_list = NULL;
-static uint32_t wb_dirty_pages = 0;
-static uint32_t wb_cleaned_pages = 0;
-static uint32_t wb_discarded_pages = 0;
-static uint32_t wb_throttled = 0;
+struct address_space *mapping_list = NULL;
 static uint32_t pcache_hits = 0;
 static uint32_t pcache_misses = 0;
-
-/*
- * Linux mapping: balance_dirty_pages() throttles writers when too many pages
- * are dirty. Lite keeps a deterministic minimal policy: if the global dirty
- * count crosses a small threshold, do one synchronous flush and keep a counter
- * of throttle events.
- */
-#define WB_DIRTY_LIMIT 64u
-static void balance_dirty_pages_lite(void)
-{
-    if (wb_dirty_pages > WB_DIRTY_LIMIT) {
-        wb_throttled++;
-        writeback_flush_all();
-    }
-}
 
 /* address_space_init: Initialize address space. */
 void address_space_init(struct address_space *mapping, struct inode *host)
@@ -214,14 +195,14 @@ uint32_t generic_file_write(struct inode *node, uint32_t offset, uint32_t size, 
         memcpy((void*)((uint32_t)memlayout_directmap_phys_to_virt(p->phys_addr) + page_offset), buffer + bytes_written, bytes);
         if (!p->dirty) {
             p->dirty = 1;
-            wb_dirty_pages++;
+            writeback_account_dirtied();
             if (mapping->nrpages_clean)
                 mapping->nrpages_clean--;
             mapping->nrpages_dirty++;
             list_del(&p->lru);
             list_add_tail(&p->lru, &mapping->dirty_pages);
         }
-        balance_dirty_pages_lite();
+        balance_dirty_pages_ratelimited(mapping);
 
         offset += bytes;
         bytes_written += bytes;
@@ -249,9 +230,7 @@ void truncate_inode_pages(struct address_space *mapping, uint32_t lstart)
             INIT_LIST_HEAD(&p->lru);
             if (p->dirty) {
                 p->dirty = 0;
-                if (wb_dirty_pages)
-                    wb_dirty_pages--;
-                wb_discarded_pages++;
+                writeback_account_discarded();
             }
             page_cache_hash_del(mapping, p);
             if (p->phys_addr)
@@ -300,50 +279,6 @@ int page_cache_reclaim_one(void)
         m = m->next;
     }
     return 0;
-}
-
-/* writeback_flush_all: Implement writeback flush all. */
-int writeback_flush_all(void)
-{
-    int flushed = 0;
-    struct address_space *m = mapping_list;
-    while (m) {
-        struct list_head *pos, *n;
-        list_for_each_safe(pos, n, &m->dirty_pages) {
-            struct page_cache_entry *p = list_entry(pos, struct page_cache_entry, lru);
-            if (p->dirty) {
-                struct inode *host = m->host;
-                if (host && m->a_ops && m->a_ops->writepage)
-                    m->a_ops->writepage(host, p);
-                p->dirty = 0;
-                if (wb_dirty_pages)
-                    wb_dirty_pages--;
-                wb_cleaned_pages++;
-                flushed++;
-            }
-            /* Move to clean list regardless (writepage may be missing). */
-            list_del(&p->lru);
-            list_add_tail(&p->lru, &m->clean_pages);
-            if (m->nrpages_dirty)
-                m->nrpages_dirty--;
-            m->nrpages_clean++;
-        }
-        m = m->next;
-    }
-    return flushed;
-}
-
-/* get_writeback_stats: Get writeback stats. */
-void get_writeback_stats(uint32_t *dirty, uint32_t *cleaned, uint32_t *discarded, uint32_t *throttled)
-{
-    if (dirty)
-        *dirty = wb_dirty_pages;
-    if (cleaned)
-        *cleaned = wb_cleaned_pages;
-    if (discarded)
-        *discarded = wb_discarded_pages;
-    if (throttled)
-        *throttled = wb_throttled;
 }
 
 /* get_pagecache_stats: Get page cache stats. */

@@ -332,8 +332,9 @@ int devtmpfs_create_node(struct device *dev)
     req.uid = 0;
     req.gid = 0;
     req.name = device_get_devnode(dev, &req.mode, &req.uid, &req.gid);
+    /* Linux mapping: if the device has no devnode policy, devtmpfs is a no-op. */
     if (!req.name || !req.name[0])
-        return -1;
+        return 0;
     if (req.mode == 0)
         req.mode = 0600;
     req.dev = dev;
@@ -350,7 +351,7 @@ int devtmpfs_delete_node(struct device *dev)
         return -1;
     req.name = device_get_devnode(dev, NULL, NULL, NULL);
     if (!req.name || !req.name[0])
-        return -1;
+        return 0;
     req.mode = 0;
     req.uid = 0;
     req.gid = 0;

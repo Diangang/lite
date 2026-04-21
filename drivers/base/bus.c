@@ -358,4 +358,13 @@ int bus_register(struct bus_type *bus)
     return 0;
 }
 
+void bus_unregister(struct bus_type *bus)
+{
+    if (!bus || !bus->p)
+        return;
+    list_del(&bus->list);
+    subsystem_unregister(&bus->subsys);
+    kobject_put(&bus->subsys.kset.kobj);
+}
+
 /* Linux alignment: do not provide global bus enumeration helpers. */

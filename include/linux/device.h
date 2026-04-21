@@ -96,6 +96,7 @@ struct class {
 void driver_init(void);
 void device_initialize(struct device *dev, const char *name);
 int bus_register(struct bus_type *bus);
+void bus_unregister(struct bus_type *bus);
 int bus_rescan_devices(struct bus_type *bus);
 int driver_register(struct device_driver *drv);
 void driver_unregister(struct device_driver *drv);
@@ -118,6 +119,20 @@ const char *device_get_devnode(struct device *dev, uint32_t *mode, uint32_t *uid
 int devtmpfs_create_node(struct device *dev);
 int devtmpfs_delete_node(struct device *dev);
 int devtmpfs_mount(const char *mntdir);
+
+/* Linux mapping: drivers/base/core.c uses get_device/put_device wrappers. */
+static inline struct device *get_device(struct device *dev)
+{
+    if (dev)
+        kobject_get(&dev->kobj);
+    return dev;
+}
+
+static inline void put_device(struct device *dev)
+{
+    if (dev)
+        kobject_put(&dev->kobj);
+}
 
 void init_driver(struct device_driver *drv, const char *name, struct bus_type *bus, int (*probe)(struct device *));
 int class_register(struct class *cls);

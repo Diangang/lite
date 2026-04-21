@@ -6,6 +6,18 @@
 
 struct device;
 struct device_type;
+struct tty_port;
+
+/*
+ * Minimal tty_struct for Linux-aligned ldisc signatures.
+ *
+ * Linux mapping: include/linux/tty.h struct tty_struct.
+ * Lite simplification: one tty_struct is embedded per tty port/device.
+ */
+struct tty_struct {
+    struct tty_port *port;
+    void *disc_data;
+};
 
 struct tty_driver {
     char name[32];
@@ -21,17 +33,7 @@ struct tty_port {
     uint32_t major;
     uint32_t minor;
     void *driver_data;
-};
-
-/*
- * Minimal tty_struct for Linux-aligned ldisc signatures.
- *
- * Linux mapping: include/linux/tty.h struct tty_struct.
- * Lite simplification: single global tty_struct is sufficient for n_tty.
- */
-struct tty_struct {
-    struct tty_port *port;
-    void *disc_data;
+    struct tty_struct tty;
 };
 
 #define TTY_FLAG_ECHO  0x1
@@ -56,6 +58,7 @@ void tty_put_char(char c);
 uint32_t tty_write(const uint8_t *buf, uint32_t len);
 int tty_register_driver(struct tty_driver *drv, const char *name, uint32_t num);
 struct device *tty_register_device(struct tty_driver *drv, uint32_t index, struct device *parent, const char *name, void *data);
+void tty_unregister_device(struct tty_driver *drv, uint32_t index);
 struct tty_port *tty_port_from_dev(struct device *dev);
 
 #endif

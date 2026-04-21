@@ -62,10 +62,15 @@ static int reparent_children(struct task_struct *parent, struct task_struct *rea
 static struct task_struct *task_reaper_locked(void)
 {
     struct task_struct *reaper = find_task_by_vpid(1);
-    if (reaper)
+    if (reaper) {
+        get_task_struct(reaper);
         return reaper;
-    if (!list_empty(&task_list_head))
-        return list_first_entry(&task_list_head, struct task_struct, tasks);
+    }
+    if (!list_empty(&task_list_head)) {
+        reaper = list_first_entry(&task_list_head, struct task_struct, tasks);
+        get_task_struct(reaper);
+        return reaper;
+    }
     return NULL;
 }
 
@@ -91,6 +96,9 @@ void task_zombify(struct task_struct *task, int code, int reason, uint32_t info0
 /* exit_notify: Implement exit notify. */
 void exit_notify(struct task_struct *task, int code, int reason, uint32_t info0, uint32_t info1)
 {
+    struct task_struct *parent;
+    struct task_struct *reaper;
+
     if (!task)
         return;
     if (task->pid == 0)
@@ -102,7 +110,10 @@ void exit_notify(struct task_struct *task, int code, int reason, uint32_t info0,
         wait_queue_remove(task->waitq, task);
 
     uint32_t flags = tasklist_lock();
-    struct task_struct *reaper = task_reaper_locked();
+    parent = task->parent;
+    if (parent)
+        get_task_struct(parent);
+    reaper = task_reaper_locked();
     if (!reaper)
         reaper = task;
     int wake = reparent_children(task, reaper);
@@ -110,35 +121,21 @@ void exit_notify(struct task_struct *task, int code, int reason, uint32_t info0,
 
     task_zombify(task, code, reason, info0, info1);
     signal_notify_exit(task);
-    if (task->parent)
-        wake_up_all(&task->parent->child_exit_wait);
+    if (parent)
+        wake_up_all(&parent->child_exit_wait);
     if (wake && reaper)
         wake_up_all(&reaper->child_exit_wait);
+    if (parent)
+        put_task_struct(parent);
+    if (reaper && reaper != task)
+        put_task_struct(reaper);
     task_set_need_resched();
 }
 
 /* release_task: Implement release task. */
 void release_task(struct task_struct *task)
 {
-    task_destroy(task);
-}
-
-static void task_release_invariant_check(struct task_struct *task)
-{
-    if (task_release_invariant_holds(task))
-        return;
-    panic("release_task invariant violated");
-}
-
-/* task_destroy: Implement task destroy. */
-void task_destroy(struct task_struct *task)
-{
-    struct task_struct *self = task_current();
     if (!task)
-        return;
-    if (!self || list_empty(&task_list_head))
-        return;
-    if (task == self)
         return;
     if (task->pid == 0)
         return;
@@ -148,13 +145,10 @@ void task_destroy(struct task_struct *task)
         list_del_init(&task->sibling);
     if (!list_empty(&task->tasks))
         list_del_init(&task->tasks);
+    task->parent = NULL;
     tasklist_unlock(flags);
 
-    task_release_invariant_check(task);
-
-    if (task->thread.sp0)
-        kfree((void*)((uint32_t)task->thread.sp0 - THREAD_SIZE));
-    kfree(task);
+    put_task_struct(task);
 }
 
 /* do_exit: Perform exit. */

@@ -17,10 +17,10 @@ struct tty_ldisc_ops {
     int (*open)(struct tty_struct *tty);
     void (*close)(struct tty_struct *tty);
     /* Linux mapping: n_tty_receive_buf()/receive_buf() */
-    void (*receive_buf)(const uint8_t *buf, uint32_t len);
+    void (*receive_buf)(struct tty_struct *tty, const uint8_t *buf, uint32_t len);
     /* Legacy Lite entry (kept for compatibility during refactors). */
-    void (*receive_char)(char c);
-    uint32_t (*read)(char *buf, uint32_t len);
+    void (*receive_char)(struct tty_struct *tty, char c);
+    uint32_t (*read)(struct tty_struct *tty, char *buf, uint32_t len);
 };
 
 /* Linux mapping: N_TTY line discipline. */

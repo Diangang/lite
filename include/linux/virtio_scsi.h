@@ -46,6 +46,4 @@ struct virtio_scsi_config {
 #define VIRTIO_SCSI_S_OK                0
 #define VIRTIO_SCSI_S_SIMPLE            0
 
-int virtio_scsi_late_probe(void);
-
 #endif

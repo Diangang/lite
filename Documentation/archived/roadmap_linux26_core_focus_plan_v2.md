@@ -213,7 +213,7 @@
 建议新增/修改文件：
 - `drivers/pci/pci.c`：枚举稳定化（桥递归、BAR 资源、capability 框架）。
 - `drivers/pci/pcie/pcie.c`：PCIe capability 解析与可观测（先用于 sanity check）。
-- `drivers/nvme/nvme.c`：拆分为 controller/queue/namespace 子模块（可仍在一个文件内，先保证结构可读）。
+- `drivers/nvme/host/pci.c`：拆分为 controller/queue/namespace 子模块（现已在 host/ 目录下收敛）。
 - `drivers/base/{bus,driver,core}.c` + `fs/sysfs/sysfs.c`：bind/unbind 的资源释放路径补齐（NVMe 设备 remove 时需要）。
 - `fs/devtmpfs/devtmpfs.c`：支持生成 `/dev/nvme0n1`（当前已支持 type=block 的 generic 逻辑，需确保命名/容量信息正确）。
 - `/proc` 可观测：

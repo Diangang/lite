@@ -70,7 +70,7 @@
 | drivers/video/console/* | drivers/video/console/* | Partial | console/vt/tty 关系后续对齐 |
 | drivers/pci/* | drivers/pci/* | Partial | PCI 枚举与配置空间语义逐步对齐（qemu 设备为主要验证） |
 | drivers/pci/* | drivers/pci/* | Partial | 已引入 pci0000:00 根设备（pci bus）并将 PCI 枚举设备挂到其下，/sys/devices 层级更接近 Linux 风格 |
-| drivers/nvme/nvme.c | drivers/block/nvme*（2.6 时代 NVMe 不存在） | Partial | NVMe 不属于 Linux 2.6，但在 Lite 目标中需要；已实现基本的控制器初始化、命名空间管理和块设备注册，参考后续 Linux 的 NVMe 实现风格 |
+| drivers/nvme/host/pci.c | drivers/block/nvme*（2.6 时代 NVMe 不存在） | Partial | NVMe 不属于 Linux 2.6，但在 Lite 目标中需要；已实现基本的控制器初始化、命名空间管理和块设备注册，参考后续 Linux 的 NVMe 实现风格 |
 
 ## lib（通用库）
 

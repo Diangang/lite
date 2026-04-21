@@ -96,6 +96,7 @@ int scsi_scan_target(struct Scsi_Host *shost, uint32_t channel, uint32_t id, uin
 int scsi_scan_host_selected(struct Scsi_Host *shost, uint32_t channel, uint32_t id, uint64_t lun);
 int scsi_scan_host(struct Scsi_Host *shost);
 void scsi_remove_host(struct Scsi_Host *shost);
+void scsi_host_put(struct Scsi_Host *shost);
 
 int scsi_execute_cmd(struct scsi_device *sdev, const uint8_t *cdb, uint32_t cdb_len,
                      void *data, uint32_t data_len, int dir,

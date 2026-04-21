@@ -1,97 +1,100 @@
-#include "../include/linux/idr.h"
-#include "../include/linux/slab.h"
+#include "linux/errno.h"
+#include "linux/idr.h"
+#include "linux/radix-tree.h"
+#include "linux/slab.h"
+#include <limits.h>
 
-/* idr_init: Initialize idr. */
 void idr_init(struct idr *idp)
 {
-	idp->slots = NULL;
-	idp->size = 0;
-	idp->next_id = 0;
+    if (!idp)
+        return;
+    INIT_RADIX_TREE(&idp->root, GFP_KERNEL);
+    idp->cur = 0;
 }
 
-/* idr_pre_get: Implement idr pre get. */
 int idr_pre_get(struct idr *idp, unsigned int gfp_mask)
 {
-	(void)idp;
-	(void)gfp_mask;
-	return 1;
+    (void)idp;
+    (void)gfp_mask;
+    return 1;
 }
 
-/* idr_expand: Implement idr expand. */
-static int idr_expand(struct idr *idp, int new_size)
+int idr_alloc(struct idr *idp, void *ptr, int start, int end, gfp_t gfp_mask)
 {
-	void **new_slots = kmalloc(sizeof(void *) * (size_t)new_size);
-	if (!new_slots)
-		return -1;
-	for (int i = 0; i < new_size; i++)
-		new_slots[i] = NULL;
-	for (int i = 0; i < idp->size; i++)
-		new_slots[i] = idp->slots[i];
-	kfree(idp->slots);
-	idp->slots = new_slots;
-	idp->size = new_size;
-	return 0;
+    int id;
+
+    if (!idp || start < 0)
+        return -EINVAL;
+    if (end <= 0)
+        end = INT_MAX;
+    if (start >= end)
+        return -EINVAL;
+
+    idp->root.gfp_mask = gfp_mask;
+    for (id = start; id < end; id++) {
+        if (!radix_tree_lookup(&idp->root, (unsigned long)id)) {
+            if (radix_tree_insert(&idp->root, (unsigned long)id, ptr) != 0)
+                return -ENOMEM;
+            idp->cur = id + 1;
+            return id;
+        }
+    }
+
+    return -ENOMEM;
 }
 
-/* idr_get_new_above: Implement idr get new above. */
 int idr_get_new_above(struct idr *idp, void *ptr, int starting_id, int *id)
 {
-	if (starting_id < 0)
-		starting_id = 0;
-	if (idp->size == 0 && idr_expand(idp, 32) != 0)
-		return -1;
-	if (starting_id >= idp->size && idr_expand(idp, starting_id + 32) != 0)
-		return -1;
+    int ret;
 
-	for (int i = starting_id; i < idp->size; i++) {
-		if (!idp->slots[i]) {
-			idp->slots[i] = ptr;
-			*id = i;
-			if (i >= idp->next_id)
-				idp->next_id = i + 1;
-			return 0;
-		}
-	}
-
-	if (idr_expand(idp, idp->size + 32) != 0)
-		return -1;
-
-	for (int i = starting_id; i < idp->size; i++) {
-		if (!idp->slots[i]) {
-			idp->slots[i] = ptr;
-			*id = i;
-			if (i >= idp->next_id)
-				idp->next_id = i + 1;
-			return 0;
-		}
-	}
-
-	return -1;
+    if (!id)
+        return -EINVAL;
+    ret = idr_alloc(idp, ptr, starting_id < 0 ? 0 : starting_id, 0, GFP_KERNEL);
+    if (ret < 0)
+        return ret;
+    *id = ret;
+    return 0;
 }
 
-/* idr_get_new: Implement idr get new. */
 int idr_get_new(struct idr *idp, void *ptr, int *id)
 {
-	int start = idp->next_id;
-	if (idr_get_new_above(idp, ptr, start, id) == 0)
-		return 0;
-	return idr_get_new_above(idp, ptr, 0, id);
+    int ret;
+
+    if (!idp || !id)
+        return -EINVAL;
+    ret = idr_alloc(idp, ptr, idp->cur, 0, GFP_KERNEL);
+    if (ret < 0 && idp->cur > 0)
+        ret = idr_alloc(idp, ptr, 0, idp->cur, GFP_KERNEL);
+    if (ret < 0)
+        return ret;
+    *id = ret;
+    return 0;
 }
 
-/* idr_find: Implement idr find. */
 void *idr_find(struct idr *idp, int id)
 {
-	if (id < 0 || id >= idp->size)
-		return NULL;
-	return idp->slots[id];
+    if (!idp || id < 0)
+        return NULL;
+    return radix_tree_lookup(&idp->root, (unsigned long)id);
 }
 
-/* idr_remove: Implement idr remove. */
 void idr_remove(struct idr *idp, int id)
 {
-	if (id < 0 || id >= idp->size)
-		return;
-	idp->slots[id] = NULL;
-	if (id < idp->next_id)
-		idp->next_id = id;
+    if (!idp || id < 0)
+        return;
+    if (radix_tree_delete(&idp->root, (unsigned long)id) && id < idp->cur)
+        idp->cur = id;
+}
+
+void idr_destroy(struct idr *idp)
+{
+    if (!idp)
+        return;
+    radix_tree_destroy(&idp->root);
+    idp->cur = 0;
+}
+
+bool idr_is_empty(struct idr *idp)
+{
+    return !idp || idp->root.rnode == NULL;
 }

@@ -123,7 +123,7 @@
 - `usr/smoke.c`：PCIe 识别失败时输出 uevent 内容。
 - `drivers/pci/pci.c`：桥设备自动分配 secondary bus，并发出 busnum 事件。
 - `drivers/pci/pci.c`：识别 NVMe class 设备并发出 nvme 事件。
-- `drivers/nvme/nvme.c`：NVMe class 设备绑定入口，映射 BAR0 并读取 CAP/VS。
+- `drivers/nvme/host/pci.c`：NVMe class 设备绑定入口，映射 BAR0 并读取 CAP/VS。
 - `arch/x86/kernel/irq.c`：中断开关封装（`irq_save/irq_restore`）。
 - `kernel/pid.c`：按 pid 查找 task（精简版）。
 - `kernel/cred.c`：uid/gid/umask 等“凭据/权限”相关接口（精简版）。

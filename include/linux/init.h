@@ -20,16 +20,29 @@ typedef int (*initcall_t)(void);
 #define __stringify_1(x) #x
 #define __stringify(x) __stringify_1(x)
 
-#define __define_initcall(fn, level) static initcall_t __initcall_##fn __attribute__((__used__, __section__(".initcall" __stringify(level) ".init"))) = fn;
+/*
+ * Linux mapping: initcalls are grouped into separate linker subsections.
+ * Lite does not reclaim init sections yet, but we keep Linux-shaped initcall
+ * levels to preserve ordering and call-site intent.
+ */
+#define __define_initcall(fn, id)                                           \
+    static initcall_t __initcall_##fn##id                                   \
+        __attribute__((__used__, __section__(".initcall" __stringify(id) ".init"))) = fn
 
-#define early_initcall(fn) __define_initcall(fn, 0)
+/* Linux-shaped initcall levels (init/main.c expects 0..7 + early). */
+#define early_initcall(fn) __define_initcall(fn, early)
+#define pure_initcall(fn) __define_initcall(fn, 0)
 #define core_initcall(fn) __define_initcall(fn, 1)
-#define subsys_initcall(fn) __define_initcall(fn, 2)
-#define fs_initcall(fn) __define_initcall(fn, 3)
-#define device_initcall(fn) __define_initcall(fn, 4)
-#define late_initcall(fn) __define_initcall(fn, 5)
+#define postcore_initcall(fn) __define_initcall(fn, 2)
+#define arch_initcall(fn) __define_initcall(fn, 3)
+#define subsys_initcall(fn) __define_initcall(fn, 4)
+#define fs_initcall(fn) __define_initcall(fn, 5)
+#define device_initcall(fn) __define_initcall(fn, 6)
+#define late_initcall(fn) __define_initcall(fn, 7)
 
-#define module_init(fn) device_initcall(fn)
+/* Backwards compatibility: prefer device_initcall() explicitly. */
+#define __initcall(fn) device_initcall(fn)
+#define module_init(fn) __initcall(fn)
 
 /* initramfs.c  */
 void populate_rootfs(void);

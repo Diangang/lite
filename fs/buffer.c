@@ -2,6 +2,7 @@
 #include "linux/blkdev.h"
 #include "linux/libc.h"
 #include "linux/slab.h"
+#include "linux/writeback.h"
 
 #define BH_HASH_BITS 6
 #define BH_HASH_SIZE (1u << BH_HASH_BITS)
@@ -172,6 +173,8 @@ void mark_buffer_dirty(struct buffer_head *bh)
 {
     if (!bh)
         return;
+    if ((bh->b_state & BH_Dirty) == 0)
+        writeback_account_dirtied();
     bh->b_state |= BH_Dirty;
 }
 
@@ -188,6 +191,7 @@ int sync_dirty_buffer(struct buffer_head *bh)
         return -1;
     bh->b_state &= ~BH_Dirty;
     bh->b_state |= BH_Uptodate;
+    writeback_account_cleaned();
     return 0;
 }
 
@@ -206,6 +210,12 @@ int sync_dirty_buffers_all(void)
     return flushed;
 }
 
+int sync_mapping_buffers(struct address_space *mapping)
+{
+    (void)mapping;
+    return sync_dirty_buffers_all();
+}
+
 /* invalidate_buffer: Invalidate buffer. */
 void invalidate_buffer(struct block_device *bdev, uint32_t block, uint32_t size)
 {
@@ -214,5 +224,7 @@ void invalidate_buffer(struct block_device *bdev, uint32_t block, uint32_t size)
     struct buffer_head *bh = bh_lookup(bdev, block, size);
     if (!bh)
         return;
+    if ((bh->b_state & BH_Dirty) != 0)
+        writeback_account_discarded();
     bh->b_state &= ~(BH_Uptodate | BH_Dirty);
 }

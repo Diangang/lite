@@ -198,11 +198,6 @@ static int virtscsi_probe(struct virtio_device *vdev)
     vscsi->vdev = vdev;
     vdev->priv = vscsi;
 
-    virtio_add_status(vdev, VIRTIO_CONFIG_S_DRIVER);
-    vdev->features = 0;
-    if (virtio_finalize_features(vdev) != 0)
-        goto err_remove;
-
     if (virtio_scsi_read_config(vscsi) != 0)
         goto err_remove;
     if (!vdev->config->find_vqs || !vdev->config->del_vqs)
@@ -226,7 +221,6 @@ static int virtscsi_probe(struct virtio_device *vdev)
         goto err_remove;
     virtqueue_kick(vscsi->event_vq);
 
-    virtio_device_ready(vdev);
     if (virtscsi_scan(vscsi) == 0)
         return 0;
 
@@ -237,15 +231,18 @@ err_remove:
 
 static void virtscsi_remove(struct virtio_device *vdev)
 {
+    struct Scsi_Host *host;
+
     if (!vdev)
         return;
     struct virtio_scsi *vscsi = (struct virtio_scsi *)vdev->priv;
     if (!vscsi)
         return;
-    scsi_remove_host(vscsi->host);
-    if (vscsi->host) {
-        device_unregister(&vscsi->host->shost_gendev);
-        kfree(vscsi->host);
+    virtio_reset_device(vdev);
+    host = vscsi->host;
+    if (host) {
+        scsi_remove_host(host);
+        scsi_host_put(host);
     }
     if (vscsi->event_phys)
         free_page(vscsi->event_phys);
@@ -269,20 +266,6 @@ static struct virtio_driver virtio_scsi_driver = {
 
 static int virtio_scsi_init(void)
 {
-    /*
-     * Linux mapping: transport registration and device probing are distinct.
-     * Lite driver core auto-probes during driver_register(); defer that for
-     * virtio-scsi so initcalls are not blocked by synchronous device scan.
-     */
-    int saved_autoprobe = bus_drivers_autoprobe(&virtio_bus_type);
-    bus_set_drivers_autoprobe(&virtio_bus_type, 0);
-    int ret = register_virtio_driver(&virtio_scsi_driver);
-    bus_set_drivers_autoprobe(&virtio_bus_type, saved_autoprobe);
-    return ret;
+    return register_virtio_driver(&virtio_scsi_driver);
 }
 module_init(virtio_scsi_init);
-
-int virtio_scsi_late_probe(void)
-{
-    return driver_attach(&virtio_scsi_driver.driver);
-}

@@ -1,0 +1,25 @@
+#ifndef _LINUX_ATOMIC_H
+#define _LINUX_ATOMIC_H
+
+#include "asm/atomic.h"
+#include "asm/barrier.h"
+
+/*
+ * Linux mapping: generic atomic wrappers layer acquire/release helpers on top
+ * of asm/atomic.h. Lite keeps the same surface for later SMP-safe convergence.
+ */
+
+#ifndef atomic_read_acquire
+#define atomic_read_acquire(v) smp_load_acquire(&(v)->counter)
+#endif
+
+#ifndef atomic_set_release
+#define atomic_set_release(v, i) smp_store_release(&(v)->counter, (i))
+#endif
+
+#define atomic_cmpxchg_acquire(v, o, n) atomic_cmpxchg((v), (o), (n))
+#define atomic_cmpxchg_release(v, o, n) atomic_cmpxchg((v), (o), (n))
+#define atomic_xchg_acquire(v, n) atomic_xchg((v), (n))
+#define atomic_xchg_release(v, n) atomic_xchg((v), (n))
+
+#endif

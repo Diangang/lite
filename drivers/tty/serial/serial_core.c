@@ -12,7 +12,7 @@ int uart_register_driver(struct uart_driver *drv, struct tty_driver *tty_drv)
         return -1;
     drv->tty_drv = tty_drv;
     memset(drv->ports, 0, sizeof(drv->ports));
-    return tty_register_driver(drv->tty_drv, drv->driver_name, (uint32_t)drv->nr);
+    return tty_register_driver(drv->tty_drv, drv->dev_name, (uint32_t)drv->nr);
 }
 
 static void uart_build_tty_name(char *out, uint32_t cap, const char *prefix, int line)
@@ -64,7 +64,7 @@ void uart_remove_one_port(struct uart_driver *drv, struct uart_port *port)
         return;
 
     if (port->tty_dev) {
-        device_unregister(port->tty_dev);
+        tty_unregister_device(drv->tty_drv, (uint32_t)port->line);
         port->tty_dev = NULL;
     }
 
@@ -100,4 +100,3 @@ void uart_default_put_char(char c)
     if (uart_default_port)
         uart_write_char(uart_default_port, c);
 }
-

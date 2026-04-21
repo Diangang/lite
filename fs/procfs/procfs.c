@@ -714,7 +714,6 @@ static uint32_t proc_write_writeback(struct inode *node, uint32_t offset, uint32
     (void)offset;
     (void)buffer;
     writeback_flush_all();
-    sync_dirty_buffers_all();
     return size;
 }
 
