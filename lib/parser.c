@@ -1,7 +1,10 @@
 #include "../include/linux/parser.h"
 #include "../include/linux/slab.h"
 #include "../include/linux/errno.h"
-#include "../include/linux/libc.h"
+#include "../include/linux/io.h"
+#include "../include/linux/string.h"
+#include "../include/linux/kernel.h"
+#include "../include/linux/printk.h"
 
 /* is_digit: Implement is digit. */
 static int is_digit(char c)

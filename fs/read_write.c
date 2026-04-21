@@ -2,7 +2,10 @@
 #include "linux/file.h"
 #include "linux/fdtable.h"
 #include "asm/pgtable.h"
-#include "linux/libc.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
 #include "linux/uaccess.h"
 
 /* read_fs: Read fs. */

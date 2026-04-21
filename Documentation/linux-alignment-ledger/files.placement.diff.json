@@ -1,0 +1,330 @@
+{
+  "scope_dirs": [
+    "arch",
+    "block",
+    "drivers",
+    "fs",
+    "include",
+    "init",
+    "kernel",
+    "lib",
+    "mm"
+  ],
+  "lite_count": 238,
+  "aligned_count": 200,
+  "diff_count": 38,
+  "aligned": [],
+  "diff": [
+    {
+      "lite": "arch/x86/boot/boot.s",
+      "basename": "boot.s",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "arch/x86/kernel/gdt.c",
+      "basename": "gdt.c",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "arch/x86/kernel/idt.c",
+      "basename": "idt.c",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "arch/x86/kernel/interrupt.s",
+      "basename": "interrupt.s",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "arch/x86/kernel/isr.c",
+      "basename": "isr.c",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "block/blkdev.c",
+      "basename": "blkdev.c",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "drivers/base/uevent.c",
+      "basename": "uevent.c",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "drivers/base/virtual.c",
+      "basename": "virtual.c",
+      "linux_exact": "drivers/regulator/virtual.c",
+      "linux_candidates": [],
+      "plan": "git mv drivers/base/virtual.c drivers/regulator/virtual.c (并按需创建目录/调整包含路径)"
+    },
+    {
+      "lite": "drivers/block/ramdisk.c",
+      "basename": "ramdisk.c",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "drivers/clocksource/timer.c",
+      "basename": "timer.c",
+      "linux_exact": null,
+      "linux_candidates": [
+        "drivers/isdn/sc/timer.c",
+        "drivers/staging/lustre/lnet/selftest/timer.c",
+        "drivers/net/ethernet/dec/tulip/timer.c",
+        "net/sunrpc/timer.c",
+        "net/irda/timer.c",
+        "net/dccp/timer.c",
+        "sound/core/timer.c",
+        "kernel/time/timer.c",
+        "arch/arm/mach-shmobile/timer.c",
+        "arch/arm/mach-ux500/timer.c"
+      ],
+      "plan": "AMBIGUOUS_BASENAME: 需要用符号账本裁决落位（优先候选见 linux_candidates）"
+    },
+    {
+      "lite": "drivers/pci/pcie/pcie.c",
+      "basename": "pcie.c",
+      "linux_exact": null,
+      "linux_candidates": [
+        "drivers/staging/rdma/hfi1/pcie.c",
+        "drivers/net/wireless/mwifiex/pcie.c",
+        "drivers/net/wireless/brcm80211/brcmfmac/pcie.c",
+        "arch/arm/mach-mv78xx0/pcie.c",
+        "arch/arm/plat-orion/pcie.c",
+        "arch/arm/mach-cns3xxx/pcie.c",
+        "arch/arm/mach-dove/pcie.c"
+      ],
+      "plan": "AMBIGUOUS_BASENAME: 需要用符号账本裁决落位（优先候选见 linux_candidates）"
+    },
+    {
+      "lite": "fs/chrdev.c",
+      "basename": "chrdev.c",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "fs/dentry.c",
+      "basename": "dentry.c",
+      "linux_exact": null,
+      "linux_candidates": [
+        "fs/hpfs/dentry.c",
+        "fs/gfs2/dentry.c",
+        "fs/ecryptfs/dentry.c"
+      ],
+      "plan": "AMBIGUOUS_BASENAME: 需要用符号账本裁决落位（优先候选见 linux_candidates）"
+    },
+    {
+      "lite": "fs/fdtable.c",
+      "basename": "fdtable.c",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "include/asm/gdt.h",
+      "basename": "gdt.h",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "include/asm/idt.h",
+      "basename": "idt.h",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "include/asm/multiboot.h",
+      "basename": "multiboot.h",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "include/linux/blk_queue.h",
+      "basename": "blk_queue.h",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "include/linux/blk_request.h",
+      "basename": "blk_request.h",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "include/linux/chrdev.h",
+      "basename": "chrdev.h",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "include/linux/clockevents.h",
+      "basename": "clockevents.h",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "include/linux/devtmpfs.h",
+      "basename": "devtmpfs.h",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "include/linux/exit.h",
+      "basename": "exit.h",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "include/linux/fork.h",
+      "basename": "fork.h",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "include/linux/ksysfs.h",
+      "basename": "ksysfs.h",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "include/linux/libc.h",
+      "basename": "libc.h",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "include/linux/memlayout.h",
+      "basename": "memlayout.h",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "include/linux/minixfs.h",
+      "basename": "minixfs.h",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "include/linux/page_alloc.h",
+      "basename": "page_alloc.h",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "include/linux/panic.h",
+      "basename": "panic.h",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "include/linux/params.h",
+      "basename": "params.h",
+      "linux_exact": "include/xen/interface/hvm/params.h",
+      "linux_candidates": [],
+      "plan": "git mv include/linux/params.h include/xen/interface/hvm/params.h (并按需创建目录/调整包含路径)"
+    },
+    {
+      "lite": "include/linux/pcie.h",
+      "basename": "pcie.h",
+      "linux_exact": null,
+      "linux_candidates": [
+        "drivers/net/wireless/mwifiex/pcie.h",
+        "arch/arm/plat-orion/include/plat/pcie.h",
+        "drivers/net/wireless/brcm80211/brcmfmac/pcie.h"
+      ],
+      "plan": "AMBIGUOUS_BASENAME: 需要用符号账本裁决落位（优先候选见 linux_candidates）"
+    },
+    {
+      "lite": "include/linux/syscall.h",
+      "basename": "syscall.h",
+      "linux_exact": null,
+      "linux_candidates": [
+        "include/trace/syscall.h",
+        "include/asm-generic/syscall.h",
+        "arch/sh/include/asm/syscall.h",
+        "arch/m32r/include/asm/syscall.h",
+        "arch/powerpc/include/asm/syscall.h",
+        "arch/parisc/include/asm/syscall.h",
+        "arch/mn10300/include/asm/syscall.h",
+        "arch/xtensa/include/asm/syscall.h",
+        "arch/metag/include/asm/syscall.h",
+        "arch/arm/include/asm/syscall.h"
+      ],
+      "plan": "AMBIGUOUS_BASENAME: 需要用符号账本裁决落位（优先候选见 linux_candidates）"
+    },
+    {
+      "lite": "include/linux/version.h",
+      "basename": "version.h",
+      "linux_exact": null,
+      "linux_candidates": [
+        "include/xen/interface/version.h",
+        "include/uapi/linux/dvb/version.h",
+        "arch/x86/math-emu/version.h",
+        "drivers/staging/unisys/include/version.h",
+        "drivers/net/ethernet/chelsio/cxgb3/version.h",
+        "drivers/net/wireless/ath/carl9170/version.h"
+      ],
+      "plan": "AMBIGUOUS_BASENAME: 需要用符号账本裁决落位（优先候选见 linux_candidates）"
+    },
+    {
+      "lite": "include/linux/vmscan.h",
+      "basename": "vmscan.h",
+      "linux_exact": "include/trace/events/vmscan.h",
+      "linux_candidates": [],
+      "plan": "git mv include/linux/vmscan.h include/trace/events/vmscan.h (并按需创建目录/调整包含路径)"
+    },
+    {
+      "lite": "include/linux/vsprintf.h",
+      "basename": "vsprintf.h",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "lib/kref.c",
+      "basename": "kref.c",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    },
+    {
+      "lite": "lib/libc.c",
+      "basename": "libc.c",
+      "linux_exact": null,
+      "linux_candidates": [],
+      "plan": "NO_LINUX_BASENAME_MATCH: 需要基于符号/职责映射确定Linux目标文件名（不能仅靠文件名对齐）"
+    }
+  ]
+}

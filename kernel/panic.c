@@ -1,6 +1,6 @@
 #include <stdarg.h>
 
-#include "linux/panic.h"
+#include "linux/kernel.h"
 #include "linux/printk.h"
 
 /* panic: Halt the system after emitting a Linux-shaped panic message. */

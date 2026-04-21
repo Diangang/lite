@@ -1,10 +1,10 @@
 #include "linux/kthread.h"
-#include "linux/fork.h"
+#include "linux/sched.h"
 #include "linux/pid.h"
 #include "linux/sched.h"
 #include "linux/slab.h"
 #include "linux/irqflags.h"
-#include "linux/exit.h"
+#include "linux/sched.h"
 
 struct kthread_create_info {
     struct kthread_create_info *next;

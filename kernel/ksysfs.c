@@ -1,11 +1,14 @@
-#include "linux/ksysfs.h"
+#include "linux/kobject.h"
 #include "linux/init.h"
 #include "linux/sysfs.h"
 #include "linux/time.h"
-#include "linux/libc.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
 #include "linux/printk.h"
 #include "linux/device.h"
-#include "linux/vsprintf.h"
+#include "linux/kernel.h"
 
 struct kobject *kernel_kobj;
 static struct kobject kernel_kobj_store;

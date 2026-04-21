@@ -119,6 +119,8 @@ const char *device_get_devnode(struct device *dev, uint32_t *mode, uint32_t *uid
 int devtmpfs_create_node(struct device *dev);
 int devtmpfs_delete_node(struct device *dev);
 int devtmpfs_mount(const char *mntdir);
+struct inode *devtmpfs_get_console(void);
+struct inode *devtmpfs_get_tty(void);
 
 /* Linux mapping: drivers/base/core.c uses get_device/put_device wrappers. */
 static inline struct device *get_device(struct device *dev)

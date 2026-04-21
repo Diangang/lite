@@ -1,5 +1,8 @@
-#include "linux/libc.h"
-#include "linux/params.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
+#include "linux/init.h"
 
 /* set_execute_command: Set init command override. */
 char saved_command_line[256];

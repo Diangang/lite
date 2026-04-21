@@ -1,7 +1,7 @@
 #ifndef _LINUX_RADIX_TREE_H
 #define _LINUX_RADIX_TREE_H
 
-#include "linux/page_alloc.h"
+#include "linux/gfp.h"
 #include "linux/types.h"
 
 /*

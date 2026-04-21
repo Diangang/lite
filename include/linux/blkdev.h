@@ -93,10 +93,14 @@ struct device *block_register_disk(struct gendisk *disk, struct device *parent);
 struct gendisk *gendisk_from_dev(struct device *dev);
 struct inode *blockdev_inode_create(struct block_device *bdev);
 void blockdev_inode_destroy(struct block_device *bdev);
+/* Linux mapping: get_gendisk(dev_t, int*) lives in block/genhd.c. Lite keeps a minimal variant. */
+struct gendisk *get_gendisk(uint32_t devt);
 struct block_device *bdget(uint32_t devt);
 struct block_device *bdget_disk(struct gendisk *disk, int index);
 struct block_device *bdgrab(struct block_device *bdev);
 void bdput(struct block_device *bdev);
+/* Lite internal: remove a whole-disk bdev from registry when a disk is deleted. */
+int bd_remove(uint32_t devt);
 int blkdev_get(struct block_device *bdev);
 void blkdev_put(struct block_device *bdev);
 int del_gendisk(struct gendisk *disk);

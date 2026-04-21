@@ -2,7 +2,10 @@
 #include "linux/namei.h"
 #include "linux/ramfs.h"
 #include "linux/slab.h"
-#include "linux/libc.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
 #include "linux/console.h"
 
 /* vfs_get_mounts: Return the current mount list. */

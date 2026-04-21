@@ -1,8 +1,11 @@
 #include "linux/slab.h"
 #include "asm/page.h"
-#include "linux/page_alloc.h"
-#include "linux/libc.h"
-#include "linux/memlayout.h"
+#include "linux/gfp.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
+#include "asm/pgtable.h"
 
 #define SLAB_MAX_PAGES 4096
 #define SLAB_MAX_CACHE 9

@@ -6,27 +6,29 @@ LD = ld
 
 CFLAGS = -m32 -ffreestanding -O2 -Wall -Wextra -fno-pie -fno-builtin
 CFLAGS += -MMD -MP
-CFLAGS += -Iinclude -Ikernel -Iinit -Ilib -Iarch/x86 -Imm -Ifs -Idrivers -Idrivers/base -Idrivers/pci -Idrivers/pci/pcie -Idrivers/nvme -Idrivers/input -Idrivers/tty -Idrivers/tty/serial -Idrivers/clocksource -Idrivers/scsi
+CFLAGS += -Iinclude -Ikernel -Iinit -Ilib -Iarch/x86 -Iarch/x86/include -Imm -Ifs -Idrivers -Idrivers/base -Idrivers/pci -Idrivers/pci/pcie -Idrivers/nvme -Idrivers/input -Idrivers/tty -Idrivers/tty/serial -Idrivers/tty/serial/8250 -Idrivers/clocksource -Idrivers/scsi -Iinclude/uapi
 LDFLAGS = -m elf_i386 -T arch/x86/kernel/linker.ld -nostdlib
 
-SOURCES_S = arch/x86/boot/boot.s arch/x86/kernel/interrupt.s
+SOURCES_S = arch/x86/boot/header.S arch/x86/entry/entry_32.S
 SOURCES_C = init/main.c init/version.c arch/x86/entry/syscall_32.c kernel/fork.c kernel/pid.c kernel/cred.c kernel/sched/core.c kernel/exit.c kernel/ksysfs.c kernel/panic.c kernel/printk/printk.c kernel/params.c kernel/time/time.c kernel/time/clockevents.c kernel/signal.c kernel/sched/wait.c kernel/kthread.c
-SOURCES_C += arch/x86/kernel/gdt.c arch/x86/kernel/head32.c arch/x86/kernel/idt.c arch/x86/kernel/isr.c arch/x86/kernel/setup.c
-SOURCES_C += arch/x86/kernel/irq.c arch/x86/kernel/i8259.c arch/x86/kernel/apic.c arch/x86/kernel/io_apic.c
-SOURCES_C += mm/bootmem.c mm/mmzone.c mm/mmap.c mm/page_alloc.c mm/vmscan.c mm/memory.c mm/vmalloc.c mm/slab.c mm/filemap.c mm/page-writeback.c mm/rmap.c mm/swap.c lib/libc.c lib/vsprintf.c lib/kref.c lib/kobject.c lib/klist.c lib/bitmap.c lib/rbtree.c lib/radix-tree.c lib/idr.c lib/parser.c
-SOURCES_C += fs/file.c fs/fdtable.c fs/exec.c fs/inode.c fs/dentry.c fs/namei.c fs/read_write.c fs/open.c fs/readdir.c fs/ioctl.c fs/namespace.c fs/ramfs/ramfs.c fs/procfs/procfs.c fs/procfs/base.c fs/procfs/array.c fs/procfs/task_mmu.c fs/block_dev.c fs/chrdev.c fs/minixfs/minixfs.c
+SOURCES_C += arch/x86/kernel/cpu/common.c arch/x86/kernel/traps.c arch/x86/kernel/head32.c arch/x86/kernel/setup.c
+SOURCES_C += arch/x86/kernel/irq.c arch/x86/kernel/i8259.c arch/x86/kernel/apic/apic.c arch/x86/kernel/apic/io_apic.c
+SOURCES_C += mm/bootmem.c mm/mmzone.c mm/mmap.c mm/page_alloc.c mm/vmscan.c mm/memory.c mm/vmalloc.c mm/slab.c mm/filemap.c mm/page-writeback.c mm/rmap.c mm/swap.c lib/string.c lib/vsprintf.c lib/kobject.c lib/klist.c lib/bitmap.c lib/rbtree.c lib/radix-tree.c lib/idr.c lib/parser.c
+SOURCES_C += fs/file.c fs/exec.c fs/inode.c fs/dcache.c fs/namei.c fs/read_write.c fs/open.c fs/readdir.c fs/ioctl.c fs/namespace.c fs/ramfs/inode.c fs/proc/root.c fs/proc/base.c fs/proc/array.c fs/proc/task_mmu.c fs/proc/meminfo.c fs/proc/interrupts.c fs/proc/generic.c fs/block_dev.c fs/char_dev.c fs/minix/inode.c fs/minix/bitmap.c fs/minix/dir.c fs/minix/file.c fs/minix/namei.c fs/sysfs/dir.c fs/sysfs/file.c fs/sysfs/group.c fs/sysfs/symlink.c fs/sysfs/mount.c
 SOURCES_C += fs/buffer.c
 SOURCES_C += block/blk-core.c
-SOURCES_C += block/blk-sysfs.c block/blkdev.c
-SOURCES_C += fs/sysfs/sysfs.c init/initramfs.c
-SOURCES_C += drivers/base/core.c drivers/base/virtual.c drivers/base/uevent.c drivers/base/bus.c drivers/base/class.c drivers/base/driver.c drivers/base/dd.c drivers/base/platform.c drivers/base/devtmpfs.c drivers/base/init.c drivers/pci/pci.c drivers/pci/pcie/pcie.c drivers/nvme/host/pci.c drivers/input/serio/serio.c drivers/input/serio/i8042.c drivers/input/keyboard/atkbd.c drivers/block/ramdisk.c
-SOURCES_C += drivers/clocksource/timer.c drivers/tty/tty_io.c drivers/tty/n_tty.c drivers/tty/serial/serial_core.c drivers/tty/serial/8250.c
+SOURCES_C += block/blk-sysfs.c block/genhd.c
+SOURCES_C += init/initramfs.c
+SOURCES_C += drivers/base/core.c drivers/base/bus.c drivers/base/class.c drivers/base/driver.c drivers/base/dd.c drivers/base/platform.c drivers/base/devtmpfs.c drivers/base/init.c drivers/pci/pci.c drivers/nvme/host/pci.c drivers/input/serio/serio.c drivers/input/serio/i8042.c drivers/input/keyboard/atkbd.c drivers/block/brd.c
+SOURCES_C += drivers/clocksource/i8253.c drivers/tty/tty_io.c drivers/tty/n_tty.c drivers/tty/serial/serial_core.c drivers/tty/serial/8250/8250_core.c drivers/tty/serial/8250/8250_port.c drivers/tty/serial/8250/8250_early.c
 # printk/console core lives in kernel/printk/printk.c; no video console backends.
 SOURCES_C += drivers/virtio/virtio.c drivers/virtio/virtio_pci_common.c
 SOURCES_C += drivers/virtio/virtio_pci_legacy.c drivers/virtio/virtio_pci_modern.c
 SOURCES_C += drivers/virtio/virtio_ring.c
 SOURCES_C += drivers/scsi/scsi_sysfs.c drivers/scsi/hosts.c drivers/scsi/scsi.c drivers/scsi/sd.c drivers/scsi/virtio_scsi.c
-OBJECTS = $(SOURCES_S:.s=.o) $(SOURCES_C:.c=.o)
+OBJECTS = $(SOURCES_S:.s=.o)
+OBJECTS := $(OBJECTS:.S=.o)
+OBJECTS += $(SOURCES_C:.c=.o)
 DEPS = $(OBJECTS:.o=.d) $(USH_OBJS:.o=.d) $(INIT_OBJS:.o=.d) $(SMOKE_OBJS:.o=.d)
 
 OUT_DIR = out
@@ -59,6 +61,9 @@ $(KERNEL): $(OBJECTS) arch/x86/kernel/linker.ld
 	$(CC) $(CFLAGS) -c $< -o $@
 
 %.o: %.s
+	$(AS) --32 $< -o $@
+
+%.o: %.S
 	$(AS) --32 $< -o $@
 
 # Create a bootable ISO image using GRUB

@@ -1,8 +1,11 @@
 #include "linux/blkdev.h"
-#include "linux/blk_queue.h"
+#include "linux/blkdev.h"
 #include "linux/device.h"
-#include "linux/libc.h"
-#include "linux/vsprintf.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
+#include "linux/kernel.h"
 
 static uint32_t blk_sysfs_emit_u32_line(char *buffer, uint32_t cap, uint32_t value)
 {

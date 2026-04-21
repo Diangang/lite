@@ -1,6 +1,9 @@
-#include "asm/multiboot.h"
-#include "linux/libc.h"
-#include "linux/panic.h"
+#include "asm/setup.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
+#include "linux/kernel.h"
 #include "linux/start_kernel.h"
 
 /*

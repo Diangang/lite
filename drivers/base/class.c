@@ -1,6 +1,9 @@
 #include "linux/device.h"
 #include "base.h"
-#include "linux/libc.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
 
 /* Linux mapping: linux2.6/drivers/base/class.c uses class_kset as /sys/class root. */
 struct kset *class_kset;

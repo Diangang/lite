@@ -1,6 +1,9 @@
 #include "linux/kobject.h"
 #include "linux/kernel.h"
-#include "linux/libc.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
 
 static int list_entry_linked(struct list_head *entry)
 {

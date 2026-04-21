@@ -1,6 +1,9 @@
 #include "linux/interrupt.h"
 #include "linux/serio.h"
-#include "linux/libc.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
 #include "linux/init.h"
 #include "linux/platform_device.h"
 

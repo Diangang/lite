@@ -55,4 +55,7 @@ void kset_remove(struct kset *kset, struct kobject *kobj);
 int subsystem_register(struct subsystem *subsys);
 void subsystem_unregister(struct subsystem *subsys);
 
+/* Linux-like /sys/kernel root kobject. */
+extern struct kobject *kernel_kobj;
+
 #endif

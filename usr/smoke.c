@@ -703,9 +703,115 @@ void test_proc_meminfo_iomem() {
         print("/proc meminfo/iomem OK.\n");
 }
 
+/* test_proc_irq_tasks_diskstats: Cover procfs nodes moved by linux-alignment refactors. */
+void test_proc_irq_tasks_diskstats() {
+    print("\n--- Test 11: /proc irq/tasks/diskstats ---\n");
+    int ok = 1;
+
+    {
+        char buf[512];
+        int n = read_file("/proc/irq", buf, sizeof(buf));
+        if (n <= 0) {
+            fail("read /proc/irq");
+            ok = 0;
+        } else {
+            if (!contains(buf, n, "irq0=") || !contains(buf, n, "syscall128=")) {
+                fail("/proc/irq missing expected keys");
+                ok = 0;
+            }
+        }
+    }
+
+    {
+        char buf[512];
+        int n = read_file("/proc/tasks", buf, sizeof(buf));
+        if (n <= 0) {
+            fail("read /proc/tasks");
+            ok = 0;
+        } else {
+            if (!contains(buf, n, "PID") || !contains(buf, n, "STATE")) {
+                fail("/proc/tasks missing header");
+                ok = 0;
+            }
+        }
+    }
+
+    {
+        char buf[1024];
+        int n = read_file("/proc/diskstats", buf, sizeof(buf));
+        if (n <= 0) {
+            fail("read /proc/diskstats");
+            ok = 0;
+        } else {
+            /* Keep it strict enough to catch regressions but stable across devices. */
+            if (!contains(buf, n, "ram0")) {
+                fail("/proc/diskstats missing ram0");
+                ok = 0;
+            }
+            if (!contains(buf, n, "reads=") || !contains(buf, n, "writes=")) {
+                fail("/proc/diskstats missing reads/writes");
+                ok = 0;
+            }
+        }
+    }
+
+    if (ok)
+        print("/proc irq/tasks/diskstats OK.\n");
+}
+
+/* test_proc_generic_content: Validate generic proc files after file placement split. */
+void test_proc_generic_content() {
+    print("\n--- Test 12: /proc generic content ---\n");
+    int ok = 1;
+
+    {
+        char buf[256];
+        int n = read_file("/proc/writeback", buf, sizeof(buf));
+        if (n <= 0) {
+            fail("read /proc/writeback");
+            ok = 0;
+        } else if (!contains(buf, n, "dirty=") ||
+                   !contains(buf, n, "cleaned=") ||
+                   !contains(buf, n, "throttled=")) {
+            fail("/proc/writeback missing keys");
+            ok = 0;
+        }
+    }
+
+    {
+        char buf[256];
+        int n = read_file("/proc/pagecache", buf, sizeof(buf));
+        if (n <= 0) {
+            fail("read /proc/pagecache");
+            ok = 0;
+        } else if (!contains(buf, n, "hits=") || !contains(buf, n, "misses=")) {
+            fail("/proc/pagecache missing keys");
+            ok = 0;
+        }
+    }
+
+    {
+        char buf[256];
+        int n = read_file("/proc/blockstats", buf, sizeof(buf));
+        if (n <= 0) {
+            fail("read /proc/blockstats");
+            ok = 0;
+        } else if (!contains(buf, n, "reads=") ||
+                   !contains(buf, n, "writes=") ||
+                   !contains(buf, n, "bytes_read=") ||
+                   !contains(buf, n, "bytes_written=")) {
+            fail("/proc/blockstats missing keys");
+            ok = 0;
+        }
+    }
+
+    if (ok)
+        print("/proc generic content OK.\n");
+}
+
 /* test_large_mmap_touch: Implement test large mmap touch. */
 void test_large_mmap_touch() {
-    print("\n--- Test 11: Large MMAP Touch ---\n");
+    print("\n--- Test 13: Large MMAP Touch ---\n");
     int memtotal_kb = parse_memtotal_kb();
     if (memtotal_kb < 0) {
         fail("parse MemTotal");
@@ -2446,6 +2552,8 @@ int main() {
     test_rmdir();
     test_mounts();
     test_proc_meminfo_iomem();
+    test_proc_irq_tasks_diskstats();
+    test_proc_generic_content();
     test_large_mmap_touch();
     test_pci_uevent();
     test_sysfs_layout();
@@ -2468,7 +2576,7 @@ int main() {
     test_writeback_truncate();
     test_pagecache_stats();
     test_writeback_throttle();
-    // test_blockstats_ramdisk();
+    test_blockstats_ramdisk();
     test_minix_mount_read();
     test_nvme_device();
     test_nvme_raw_rw();

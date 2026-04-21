@@ -4,7 +4,7 @@
 #include "linux/device.h"
 #include "linux/pci.h"
 #include "linux/blkdev.h"
-#include "linux/blk_queue.h"
+#include "linux/blkdev.h"
 #include <stdint.h>
 
 /*

@@ -1,8 +1,11 @@
 #include "linux/mmzone.h"
 #include "linux/bootmem.h"
-#include "linux/memlayout.h"
+#include "asm/pgtable.h"
 #include "asm/page.h"
-#include "linux/libc.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
 
 struct pglist_data contig_page_data;
 struct zonelist contig_zonelist;

@@ -2,7 +2,9 @@
 #include <stdint.h>
 
 #include "linux/console.h"
-#include "linux/libc.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
 #include "linux/printk.h"
 
 /*
@@ -259,6 +261,14 @@ int vprintk(const char *format, va_list args)
         }
     }
     return printed;
+}
+
+void printf(const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    (void)vprintk(format, args);
+    va_end(args);
 }
 
 /* printk: Implement printk. */

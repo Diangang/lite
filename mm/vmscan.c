@@ -1,4 +1,4 @@
-#include "linux/vmscan.h"
+#include "linux/mmzone.h"
 #include "linux/swap.h"
 #include "linux/pagemap.h"
 #include "linux/slab.h"

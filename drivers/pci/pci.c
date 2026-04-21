@@ -1,10 +1,12 @@
 #include "linux/pci.h"
-#include "linux/pcie.h"
 #include "linux/kernel.h"
-#include "linux/libc.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
 #include "linux/init.h"
 #include "linux/slab.h"
-#include "linux/memlayout.h"
+#include "asm/pgtable.h"
 #include "base.h"
 
 static int pci_bus_match(struct device *dev, struct device_driver *drv);

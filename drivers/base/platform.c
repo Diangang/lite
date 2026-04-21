@@ -1,8 +1,11 @@
 #include "linux/platform_device.h"
 #include "linux/kernel.h"
-#include "linux/libc.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
 #include "linux/slab.h"
-#include "linux/vsprintf.h"
+#include "linux/kernel.h"
 #include "base.h"
 
 struct bus_type platform_bus_type;

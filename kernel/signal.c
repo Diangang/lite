@@ -1,5 +1,5 @@
 #include "linux/signal.h"
-#include "linux/exit.h"
+#include "linux/sched.h"
 #include "linux/irqflags.h"
 #include "linux/pid.h"
 #include "linux/sched.h"

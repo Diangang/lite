@@ -2,7 +2,7 @@
 #define LINUX_IDR_H
 
 #include <stdbool.h>
-#include "linux/page_alloc.h"
+#include "linux/gfp.h"
 #include "linux/radix-tree.h"
 
 struct idr {

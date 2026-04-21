@@ -2,7 +2,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "linux/vsprintf.h"
+#include "linux/kernel.h"
 
 struct vsn_ctx {
     char *buf;

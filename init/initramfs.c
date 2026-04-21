@@ -1,14 +1,17 @@
 #include "linux/file.h"
-#include "linux/libc.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
 #include "linux/slab.h"
 #include "asm/pgtable.h"
-#include "linux/page_alloc.h"
+#include "linux/gfp.h"
 #include "linux/console.h"
 #include "linux/fs.h"
 #include "linux/pagemap.h"
-#include "asm/multiboot.h"
+#include "asm/setup.h"
 #include "asm/page.h"
-#include "linux/memlayout.h"
+#include "asm/pgtable.h"
 
 // Basic CPIO newc header
 struct cpio_newc_header {

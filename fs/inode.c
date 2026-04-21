@@ -1,8 +1,11 @@
 #include "linux/fs.h"
 #include "linux/blkdev.h"
-#include "linux/chrdev.h"
+#include "linux/cdev.h"
 #include "linux/cred.h"
-#include "linux/libc.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
 #include "linux/slab.h"
 #include "linux/uaccess.h"
 

@@ -2,6 +2,10 @@
 #define _LINUX_SYSCALLS_H
 
 #include <stdint.h>
+#include "asm/ptrace.h"
+#include "asm/unistd.h"
+
+void syscall_init(void);
 
 int sys_write(int fd, const void *buf, uint32_t len, int from_user);
 int sys_read(int fd, void *buf, uint32_t len, int from_user);

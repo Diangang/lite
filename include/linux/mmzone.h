@@ -23,6 +23,7 @@ enum zone_type {
     ZONE_NORMAL = 1
 };
 
+struct multiboot_info;
 struct mm_struct;
 struct rmap_item;
 
@@ -85,5 +86,32 @@ struct zone *pfn_to_zone(uint32_t pfn);
 /* Minimal LRU primitives (Linux mapping: inactive LRU + isolation). */
 void lru_add_inactive(struct page *pg);
 void lru_del(struct page *pg);
+
+
+void free_area_init(struct multiboot_info *mbi);
+void free_area_init_core(struct multiboot_info *mbi);
+void mem_init(void);
+unsigned long totalram_pages(void);
+unsigned long nr_free_pages(void);
+unsigned long zone_free_pages(struct zone *zone);
+unsigned int buddy_max_order_get(void);
+void show_mem(void);
+
+/* Linux mapping: reclaim knobs are passed via scan_control. */
+struct scan_control {
+    int may_writepage;
+    int may_unmap;
+    int may_swap;
+};
+
+void wakeup_kswapd(struct zone *zone);
+void kswapd_init(void);
+uint32_t kswapd_wakeup_count(void);
+uint32_t kswapd_try_count(void);
+uint32_t kswapd_reclaim_count(void);
+uint32_t kswapd_anon_reclaim_count(void);
+uint32_t kswapd_file_reclaim_count(void);
+uint32_t try_to_free_pages(struct zone *zone, unsigned int order);
+uint32_t shrink_zone(struct zone *zone, unsigned int order, struct scan_control *sc);
 
 #endif

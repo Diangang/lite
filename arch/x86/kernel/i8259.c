@@ -1,6 +1,9 @@
 #include "asm/i8259.h"
 #include "linux/interrupt.h"
-#include "linux/libc.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
 
 #define PIC_MASTER_CMD  0x20
 #define PIC_MASTER_IMR  0x21

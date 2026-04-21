@@ -1,6 +1,9 @@
 #include "linux/device.h"
 #include "linux/init.h"
-#include "linux/libc.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
 #include "linux/list.h"
 
 /*

@@ -4,7 +4,10 @@
 #include "linux/wait.h"
 #include "linux/sched.h"
 #include "linux/signal.h"
-#include "linux/libc.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
 #include "linux/slab.h"
 
 #define N_TTY_INPUT_BUF_SIZE 256

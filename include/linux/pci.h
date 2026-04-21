@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include "linux/kernel.h"
 #include "linux/device.h"
+#include "uapi/linux/pci_regs.h"
 #include "linux/resource.h"
 
 /* Linux 2.6 compatible PCI core naming (minimal subset). */
@@ -100,5 +101,53 @@ int pci_write_config_dword(struct pci_dev *pdev, uint8_t offset, uint32_t value)
 
 /* Linux: pci_find_capability() */
 int pci_find_capability(struct pci_dev *pdev, uint8_t cap_id);
+
+/*
+ * Linux mapping: PCIe capability helpers are in linux2.6/include/linux/pci.h
+ * (not a standalone drivers/pci/pcie/pcie.c file).
+ */
+static inline int pcie_find_capability(struct pci_dev *pdev)
+{
+    return pci_find_capability(pdev, PCI_CAP_ID_EXP);
+}
+
+static inline int pcie_is_pcie(struct pci_dev *pdev)
+{
+    return (pdev && pdev->pcie_cap) ? 1 : 0;
+}
+
+static inline int pcie_capability_read_word(struct pci_dev *pdev, uint16_t pos, uint16_t *value)
+{
+    if (!pdev || !value || !pdev->pcie_cap)
+        return -1;
+    return pci_read_config_word(pdev, (uint8_t)(pdev->pcie_cap + pos), value);
+}
+
+static inline int pcie_capability_read_dword(struct pci_dev *pdev, uint16_t pos, uint32_t *value)
+{
+    if (!pdev || !value || !pdev->pcie_cap)
+        return -1;
+    return pci_read_config_dword(pdev, (uint8_t)(pdev->pcie_cap + pos), value);
+}
+
+static inline int pcie_port_type(struct pci_dev *pdev, uint8_t *type)
+{
+    if (!type)
+        return -1;
+    uint16_t flags = 0;
+    if (pcie_capability_read_word(pdev, PCI_EXP_FLAGS, &flags) != 0)
+        return -1;
+    *type = (uint8_t)((flags & PCI_EXP_FLAGS_TYPE) >> PCI_EXP_FLAGS_TYPE_SHIFT);
+    return 0;
+}
+
+static inline int pcie_scan_device(struct pci_dev *pdev)
+{
+    if (!pdev)
+        return 0;
+    int off = pcie_find_capability(pdev);
+    pdev->pcie_cap = (uint16_t)off;
+    return off ? 1 : 0;
+}
 
 #endif

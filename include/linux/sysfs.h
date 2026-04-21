@@ -5,6 +5,7 @@
 #include "linux/fs.h"
 
 struct kobject;
+struct device;
 
 struct attribute {
     const char *name;
@@ -39,5 +40,11 @@ void sysfs_remove_group(struct kobject *kobj, const struct attribute_group *grp)
 void sysfs_remove_subdir(struct kobject *kobj, const char *name);
 void sysfs_remove_link(struct kobject *kobj, const char *name);
 void sysfs_remove_dir(struct kobject *kobj);
+
+/*
+ * Linux mapping: sysfs iterates device group sets (device/type/class/bus) when
+ * checking visibility or building sysfs trees.
+ */
+const struct attribute_group **sysfs_device_group_set(struct device *dev, uint32_t index);
 
 #endif

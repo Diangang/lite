@@ -1,6 +1,9 @@
 #include "linux/buffer_head.h"
 #include "linux/blkdev.h"
-#include "linux/libc.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
 #include "linux/slab.h"
 #include "linux/writeback.h"
 

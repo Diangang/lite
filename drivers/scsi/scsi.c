@@ -1,11 +1,14 @@
 #include "scsi/scsi.h"
 #include "scsi/scsi_host.h"
 #include "linux/init.h"
-#include "linux/blk_queue.h"
-#include "linux/libc.h"
+#include "linux/blkdev.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
 #include "linux/slab.h"
 #include "linux/time.h"
-#include "linux/vsprintf.h"
+#include "linux/kernel.h"
 
 static uint32_t scsi_host_next;
 static uint32_t scsi_disk_next;

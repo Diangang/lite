@@ -1,14 +1,17 @@
 #include "linux/sched.h"
-#include "linux/fork.h"
+#include "linux/sched.h"
 #include "linux/binfmts.h"
 #include "linux/pid.h"
 #include "linux/slab.h"
-#include "linux/libc.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
 #include "linux/printk.h"
 #include "linux/fs.h"
 #include "linux/console.h"
 #include "linux/irqflags.h"
-#include "linux/panic.h"
+#include "linux/kernel.h"
 
 /* copy_thread: Copy thread. */
 struct pt_regs *copy_thread(uint32_t *stack, void (*entry)(void), struct pt_regs *parent_regs)

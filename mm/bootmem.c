@@ -1,8 +1,11 @@
 #include "linux/bootmem.h"
-#include "asm/multiboot.h"
+#include "asm/setup.h"
 #include "asm/page.h"
-#include "linux/libc.h"
-#include "linux/memlayout.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
+#include "asm/pgtable.h"
 
 #define BOOTMEM_MAX_REGIONS 256
 #define BOOTMEM_MAX_E820 64

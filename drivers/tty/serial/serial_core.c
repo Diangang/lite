@@ -1,7 +1,10 @@
 #include "linux/serial_core.h"
 
 #include "linux/device.h"
-#include "linux/libc.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
 #include "linux/tty.h"
 
 static struct uart_port *uart_default_port;

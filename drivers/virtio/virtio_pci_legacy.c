@@ -1,6 +1,9 @@
-#include "linux/libc.h"
-#include "linux/memlayout.h"
-#include "linux/page_alloc.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
+#include "asm/pgtable.h"
+#include "linux/gfp.h"
 #include "linux/slab.h"
 #include "virtio_pci_common.h"
 

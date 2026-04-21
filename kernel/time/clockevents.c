@@ -1,4 +1,4 @@
-#include "linux/clockevents.h"
+#include "linux/clockchips.h"
 #include "linux/time.h"
 
 static struct clock_event_device *tick_device;

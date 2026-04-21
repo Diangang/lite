@@ -2,7 +2,10 @@
 #include "base.h"
 #include "linux/kernel.h"
 #include "linux/slab.h"
-#include "linux/libc.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
 #include "linux/sysfs.h"
 
 /* Linux mapping: linux2.6/drivers/base/bus.c uses bus_kset as /sys/bus root. */

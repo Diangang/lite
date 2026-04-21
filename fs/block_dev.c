@@ -1,9 +1,244 @@
 #include "linux/blkdev.h"
+#include "linux/bio.h"
 #include "linux/fs.h"
-#include "linux/libc.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
 #include "linux/pagemap.h"
 #include "linux/slab.h"
-#include "linux/memlayout.h"
+#include "asm/pgtable.h"
+
+/* Whole-disk bdev registry keyed by devt (no partitions yet). */
+struct bdev_map_entry {
+    uint32_t devt;
+    struct block_device *bdev;
+};
+
+static struct bdev_map_entry bdev_map[32];
+static uint32_t bdev_map_count;
+
+static uint32_t blk_reads;
+static uint32_t blk_writes;
+static uint32_t blk_bytes_read;
+static uint32_t blk_bytes_written;
+
+static struct block_device *bdev_lookup(uint32_t devt)
+{
+    for (uint32_t i = 0; i < bdev_map_count; i++) {
+        if (bdev_map[i].devt == devt)
+            return bdev_map[i].bdev;
+    }
+    return NULL;
+}
+
+static int bdev_register(uint32_t devt, struct block_device *bdev)
+{
+    if (!bdev || bdev_map_count >= (sizeof(bdev_map) / sizeof(bdev_map[0])))
+        return -1;
+    if (bdev_lookup(devt))
+        return 0;
+    bdev_map[bdev_map_count].devt = devt;
+    bdev_map[bdev_map_count].bdev = bdev;
+    bdev_map_count++;
+    return 0;
+}
+
+static int bdev_unregister(uint32_t devt)
+{
+    for (uint32_t i = 0; i < bdev_map_count; i++) {
+        if (bdev_map[i].devt == devt) {
+            for (uint32_t j = i + 1; j < bdev_map_count; j++)
+                bdev_map[j - 1] = bdev_map[j];
+            bdev_map_count--;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int bd_remove(uint32_t devt)
+{
+    struct block_device *bdev = bdev_lookup(devt);
+    if (!bdev)
+        return 0;
+    if (bdev->openers)
+        return -1;
+
+    if (bdev->inode)
+        blockdev_inode_destroy(bdev);
+
+    (void)bdev_unregister(devt);
+    bdput(bdev);
+    return 0;
+}
+
+static struct block_device *bdev_alloc_for_disk(struct gendisk *disk)
+{
+    if (!disk)
+        return NULL;
+    struct block_device *bdev = (struct block_device *)kmalloc(sizeof(*bdev));
+    if (!bdev)
+        return NULL;
+    memset(bdev, 0, sizeof(*bdev));
+    bdev->devt = MKDEV(disk->major, disk->first_minor);
+    bdev->disk = disk;
+    bdev->block_size = disk->block_size ? disk->block_size : 512;
+    bdev->size = disk->capacity * 512ULL;
+    bdev->private_data = disk->private_data;
+    bdev->refcnt = 1;
+    bdev->openers = 0;
+    bdev->inode = NULL;
+    if (bdev_register(bdev->devt, bdev) != 0) {
+        kfree(bdev);
+        return NULL;
+    }
+    return bdev;
+}
+
+struct block_device *bdgrab(struct block_device *bdev)
+{
+    if (!bdev)
+        return NULL;
+    bdev->refcnt++;
+    return bdev;
+}
+
+void bdput(struct block_device *bdev)
+{
+    if (!bdev || bdev->refcnt == 0)
+        return;
+    bdev->refcnt--;
+    if (bdev->refcnt != 0)
+        return;
+    if (bdev->openers || bdev->inode) {
+        printf("block: bdput refcnt underflow guard devt=%x openers=%u inode=%p\n",
+               bdev->devt, bdev->openers, bdev->inode);
+        return;
+    }
+    kfree(bdev);
+}
+
+struct block_device *bdget(uint32_t devt)
+{
+    struct block_device *bdev = bdev_lookup(devt);
+    if (bdev)
+        return bdgrab(bdev);
+    struct gendisk *disk = get_gendisk(devt);
+    if (!disk)
+        return NULL;
+    bdev = bdev_alloc_for_disk(disk);
+    return bdev ? bdgrab(bdev) : NULL;
+}
+
+struct block_device *bdget_disk(struct gendisk *disk, int index)
+{
+    if (!disk || index != 0)
+        return NULL;
+    uint32_t devt = MKDEV(disk->major, disk->first_minor);
+    struct block_device *bdev = bdev_lookup(devt);
+    if (bdev)
+        return bdgrab(bdev);
+    bdev = bdev_alloc_for_disk(disk);
+    return bdev ? bdgrab(bdev) : NULL;
+}
+
+int blkdev_get(struct block_device *bdev)
+{
+    if (!bdev)
+        return -1;
+    bdev->openers++;
+    return 0;
+}
+
+void blkdev_put(struct block_device *bdev)
+{
+    if (!bdev || bdev->openers == 0)
+        return;
+    bdev->openers--;
+}
+
+static void bio_endio_sync(struct bio *bio, int error)
+{
+    if (!bio)
+        return;
+    bio->bi_status = error;
+}
+
+uint32_t block_device_read(struct block_device *bdev, uint32_t offset, uint32_t size, uint8_t *buffer)
+{
+    if (!bdev || !buffer || size == 0)
+        return 0;
+    if (offset >= bdev->size)
+        return 0;
+    if (offset + size > bdev->size)
+        size = (uint32_t)(bdev->size - offset);
+    struct bio bio;
+    memset(&bio, 0, sizeof(bio));
+    bio.bi_bdev = bdev;
+    bio.bi_sector = offset / 512;
+    bio.bi_byte_offset = offset % 512;
+    bio.bi_size = size;
+    bio.bi_buf = buffer;
+    bio.bi_opf = REQ_OP_READ;
+    bio.bi_end_io = bio_endio_sync;
+    bio.bi_status = 0;
+    if (submit_bio(&bio) != 0 || bio.bi_status != 0)
+        return 0;
+    return size;
+}
+
+uint32_t block_device_write(struct block_device *bdev, uint32_t offset, uint32_t size, const uint8_t *buffer)
+{
+    if (!bdev || !buffer || size == 0)
+        return 0;
+    if (offset >= bdev->size)
+        return 0;
+    if (offset + size > bdev->size)
+        size = (uint32_t)(bdev->size - offset);
+    struct bio bio;
+    memset(&bio, 0, sizeof(bio));
+    bio.bi_bdev = bdev;
+    bio.bi_sector = offset / 512;
+    bio.bi_byte_offset = offset % 512;
+    bio.bi_size = size;
+    bio.bi_buf = (uint8_t *)buffer;
+    bio.bi_opf = REQ_OP_WRITE;
+    bio.bi_end_io = bio_endio_sync;
+    bio.bi_status = 0;
+    if (submit_bio(&bio) != 0 || bio.bi_status != 0)
+        return 0;
+    return size;
+}
+
+void block_account_io(struct block_device *bdev, int is_write, uint32_t bytes)
+{
+    if (!bdev || bytes == 0)
+        return;
+    if (is_write) {
+        bdev->writes++;
+        bdev->bytes_written += bytes;
+        blk_writes++;
+        blk_bytes_written += bytes;
+    } else {
+        bdev->reads++;
+        bdev->bytes_read += bytes;
+        blk_reads++;
+        blk_bytes_read += bytes;
+    }
+}
+
+void get_block_stats(uint32_t *reads, uint32_t *writes, uint32_t *bytes_read, uint32_t *bytes_written)
+{
+    if (reads)
+        *reads = blk_reads;
+    if (writes)
+        *writes = blk_writes;
+    if (bytes_read)
+        *bytes_read = blk_bytes_read;
+    if (bytes_written)
+        *bytes_written = blk_bytes_written;
+}
 
 static int blkdev_readpage(struct inode *inode, uint32_t index, struct page_cache_entry *page)
 {

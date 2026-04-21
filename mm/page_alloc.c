@@ -1,9 +1,13 @@
-#include "linux/page_alloc.h"
-#include "linux/libc.h"
+#include "linux/gfp.h"
+#include "asm/setup.h"
+#include "linux/io.h"
+#include "linux/string.h"
+#include "linux/kernel.h"
+#include "linux/printk.h"
 #include "linux/bootmem.h"
-#include "linux/memlayout.h"
+#include "asm/pgtable.h"
 #include "linux/mmzone.h"
-#include "linux/vmscan.h"
+#include "linux/mmzone.h"
 
 static struct multiboot_info* cached_mbi = NULL;
 static uint32_t total_memory_kb = 0;
