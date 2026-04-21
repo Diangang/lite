@@ -138,16 +138,6 @@ static uint32_t block_attr_show_stat(struct device *dev, struct device_attribute
     return off;
 }
 
-static uint32_t block_attr_show_queue_nr_requests(struct device *dev, struct device_attribute *attr,
-                                                  char *buffer, uint32_t cap)
-{
-    (void)attr;
-    struct gendisk *disk = gendisk_from_dev(dev);
-    if (!disk || !disk->queue)
-        return 0;
-    return blk_sysfs_emit_u32_line(buffer, cap, disk->queue->nr_requests);
-}
-
 static struct device_attribute block_attr_size = {
     .attr = { .name = "size", .mode = 0444 },
     .show = block_attr_show_size,
@@ -156,11 +146,6 @@ static struct device_attribute block_attr_size = {
 static struct device_attribute block_attr_stat = {
     .attr = { .name = "stat", .mode = 0444 },
     .show = block_attr_show_stat,
-};
-
-static struct device_attribute block_attr_queue_nr_requests = {
-    .attr = { .name = "nr_requests", .mode = 0444 },
-    .show = block_attr_show_queue_nr_requests,
 };
 
 static const struct attribute *disk_attrs[] = {
@@ -172,17 +157,6 @@ static const struct attribute *disk_attrs[] = {
 static const struct attribute_group disk_attr_group = {
     .name = NULL,
     .attrs = disk_attrs,
-    .is_visible = NULL,
-};
-
-static const struct attribute *queue_attrs[] = {
-    &block_attr_queue_nr_requests.attr,
-    NULL,
-};
-
-static const struct attribute_group queue_attr_group = {
-    .name = "queue",
-    .attrs = queue_attrs,
     .is_visible = NULL,
 };
 

@@ -2,6 +2,7 @@
 #include "linux/blkdev.h"
 #include "linux/blk_queue.h"
 #include "linux/blk_request.h"
+#include "linux/errno.h"
 #include "linux/slab.h"
 #include <stdint.h>
 
@@ -31,6 +32,24 @@ int submit_bio(struct bio *bio)
     if (ret != 0 && bio->bi_status == 0)
         bio_endio(bio, ret);
     return ret;
+}
+
+int blk_update_nr_requests(struct request_queue *q, unsigned int nr)
+{
+    if (!q)
+        return -EINVAL;
+    if (!q->request_fn && !q->make_request_fn)
+        return -EINVAL;
+    /*
+     * Linux mapping: linux2.6/block/blk-core.c:blk_update_nr_requests()
+     *
+     * Lite simplification: no congestion tracking / request_list accounting;
+     * we only update the queue depth which gates submission.
+     */
+    if (nr < BLKDEV_MIN_RQ)
+        nr = BLKDEV_MIN_RQ;
+    q->nr_requests = nr;
+    return 0;
 }
 
 struct request_queue *blk_init_queue(request_fn_t request_fn, void *queuedata)

@@ -5,6 +5,18 @@
 
 typedef int (*initcall_t)(void);
 
+/*
+ * Linux mapping: include/linux/init.h defines section annotations for init/exit.
+ *
+ * Lite simplification: we don't reclaim init sections yet, so these are kept as
+ * no-ops to preserve Linux-compatible signatures without changing runtime.
+ */
+#define __init
+#define __initdata
+#define __initconst
+#define __exit
+#define __exitdata
+
 #define __stringify_1(x) #x
 #define __stringify(x) __stringify_1(x)
 
@@ -18,9 +30,6 @@ typedef int (*initcall_t)(void);
 #define late_initcall(fn) __define_initcall(fn, 5)
 
 #define module_init(fn) device_initcall(fn)
-
-struct multiboot_info;
-void start_kernel(struct multiboot_info* mbi, uint32_t magic);
 
 /* initramfs.c  */
 void populate_rootfs(void);

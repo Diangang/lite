@@ -3,10 +3,17 @@
 
 #include <stdint.h>
 
+/*
+ * Linux mapping: include/linux/blkdev.h defines BLKDEV_MIN_RQ and enforces it
+ * via sysfs queue/nr_requests and queue update helpers.
+ */
+#define BLKDEV_MIN_RQ 4
+
 struct inode;
 struct device;
 struct device_type;
 struct request_queue;
+struct attribute_group;
 
 struct gendisk {
     char disk_name[32];
@@ -67,5 +74,6 @@ void bdput(struct block_device *bdev);
 int blkdev_get(struct block_device *bdev);
 void blkdev_put(struct block_device *bdev);
 int del_gendisk(struct gendisk *disk);
+extern const struct attribute_group queue_attr_group;
 
 #endif

@@ -1,7 +1,7 @@
 #include "linux/init.h"
 #include "linux/libc.h"
 #include "linux/list.h"
-#include "nvme_internal.h"
+#include "host/nvme.h"
 
 /*
  * NVMe core (Linux mapping): controller object model (/sys/class/nvme/nvmeX).

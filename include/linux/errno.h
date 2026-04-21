@@ -3,6 +3,9 @@
 
 #define ENOMEM 12
 #define EINVAL 22
+#define EBUSY 16
+#define EIO 5
+#define ETIMEDOUT 110
 #define EPROBE_DEFER 517
 
 #endif

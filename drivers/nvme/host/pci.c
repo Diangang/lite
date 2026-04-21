@@ -10,7 +10,7 @@
 #include "linux/blk_queue.h"
 #include "linux/blk_request.h"
 #include "linux/bio.h"
-#include "linux/time.h"
+#include "linux/errno.h"
 #include "linux/time.h"
 #include "linux/page_alloc.h"
 #include "linux/memlayout.h"
@@ -18,7 +18,27 @@
 #include "asm/pgtable.h"
 #include <stdint.h>
 
-#include "nvme_internal.h"
+#include "nvme.h"
+
+/* #region debug-point nvme-minixfs-timeout */
+/*
+ * Structured debug lines (timing-sensitive issue; keep minimal but present).
+ * Format: "TRAEDBG <json...>\n"
+ */
+#ifndef TRAE_DEBUG_NVME
+#define TRAE_DEBUG_NVME 1
+#endif
+
+static void nvme_dbg(const char *s)
+{
+#if TRAE_DEBUG_NVME
+    if (s)
+        printf("TRAEDBG %s\n", s);
+#else
+    (void)s;
+#endif
+}
+/* #endregion debug-point nvme-minixfs-timeout */
 
 /* NVMe controller registers (NVMe spec; offsets from BAR0) */
 #define NVME_REG_CAP   0x00
@@ -41,8 +61,11 @@
 #define NVME_CC_IOCQES(v)   (((uint32_t)(v) & 0xF) << 20)      /* 4 => 16B */
 
 #define NVME_MAX_DEVS 4
+#define ADMIN_TIMEOUT (60u * HZ)
+#define NVME_IO_TIMEOUT (30u * HZ)
 static struct nvme_dev *nvme_devs[NVME_MAX_DEVS];
 static struct nvme_ns *nvme_ns_map[NVME_MAX_DEVS];
+static uint32_t nvme_cap_to_ticks(uint64_t cap);
 
 static int nvme_alloc_instance(void)
 {
@@ -137,13 +160,14 @@ static void *nvme_alloc_page(uint32_t *phys_out)
     return v;
 }
 
-static int nvme_wait_csts_rdy(struct nvme_dev *dev, int want_rdy, uint32_t timeout_ticks)
+static int nvme_wait_ready(struct nvme_dev *dev, uint64_t cap, int enabled)
 {
+    uint32_t timeout_ticks = nvme_cap_to_ticks(cap);
     uint32_t deadline = time_get_jiffies() + timeout_ticks;
     while (1) {
         uint32_t csts = mmio_read32(dev->mmio, NVME_REG_CSTS);
         int rdy = (csts & NVME_CSTS_RDY) != 0;
-        if (rdy == want_rdy)
+        if (rdy == enabled)
             return 0;
         if (time_after_eq(time_get_jiffies(), deadline))
             return -1;
@@ -169,7 +193,7 @@ static void nvme_queue_init_doorbells(struct nvme_dev *dev, struct nvme_queue *q
     q->cq_db = (volatile uint32_t *)((uint32_t)dev->mmio + cq_off);
 }
 
-static uint16_t nvme_sq_submit(struct nvme_queue *q, const struct nvme_command *cmd)
+static uint16_t __nvme_submit_cmd(struct nvme_queue *q, const struct nvme_command *cmd)
 {
     if (!q || !cmd)
         return 0;
@@ -192,13 +216,25 @@ static uint16_t nvme_sq_submit(struct nvme_queue *q, const struct nvme_command *
         tail = 0;
     q->sq_tail = tail;
     nvme_doorbell_write(q->sq_db, tail);
+    /* #region debug-point nvme-minixfs-timeout */
+    char j[160];
+    snprintf(j, sizeof(j),
+             "{\"ev\":\"sq_submit\",\"qid\":%u,\"cid\":%u,\"opc\":%u,\"tail\":%u}",
+             (unsigned)q->qid, (unsigned)tmp.command_id, (unsigned)tmp.opcode, (unsigned)tail);
+    nvme_dbg(j);
+    /* #endregion debug-point nvme-minixfs-timeout */
     return tmp.command_id;
+}
+
+static uint16_t nvme_submit_cmd(struct nvme_queue *q, const struct nvme_command *cmd)
+{
+    return __nvme_submit_cmd(q, cmd);
 }
 
 static int nvme_cq_poll_cid(struct nvme_queue *q, uint16_t cid, struct nvme_completion *cpl_out, uint32_t timeout_ticks)
 {
     if (!q || cid == 0)
-        return -1;
+        return -EINVAL;
     volatile struct nvme_completion *cq = (volatile struct nvme_completion *)q->cq;
 
     /* Poll completion queue. */
@@ -224,34 +260,69 @@ static int nvme_cq_poll_cid(struct nvme_queue *q, uint16_t cid, struct nvme_comp
             if (cpl.command_id == cid && cpl.sq_id == q->qid) {
                 if (cpl_out)
                     *cpl_out = cpl;
+                /* #region debug-point nvme-minixfs-timeout */
+                char j[200];
+                snprintf(j, sizeof(j),
+                         "{\"ev\":\"cq_match\",\"qid\":%u,\"cid\":%u,\"st\":%u,\"res\":%u,\"sqh\":%u,\"cqh\":%u}",
+                         (unsigned)q->qid, (unsigned)cid, (unsigned)cpl.status, (unsigned)cpl.result,
+                         (unsigned)cpl.sq_head, (unsigned)q->cq_head);
+                nvme_dbg(j);
+                /* #endregion debug-point nvme-minixfs-timeout */
                 /* Status code is bits 15:1 (0 means success). */
                 if ((cpl.status >> 1) != 0)
-                    return -1;
+                    return -EIO;
                 return 0;
             }
+            /* #region debug-point nvme-minixfs-timeout */
+            char j[200];
+            snprintf(j, sizeof(j),
+                     "{\"ev\":\"cq_other\",\"qid\":%u,\"want_cid\":%u,\"got_cid\":%u,\"sqid\":%u,\"st\":%u,\"cqh\":%u}",
+                     (unsigned)q->qid, (unsigned)cid, (unsigned)cpl.command_id, (unsigned)cpl.sq_id,
+                     (unsigned)cpl.status, (unsigned)q->cq_head);
+            nvme_dbg(j);
+            /* #endregion debug-point nvme-minixfs-timeout */
             /* Unrelated completion: keep polling until our CID completes. */
         }
-        if (time_after_eq(time_get_jiffies(), deadline))
-            return -1;
+        if (time_after_eq(time_get_jiffies(), deadline)) {
+            /* #region debug-point nvme-minixfs-timeout */
+            char j[200];
+            snprintf(j, sizeof(j),
+                     "{\"ev\":\"cq_timeout\",\"qid\":%u,\"cid\":%u,\"cqh\":%u,\"phase\":%u,\"now\":%u,\"dl\":%u}",
+                     (unsigned)q->qid, (unsigned)cid, (unsigned)q->cq_head, (unsigned)q->cq_phase,
+                     (unsigned)time_get_jiffies(), (unsigned)deadline);
+            nvme_dbg(j);
+            /* #endregion debug-point nvme-minixfs-timeout */
+            return -ETIMEDOUT;
+        }
     }
 }
 
-static int nvme_submit_cmd(struct nvme_queue *q, struct nvme_command *cmd, struct nvme_completion *cpl_out)
+static int __nvme_submit_sync_cmd(struct nvme_dev *dev, struct nvme_queue *q, struct nvme_command *cmd,
+                                  struct nvme_completion *cpl_out, uint32_t timeout_ticks)
 {
-    if (!q || !cmd)
-        return -1;
-    /*
-     * Linux mapping:
-     * - submission and completion are separate concerns (irq-driven or polling fallback).
-     * Keep the API shape split so Stage 3+ can plug an interrupt completion path later.
-     */
-    uint16_t cid = nvme_sq_submit(q, cmd);
+    if (!dev || !q || !cmd)
+        return -EINVAL;
+    uint16_t cid = nvme_submit_cmd(q, cmd);
     if (cid == 0)
-        return -1;
-    return nvme_cq_poll_cid(q, cid, cpl_out, 500);
+        return -EINVAL;
+    if (timeout_ticks == 0)
+        timeout_ticks = ADMIN_TIMEOUT;
+    return nvme_cq_poll_cid(q, cid, cpl_out, timeout_ticks);
 }
 
-static int nvme_admin_identify(struct nvme_dev *dev, uint32_t nsid, uint32_t cns, void *buf, uint32_t buf_size)
+static int nvme_submit_sync_admin_cmd(struct nvme_dev *dev, struct nvme_command *cmd,
+                                      struct nvme_completion *cpl_out)
+{
+    return __nvme_submit_sync_cmd(dev, &dev->admin_q, cmd, cpl_out, ADMIN_TIMEOUT);
+}
+
+static int nvme_submit_sync_io_cmd(struct nvme_dev *dev, struct nvme_command *cmd,
+                                   struct nvme_completion *cpl_out)
+{
+    return __nvme_submit_sync_cmd(dev, &dev->io_q, cmd, cpl_out, NVME_IO_TIMEOUT);
+}
+
+static int nvme_identify(struct nvme_dev *dev, uint32_t nsid, uint32_t cns, void *buf, uint32_t buf_size)
 {
     if (!dev || !buf || buf_size < 4096)
         return -1;
@@ -265,30 +336,39 @@ static int nvme_admin_identify(struct nvme_dev *dev, uint32_t nsid, uint32_t cns
     cmd.nsid = nsid;
     cmd.prp1 = (uint64_t)phys;
     cmd.cdw10 = cns & 0xFF;
-    return nvme_submit_cmd(&dev->admin_q, &cmd, NULL);
+    return nvme_submit_sync_admin_cmd(dev, &cmd, NULL);
 }
 
-static int nvme_admin_set_features_num_queues(struct nvme_dev *dev, uint16_t nsq, uint16_t ncq,
-                                              uint16_t *nsq_alloc, uint16_t *ncq_alloc)
+static int nvme_identify_ns_list(struct nvme_dev *dev, void *buf, uint32_t buf_size)
 {
-    if (!dev || nsq == 0 || ncq == 0)
+    return nvme_identify(dev, 0, NVME_ID_CNS_ACTIVE_NS_LIST, buf, buf_size);
+}
+
+static int nvme_identify_ctrl(struct nvme_dev *dev, void *buf, uint32_t buf_size)
+{
+    return nvme_identify(dev, 0, NVME_ID_CNS_CTRL, buf, buf_size);
+}
+
+static int nvme_identify_ns(struct nvme_dev *dev, uint32_t nsid, void *buf, uint32_t buf_size)
+{
+    return nvme_identify(dev, nsid, NVME_ID_CNS_NS, buf, buf_size);
+}
+
+static int set_queue_count(struct nvme_dev *dev, int count)
+{
+    if (!dev || count <= 0)
         return -1;
     struct nvme_command cmd;
     struct nvme_completion cpl;
     memset(&cmd, 0, sizeof(cmd));
     cmd.opcode = NVME_ADMIN_OPC_SET_FEATURES;
     cmd.cdw10 = NVME_FEAT_NUM_QUEUES;
-    /* CDW11: [31:16] NSQR (0-based), [15:0] NCQR (0-based) */
-    cmd.cdw11 = ((uint32_t)(nsq - 1) << 16) | (uint32_t)(ncq - 1);
-    if (nvme_submit_cmd(&dev->admin_q, &cmd, &cpl) != 0)
+    cmd.cdw11 = (uint32_t)(count - 1) | ((uint32_t)(count - 1) << 16);
+    if (nvme_submit_sync_admin_cmd(dev, &cmd, &cpl) != 0)
         return -1;
-    uint16_t ncqa = (uint16_t)(cpl.result & 0xFFFFu);
-    uint16_t nsqa = (uint16_t)((cpl.result >> 16) & 0xFFFFu);
-    if (nsq_alloc)
-        *nsq_alloc = (uint16_t)(nsqa + 1u);
-    if (ncq_alloc)
-        *ncq_alloc = (uint16_t)(ncqa + 1u);
-    return 0;
+    uint16_t ncqa = (uint16_t)((cpl.result & 0xFFFFu) + 1u);
+    uint16_t nsqa = (uint16_t)(((cpl.result >> 16) & 0xFFFFu) + 1u);
+    return (nsqa < ncqa) ? nsqa : ncqa;
 }
 
 static int nvme_create_io_queues(struct nvme_dev *dev)
@@ -297,13 +377,21 @@ static int nvme_create_io_queues(struct nvme_dev *dev)
         return -1;
 
     /* Linux flow: Set Features - Number of Queues, then create I/O CQ/SQ. */
-    uint16_t nsq_alloc = 0, ncq_alloc = 0;
-    if (nvme_admin_set_features_num_queues(dev, 1, 1, &nsq_alloc, &ncq_alloc) != 0) {
+    int queue_count = set_queue_count(dev, 1);
+    if (queue_count < 0) {
         printf("nvme: Set Features (Number of Queues) failed, continuing\n");
     } else {
-        printf("nvme: num_queues allocated: NSQ=%u NCQ=%u\n", (unsigned)nsq_alloc, (unsigned)ncq_alloc);
+        printf("nvme: num_queues allocated: %u\n", (unsigned)queue_count);
     }
-
+    /* #region debug-point nvme-minixfs-timeout */
+    {
+        char j[160];
+        snprintf(j, sizeof(j),
+                 "{\"ev\":\"set_queue_count\",\"rc\":%d,\"cap_to\":%u}",
+                 queue_count, (unsigned)((dev->cap >> 24) & 0xFFu));
+        nvme_dbg(j);
+    }
+    /* #endregion debug-point nvme-minixfs-timeout */
     /* Choose a small, safe depth. Must be <= (CAP.MQES + 1). */
     uint16_t max_depth = (uint16_t)(dev->mqes + 1u);
     uint16_t depth = 32;
@@ -347,7 +435,7 @@ static int nvme_create_io_queues(struct nvme_dev *dev)
      * We poll completions, so IEN=0, IV=0.
      */
     cmd.cdw11 = (0u << 16) | (0u << 1) | 1u;
-    if (nvme_submit_cmd(&dev->admin_q, &cmd, &cpl) != 0) {
+    if (nvme_submit_sync_admin_cmd(dev, &cmd, &cpl) != 0) {
         printf("nvme: CREATE_IO_CQ failed (status=0x%x)\n", cpl.status);
         return -1;
     }
@@ -373,7 +461,7 @@ static int nvme_create_io_queues(struct nvme_dev *dev)
      * - bit 0      PC
      */
     cmd.cdw11 = ((uint32_t)qid << 16) | (0u << 1) | 1u;
-    if (nvme_submit_cmd(&dev->admin_q, &cmd, &cpl) != 0) {
+    if (nvme_submit_sync_admin_cmd(dev, &cmd, &cpl) != 0) {
         printf("nvme: CREATE_IO_SQ failed (status=0x%x)\n", cpl.status);
         return -1;
     }
@@ -437,15 +525,45 @@ static int nvme_io_rw(struct nvme_ns *ns, int write, uint64_t lba, uint32_t nlb,
     cmd.cdw11 = (uint32_t)(lba >> 32);
     cmd.cdw12 = (nlb - 1) & 0xFFFFu;
     struct nvme_completion cpl;
-    int ret = nvme_submit_cmd(&dev->io_q, &cmd, &cpl);
+    memset(&cpl, 0, sizeof(cpl));
+    int ret = nvme_submit_sync_io_cmd(dev, &cmd, &cpl);
     if (ret != 0) {
-        printf("nvme: io %s failed lba=%u nlb=%u len=%u status=0x%x\n",
-               write ? "write" : "read",
-               (unsigned)lba, (unsigned)nlb, (unsigned)buf_len, (unsigned)cpl.status);
+        /* #region debug-point nvme-minixfs-timeout */
+        {
+            char j[220];
+            snprintf(j, sizeof(j),
+                     "{\"ev\":\"io_fail\",\"wr\":%u,\"lba\":%u,\"nlb\":%u,\"len\":%u,\"ret\":%d}",
+                     (unsigned)write, (unsigned)lba, (unsigned)nlb, (unsigned)buf_len, ret);
+            nvme_dbg(j);
+        }
+        /* #endregion debug-point nvme-minixfs-timeout */
+        /*
+         * Linux mapping: request completion status is only meaningful if we
+         * consumed a CQE for this command. Timeouts must not print a bogus
+         * status value.
+         */
+        if (ret == -EIO) {
+            printf("nvme: io %s failed lba=%u nlb=%u len=%u status=0x%x\n",
+                   write ? "write" : "read",
+                   (unsigned)lba, (unsigned)nlb, (unsigned)buf_len, (unsigned)cpl.status);
+        } else {
+            printf("nvme: io %s failed lba=%u nlb=%u len=%u err=%d\n",
+                   write ? "write" : "read",
+                   (unsigned)lba, (unsigned)nlb, (unsigned)buf_len, ret);
+        }
         if (bounce)
             kfree(bounce);
         return -1;
     }
+    /* #region debug-point nvme-minixfs-timeout */
+    {
+        char j[200];
+        snprintf(j, sizeof(j),
+                 "{\"ev\":\"io_ok\",\"wr\":%u,\"lba\":%u,\"nlb\":%u,\"len\":%u}",
+                 (unsigned)write, (unsigned)lba, (unsigned)nlb, (unsigned)buf_len);
+        nvme_dbg(j);
+    }
+    /* #endregion debug-point nvme-minixfs-timeout */
     if (bounce) {
         if (!write)
             memcpy(buf, dma_buf, buf_len);
@@ -541,14 +659,13 @@ static int nvme_dev_init(struct nvme_dev *dev)
     dev->cqr = (uint8_t)((dev->cap >> 16) & 0x1u);
     uint32_t dstrd = (uint32_t)((dev->cap >> 32) & 0xFu);
     dev->db_stride = 4u << dstrd;
-    uint32_t to_ticks = nvme_cap_to_ticks(dev->cap);
     printf("nvme: CAP=0x%x%08x MQES=%u TO=%u DSTRD=%u\n",
            (uint32_t)(dev->cap >> 32), (uint32_t)dev->cap,
            (unsigned)(dev->mqes + 1u), (unsigned)((dev->cap >> 24) & 0xFFu), (unsigned)dstrd);
 
     /* Disable controller, then configure admin queue. */
     mmio_write32(dev->mmio, NVME_REG_CC, 0);
-    if (nvme_wait_csts_rdy(dev, 0, to_ticks) != 0)
+    if (nvme_wait_ready(dev, dev->cap, 0) != 0)
         return -1;
 
     memset(&dev->admin_q, 0, sizeof(dev->admin_q));
@@ -574,7 +691,7 @@ static int nvme_dev_init(struct nvme_dev *dev)
     uint32_t cc = NVME_CC_EN | NVME_CC_CSS_NVM | NVME_CC_MPS(0) | NVME_CC_AMS_RR |
                   NVME_CC_SHN_NONE | NVME_CC_IOSQES(6) | NVME_CC_IOCQES(4);
     mmio_write32(dev->mmio, NVME_REG_CC, cc);
-    if (nvme_wait_csts_rdy(dev, 1, to_ticks) != 0)
+    if (nvme_wait_ready(dev, dev->cap, 1) != 0)
         return -1;
 
     return 0;
@@ -590,7 +707,7 @@ static int nvme_ns_init(struct nvme_dev *dev)
     void *nslist = nvme_alloc_page(&nslist_phys);
     if (!nslist || !nslist_phys)
         return -1;
-    if (nvme_admin_identify(dev, 0, NVME_ID_CNS_ACTIVE_NS_LIST, nslist, 4096) != 0) {
+    if (nvme_identify_ns_list(dev, nslist, 4096) != 0) {
         free_page((unsigned long)nslist_phys);
         return -1;
     }
@@ -607,12 +724,12 @@ static int nvme_ns_init(struct nvme_dev *dev)
         return -1;
     memset(id, 0, 4096);
 
-    if (nvme_admin_identify(dev, 0, NVME_ID_CNS_CTRL, id, 4096) != 0) {
+    if (nvme_identify_ctrl(dev, id, 4096) != 0) {
         free_page((unsigned long)id_phys);
         return -1;
     }
     memset(id, 0, 4096);
-    if (nvme_admin_identify(dev, nsid, NVME_ID_CNS_NS, id, 4096) != 0) {
+    if (nvme_identify_ns(dev, nsid, id, 4096) != 0) {
         free_page((unsigned long)id_phys);
         return -1;
     }
@@ -706,7 +823,7 @@ static const struct pci_device_id nvme_pci_ids[] = {
     { 0 }
 };
 
-static int nvme_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
+static int nvme_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
     (void)id;
     if (!pdev)
@@ -763,7 +880,7 @@ static int nvme_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
     return 0;
 }
 
-static void nvme_pci_remove(struct pci_dev *pdev)
+static void nvme_remove(struct pci_dev *pdev)
 {
     int instance = nvme_find_instance_by_pdev(pdev);
     if (instance < 0)
@@ -788,8 +905,8 @@ static void nvme_pci_remove(struct pci_dev *pdev)
 static struct pci_driver nvme_driver = {
     .driver = { .name = "nvme" },
     .id_table = nvme_pci_ids,
-    .probe = nvme_pci_probe,
-    .remove = nvme_pci_remove,
+    .probe = nvme_probe,
+    .remove = nvme_remove,
 };
 
 static int nvme_init(void)

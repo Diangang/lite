@@ -24,6 +24,9 @@ struct request_queue {
 struct request_queue *blk_init_queue(request_fn_t request_fn, void *queuedata);
 void blk_cleanup_queue(struct request_queue *q);
 
+/* Linux mapping: block/blk-core.c:blk_update_nr_requests() */
+int blk_update_nr_requests(struct request_queue *q, unsigned int nr);
+
 int generic_make_request(struct bio *bio);
 struct request *blk_fetch_request(struct request_queue *q);
 void blk_complete_request(struct request_queue *q, struct request *rq, int error);

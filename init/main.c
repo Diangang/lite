@@ -23,6 +23,7 @@
 #include "linux/printk.h"
 #include "linux/tty.h"
 #include "linux/version.h"
+#include "linux/start_kernel.h"
 #include "linux/memlayout.h"
 #include "linux/bootmem.h"
 #include "linux/mmzone.h"
@@ -33,7 +34,6 @@
 
 extern initcall_t __initcall_start[];
 extern initcall_t __initcall_end[];
-struct multiboot_info boot_mbi;
 
 /* do_initcalls: Perform initcalls. */
 static void do_initcalls(void)
@@ -168,21 +168,17 @@ static void rest_init(void)
 }
 
 /* start_kernel: Run the top-level kernel initialization sequence. */
-void start_kernel(struct multiboot_info* mbi, uint32_t magic)
+void start_kernel(void)
 {
     /* Initialize serial port FIRST so we can debug without VGA */
     init_serial();
-
-    if (magic != MULTIBOOT_BOOTLOADER_MAGIC)
-        panic("Invalid Multiboot magic number!");
-
-    setup_arch(mbi);
+    setup_arch(&boot_mbi);
 
     /* Initialize the entire Memory Management subsystem (PMM, VMM, KHEAP) */
-    if (mbi->mods_addr == 0)
+    if (boot_mbi.mods_addr == 0)
         panic("No Multiboot modules found! InitRD not loaded.");
 
-    bootmem_init(mbi);
+    bootmem_init(&boot_mbi);
     printf("BOOTMEM initialized.\n");
 
     init_zones();
@@ -191,7 +187,7 @@ void start_kernel(struct multiboot_info* mbi, uint32_t magic)
     build_all_zonelists();
     printf("ZONELISTS initialized.\n");
 
-    free_area_init(mbi);
+    free_area_init(&boot_mbi);
     printf("PAGE_ALLOC initialized.\n");
 
     paging_init();
@@ -212,7 +208,6 @@ void start_kernel(struct multiboot_info* mbi, uint32_t magic)
     sched_init();
     fork_init();
 
-    boot_mbi = *mbi;
     if (boot_mbi.flags & 0x4)
         setup_command_line((const char *)memlayout_directmap_phys_to_virt(boot_mbi.cmdline));
     else

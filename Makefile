@@ -11,15 +11,15 @@ LDFLAGS = -m elf_i386 -T arch/x86/kernel/linker.ld -nostdlib
 
 SOURCES_S = arch/x86/boot/boot.s arch/x86/kernel/interrupt.s
 SOURCES_C = init/main.c init/version.c kernel/syscall.c kernel/fork.c kernel/pid.c kernel/cred.c kernel/sched.c kernel/exit.c kernel/ksysfs.c kernel/panic.c kernel/printk.c kernel/params.c kernel/time.c kernel/clockevents.c kernel/signal.c kernel/wait.c kernel/kthread.c
-SOURCES_C += arch/x86/kernel/gdt.c arch/x86/kernel/idt.c arch/x86/kernel/isr.c arch/x86/kernel/setup.c
+SOURCES_C += arch/x86/kernel/gdt.c arch/x86/kernel/head32.c arch/x86/kernel/idt.c arch/x86/kernel/isr.c arch/x86/kernel/setup.c
 SOURCES_C += arch/x86/kernel/irq.c arch/x86/kernel/i8259.c arch/x86/kernel/apic.c arch/x86/kernel/io_apic.c
 SOURCES_C += mm/bootmem.c mm/mmzone.c mm/mmap.c mm/page_alloc.c mm/vmscan.c mm/memory.c mm/vmalloc.c mm/slab.c mm/filemap.c mm/rmap.c mm/swap.c lib/libc.c lib/vsprintf.c lib/kref.c lib/kobject.c lib/klist.c lib/bitmap.c lib/rbtree.c lib/idr.c lib/parser.c
 SOURCES_C += fs/file.c fs/fdtable.c fs/exec.c fs/inode.c fs/dentry.c fs/namei.c fs/read_write.c fs/open.c fs/readdir.c fs/ioctl.c fs/namespace.c fs/ramfs/ramfs.c fs/procfs/procfs.c fs/procfs/base.c fs/procfs/array.c fs/procfs/task_mmu.c fs/block_dev.c fs/chrdev.c fs/minixfs/minixfs.c
 SOURCES_C += fs/buffer.c
 SOURCES_C += block/blk-core.c
-SOURCES_C += block/blkdev.c
+SOURCES_C += block/blk-sysfs.c block/blkdev.c
 SOURCES_C += fs/sysfs/sysfs.c init/initramfs.c
-SOURCES_C += drivers/base/core.c drivers/base/virtual.c drivers/base/uevent.c drivers/base/bus.c drivers/base/class.c drivers/base/driver.c drivers/base/platform.c drivers/base/devtmpfs.c drivers/base/init.c drivers/pci/pci.c drivers/pci/pcie/pcie.c drivers/nvme/nvme-core.c drivers/nvme/nvme.c drivers/input/serio/serio.c drivers/input/serio/i8042.c drivers/input/keyboard/atkbd.c drivers/block/ramdisk.c
+SOURCES_C += drivers/base/core.c drivers/base/virtual.c drivers/base/uevent.c drivers/base/bus.c drivers/base/class.c drivers/base/driver.c drivers/base/platform.c drivers/base/devtmpfs.c drivers/base/init.c drivers/pci/pci.c drivers/pci/pcie/pcie.c drivers/nvme/nvme-core.c drivers/nvme/host/pci.c drivers/input/serio/serio.c drivers/input/serio/i8042.c drivers/input/keyboard/atkbd.c drivers/block/ramdisk.c
 SOURCES_C += drivers/clocksource/timer.c drivers/tty/tty_io.c drivers/tty/n_tty.c drivers/tty/serial/serial_core.c drivers/tty/serial/8250.c
 # printk/console core lives in kernel/printk.c; no video console backends.
 SOURCES_C += drivers/virtio/virtio.c drivers/virtio/virtio_pci.c drivers/virtio/virtqueue.c
@@ -116,10 +116,10 @@ SMOKE_INPUT_DELAY ?= 5
 smoke: smoke-512
 
 smoke-512: $(KERNEL) $(INITRAMFS) $(SCSI_IMG) $(NVME_IMG0) $(NVME_IMG1)
-	sh -c 'tmp=$$(mktemp); scsi=$$(mktemp); nv0=$$(mktemp); nv1=$$(mktemp); cp $(SCSI_IMG) $$scsi; cp $(NVME_IMG0) $$nv0; cp $(NVME_IMG1) $$nv1; timeout $(SMOKE_TIMEOUT)s sh -c "{ sleep $(SMOKE_INPUT_DELAY); printf \"run /bin/smoke\\nexit\\n\"; } | qemu-system-i386 -machine q35 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -display none -monitor none -serial stdio -drive file=$$scsi,format=raw,if=none,id=scsidisk0 -device virtio-scsi-pci,id=scsi0,disable-modern=on -device scsi-hd,drive=scsidisk0,bus=scsi0.0 -drive file=$$nv0,format=raw,if=none,id=nvme0 -device nvme,drive=nvme0,serial=NVME0001 -drive file=$$nv1,format=raw,if=none,id=nvme1 -device nvme,drive=nvme1,serial=NVME0002" >$$tmp 2>&1; cat $$tmp; rm -f $$scsi $$nv0 $$nv1; grep -q "All tests completed (OK)." $$tmp'
+	sh scripts/run-smoke-qemu.sh 512M $(KERNEL) $(INITRAMFS) $(SCSI_IMG) $(NVME_IMG0) $(NVME_IMG1)
 
 smoke-128: $(KERNEL) $(INITRAMFS) $(SCSI_IMG) $(NVME_IMG0) $(NVME_IMG1)
-	sh -c 'tmp=$$(mktemp); scsi=$$(mktemp); nv0=$$(mktemp); nv1=$$(mktemp); cp $(SCSI_IMG) $$scsi; cp $(NVME_IMG0) $$nv0; cp $(NVME_IMG1) $$nv1; timeout $(SMOKE_TIMEOUT)s sh -c "{ sleep $(SMOKE_INPUT_DELAY); printf \"run /bin/smoke\\nexit\\n\"; } | qemu-system-i386 -machine q35 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 128M -display none -monitor none -serial stdio -drive file=$$scsi,format=raw,if=none,id=scsidisk0 -device virtio-scsi-pci,id=scsi0,disable-modern=on -device scsi-hd,drive=scsidisk0,bus=scsi0.0 -drive file=$$nv0,format=raw,if=none,id=nvme0 -device nvme,drive=nvme0,serial=NVME0001 -drive file=$$nv1,format=raw,if=none,id=nvme1 -device nvme,drive=nvme1,serial=NVME0002" >$$tmp 2>&1; cat $$tmp; rm -f $$scsi $$nv0 $$nv1; grep -q "All tests completed (OK)." $$tmp'
+	sh scripts/run-smoke-qemu.sh 128M $(KERNEL) $(INITRAMFS) $(SCSI_IMG) $(NVME_IMG0) $(NVME_IMG1)
 
 check-vocab:
 	sh scripts/check-vocab.sh
