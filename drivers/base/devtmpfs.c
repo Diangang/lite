@@ -18,7 +18,7 @@ static struct super_block *devtmpfs_sb;
 static struct inode *devtmpfs_console_inode;
 static struct inode *devtmpfs_tty_inode;
 static struct task_struct *thread;
-static struct completion setup_done;
+static struct completion devtmpfs_setup_done;
 static DEFINE_SPINLOCK(req_lock);
 static struct file_system_type dev_fs_type;
 
@@ -258,10 +258,10 @@ static int devtmpfsd(void *p)
     sb = devtmpfs_get_sb(&dev_fs_type, 0, NULL, NULL);
     if (!sb || !sb->s_root || !sb->s_root->inode) {
         *err = -1;
-        complete(&setup_done);
+        complete(&devtmpfs_setup_done);
         return *err;
     }
-    complete(&setup_done);
+    complete(&devtmpfs_setup_done);
 
     for (;;) {
         spin_lock(&req_lock);
@@ -393,14 +393,14 @@ int devtmpfs_init(void)
 
     if (err != 0)
         return err;
-    init_completion(&setup_done);
+    init_completion(&devtmpfs_setup_done);
     err = 0;
     thread = kthread_run(devtmpfsd, &err, "kdevtmpfs");
     if (!thread) {
         unregister_filesystem(&dev_fs_type);
         return -1;
     }
-    wait_for_completion(&setup_done);
+    wait_for_completion(&devtmpfs_setup_done);
     if (err != 0) {
         thread = NULL;
         unregister_filesystem(&dev_fs_type);

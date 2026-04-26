@@ -1,0 +1,161 @@
+{
+  "no_direct_linux_match": [
+    {
+      "lite_file": "drivers/base/bus.c",
+      "name": "bus_kset",
+      "placement": "NO_DIRECT_LINUX_MATCH",
+      "storage": "global"
+    },
+    {
+      "lite_file": "drivers/base/class.c",
+      "name": "class_kset",
+      "placement": "NO_DIRECT_LINUX_MATCH",
+      "storage": "global"
+    },
+    {
+      "lite_file": "drivers/base/dd.c",
+      "name": "deferred_devs",
+      "placement": "NO_DIRECT_LINUX_MATCH",
+      "storage": "static"
+    },
+    {
+      "lite_file": "drivers/base/dd.c",
+      "name": "deferred_devs_count",
+      "placement": "NO_DIRECT_LINUX_MATCH",
+      "storage": "static"
+    },
+    {
+      "lite_file": "drivers/base/devtmpfs.c",
+      "name": "dev_fs_type",
+      "placement": "NO_DIRECT_LINUX_MATCH",
+      "storage": "static"
+    },
+    {
+      "lite_file": "drivers/base/devtmpfs.c",
+      "name": "requests",
+      "placement": "NO_DIRECT_LINUX_MATCH",
+      "storage": "global"
+    },
+    {
+      "lite_file": "drivers/base/driver.c",
+      "name": "drv_attr_bind",
+      "placement": "NO_DIRECT_LINUX_MATCH",
+      "storage": "static"
+    },
+    {
+      "lite_file": "drivers/base/driver.c",
+      "name": "drv_attr_unbind",
+      "placement": "NO_DIRECT_LINUX_MATCH",
+      "storage": "static"
+    },
+    {
+      "lite_file": "drivers/base/platform.c",
+      "name": "platform_bus_type",
+      "placement": "NO_DIRECT_LINUX_MATCH",
+      "storage": "global"
+    },
+    {
+      "lite_file": "drivers/base/platform.c",
+      "name": "platform_bus",
+      "placement": "NO_DIRECT_LINUX_MATCH",
+      "storage": "global"
+    }
+  ],
+  "placement_diff": [
+    {
+      "linux_files": [
+        "arch/cris/arch-v10/kernel/irq.c",
+        "arch/ia64/sn/kernel/msi_sn.c",
+        "arch/m32r/platforms/m32104ut/setup.c",
+        "arch/m32r/platforms/mappi/setup.c",
+        "arch/m32r/platforms/mappi2/setup.c",
+        "arch/m32r/platforms/mappi3/setup.c",
+        "arch/m32r/platforms/oaks32r/setup.c",
+        "arch/m68k/coldfire/intc.c",
+        "arch/sparc/kernel/irq_32.c",
+        "drivers/net/hamradio/scc.c"
+      ],
+      "lite_file": "arch/x86/kernel/irq.c",
+      "name": "NR_IRQS",
+      "placement": "DIFF",
+      "storage": "static"
+    },
+    {
+      "linux_files": [
+        "arch/cris/arch-v10/kernel/irq.c",
+        "arch/ia64/sn/kernel/msi_sn.c",
+        "arch/m32r/platforms/m32104ut/setup.c",
+        "arch/m32r/platforms/mappi/setup.c",
+        "arch/m32r/platforms/mappi2/setup.c",
+        "arch/m32r/platforms/mappi3/setup.c",
+        "arch/m32r/platforms/oaks32r/setup.c",
+        "arch/m68k/coldfire/intc.c",
+        "arch/sparc/kernel/irq_32.c",
+        "drivers/net/hamradio/scc.c"
+      ],
+      "lite_file": "arch/x86/kernel/irq.c",
+      "name": "NR_IRQS",
+      "placement": "DIFF",
+      "storage": "static"
+    },
+    {
+      "linux_files": [
+        "arch/x86/kernel/head_32.S"
+      ],
+      "lite_file": "arch/x86/kernel/traps.c",
+      "name": "idt_descr",
+      "placement": "DIFF",
+      "storage": "static"
+    },
+    {
+      "linux_files": [
+        "drivers/scsi/eata.c",
+        "drivers/scsi/u14-34f.c"
+      ],
+      "lite_file": "drivers/base/devtmpfs.c",
+      "name": "setup_done",
+      "placement": "DIFF",
+      "storage": "static"
+    },
+    {
+      "linux_files": [
+        "net/socket.c"
+      ],
+      "lite_file": "drivers/tty/tty_io.c",
+      "name": "hook",
+      "placement": "DIFF",
+      "storage": "static"
+    },
+    {
+      "linux_files": [
+        "arch/alpha/kernel/smc37c669.c",
+        "arch/cris/arch-v10/kernel/debugport.c",
+        "arch/cris/arch-v10/kernel/io_interface_mux.c",
+        "arch/cris/arch-v32/drivers/axisflashmap.c",
+        "arch/cris/arch-v32/drivers/cryptocop.c",
+        "arch/cris/arch-v32/kernel/debugport.c",
+        "arch/x86/kernel/crash.c",
+        "drivers/bcma/driver_mips.c",
+        "drivers/gpu/drm/msm/mdp/mdp5/mdp5_cfg.c",
+        "drivers/isdn/divert/isdn_divert.c",
+        "drivers/isdn/hisax/isdnl1.c",
+        "drivers/isdn/mISDN/layer1.c",
+        "drivers/media/pci/zoran/videocodec.c",
+        "drivers/staging/lustre/lustre/obdclass/lu_object.c",
+        "drivers/video/fbdev/atafb.c",
+        "fs/ocfs2/cluster/masklog.c"
+      ],
+      "lite_file": "mm/vmalloc.c",
+      "name": "NULL",
+      "placement": "DIFF",
+      "storage": "global"
+    }
+  ],
+  "summary": {
+    "globals_no_direct_linux_match": 173,
+    "globals_ok": 15,
+    "globals_placement_diff": 6,
+    "lite_files_scanned": 116,
+    "lite_files_with_globals": 56
+  }
+}

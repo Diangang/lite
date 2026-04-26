@@ -7,10 +7,8 @@
 #include "linux/kernel.h"
 #include "linux/printk.h"
 
-struct pglist_data contig_page_data;
 struct zonelist contig_zonelist;
 struct zonelist dma_zonelist;
-static struct page *mem_map = NULL;
 static uint32_t mem_map_pages = 0;
 
 /* build_all_zonelists: Build all zonelists. */

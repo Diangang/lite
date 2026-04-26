@@ -47,6 +47,7 @@ void device_initialize(struct device *dev, const char *name)
     INIT_LIST_HEAD(&dev->knode_bus.n_node);
     dev->knode_bus.n_klist = NULL;
     kref_init(&dev->knode_bus.n_ref);
+    INIT_LIST_HEAD(&dev->deferred_probe);
     INIT_LIST_HEAD(&dev->class_list);
     /* Linux mapping: device_initialize should leave the device in a known state. */
     dev->bus = NULL;
@@ -374,6 +375,11 @@ int device_attach(struct device *dev)
         return -1;
     if (dev->driver)
         return 0;
+    /* #region debug-point deferred-probe-nvme-core */
+    printf("TRAEDBG {\"ev\":\"device_attach_enter\",\"dev\":\"%s\",\"bus\":\"%s\"}\n",
+           dev->kobj.name[0] ? dev->kobj.name : "-",
+           dev->bus->subsys.kset.kobj.name ? dev->bus->subsys.kset.kobj.name : "-");
+    /* #endregion debug-point deferred-probe-nvme-core */
     klist_iter_init(bus_drivers_klist(dev->bus), &iter);
     while ((node = klist_next(&iter)) != NULL) {
         struct device_driver *drv = container_of(node, struct device_driver, knode_bus);
@@ -382,15 +388,32 @@ int device_attach(struct device *dev)
             if (rc == -EPROBE_DEFER) {
                 klist_iter_exit(&iter);
                 driver_deferred_probe_add(dev);
+                /* #region debug-point deferred-probe-nvme-core */
+                printf("TRAEDBG {\"ev\":\"device_attach_defer\",\"dev\":\"%s\",\"bus\":\"%s\",\"drv\":\"%s\"}\n",
+                       dev->kobj.name[0] ? dev->kobj.name : "-",
+                       dev->bus->subsys.kset.kobj.name ? dev->bus->subsys.kset.kobj.name : "-",
+                       drv->name ? drv->name : "-");
+                /* #endregion debug-point deferred-probe-nvme-core */
                 return 0;
             }
             if (rc == 0) {
                 klist_iter_exit(&iter);
+                /* #region debug-point deferred-probe-nvme-core */
+                printf("TRAEDBG {\"ev\":\"device_attach_bound\",\"dev\":\"%s\",\"bus\":\"%s\",\"drv\":\"%s\"}\n",
+                       dev->kobj.name[0] ? dev->kobj.name : "-",
+                       dev->bus->subsys.kset.kobj.name ? dev->bus->subsys.kset.kobj.name : "-",
+                       drv->name ? drv->name : "-");
+                /* #endregion debug-point deferred-probe-nvme-core */
                 return 0;
             }
         }
     }
     klist_iter_exit(&iter);
+    /* #region debug-point deferred-probe-nvme-core */
+    printf("TRAEDBG {\"ev\":\"device_attach_nomatch\",\"dev\":\"%s\",\"bus\":\"%s\"}\n",
+           dev->kobj.name[0] ? dev->kobj.name : "-",
+           dev->bus->subsys.kset.kobj.name ? dev->bus->subsys.kset.kobj.name : "-");
+    /* #endregion debug-point deferred-probe-nvme-core */
     return 0;
 }
 
@@ -519,7 +542,7 @@ void devices_init(void)
 
 static char uevent_buf[4096];
 static uint32_t uevent_len;
-static uint32_t uevent_seqnum;
+extern uint32_t uevent_seqnum;
 
 static int buf_append(char *buf, uint32_t *off, uint32_t cap, const char *s)
 {

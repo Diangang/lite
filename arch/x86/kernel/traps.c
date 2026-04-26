@@ -30,7 +30,7 @@ struct idt_ptr {
 } __attribute__((packed));
 
 static struct idt_entry idt_table[256];
-static struct idt_ptr idt_descr;
+static struct idt_ptr lite_idt_descr;
 
 static isr_t interrupt_handlers[256];
 static uint32_t interrupt_count[256];
@@ -183,13 +183,13 @@ void isr_install(void)
 
 void init_idt(void)
 {
-    idt_descr.limit = (uint16_t)(sizeof(struct idt_entry) * 256u - 1u);
-    idt_descr.base = (uint32_t)(uintptr_t)&idt_table;
+    lite_idt_descr.limit = (uint16_t)(sizeof(struct idt_entry) * 256u - 1u);
+    lite_idt_descr.base = (uint32_t)(uintptr_t)&idt_table;
     memset(&idt_table, 0, sizeof(idt_table));
 
     isr_install();
     irq_install();
 
-    idt_flush((uint32_t)(uintptr_t)&idt_descr);
+    idt_flush((uint32_t)(uintptr_t)&lite_idt_descr);
     printf("IDT and Interrupts initialized.\n");
 }

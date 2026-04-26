@@ -123,6 +123,7 @@ struct vfsmount *vfs_get_mounts(void);
 
 int register_filesystem(struct file_system_type *fs);
 int unregister_filesystem(struct file_system_type *fs);
+struct file_system_type *get_fs_type(const char *name);
 
 int vfs_path_is_prefix(const char *path, const char *prefix, uint32_t *out_tail_off);
 int vfs_normalize_path(const char *path, char *out, uint32_t cap);

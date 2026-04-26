@@ -6,14 +6,9 @@
 #include "linux/string.h"
 #include "linux/kernel.h"
 #include "linux/printk.h"
-#include "linux/printk.h"
 #include "linux/device.h"
-#include "linux/kernel.h"
 
 struct kobject *kernel_kobj;
-static struct kobject kernel_kobj_store;
-
-static char kernel_uevent_helper[128] = "";
 static uint32_t kernel_attr_show_version(struct kobject *kobj, struct kobj_attribute *attr,
                                          char *buffer, uint32_t cap);
 static uint32_t kernel_attr_show_uptime(struct kobject *kobj, struct kobj_attribute *attr,
@@ -103,7 +98,7 @@ static uint32_t kernel_attr_show_uevent_helper(struct kobject *kobj, struct kobj
 {
     (void)kobj;
     (void)attr;
-    return sysfs_emit_text_line(buffer, cap, kernel_uevent_helper);
+    return sysfs_emit_text_line(buffer, cap, uevent_helper);
 }
 
 static uint32_t kernel_attr_store_uevent_helper(struct kobject *kobj, struct kobj_attribute *attr,
@@ -115,12 +110,12 @@ static uint32_t kernel_attr_store_uevent_helper(struct kobject *kobj, struct kob
         return 0;
     /* Linux mapping: /sys/kernel/uevent_helper is a configurable helper path. */
     uint32_t n = size;
-    if (n >= sizeof(kernel_uevent_helper))
-        n = sizeof(kernel_uevent_helper) - 1;
+    if (n >= UEVENT_HELPER_PATH_LEN)
+        n = UEVENT_HELPER_PATH_LEN - 1;
     if (n > 0 && buffer[n - 1] == '\n')
         n--;
-    memcpy(kernel_uevent_helper, buffer, n);
-    kernel_uevent_helper[n] = 0;
+    memcpy(uevent_helper, buffer, n);
+    uevent_helper[n] = 0;
     return size;
 }
 
@@ -138,16 +133,15 @@ static uint32_t kernel_attr_show_uevent_seqnum(struct kobject *kobj, struct kobj
 
 static int ksysfs_init(void)
 {
-    kobject_init(&kernel_kobj_store, "kernel", NULL);
-    kernel_kobj = &kernel_kobj_store;
+    kernel_kobj = kobject_create_and_add("kernel", NULL);
+    if (!kernel_kobj)
+        return -1;
     /* Selftest: printk returns printed byte count (Linux-like). */
     const char *s = "printk selftest";
     int n = printk(s);
     printk("\n");
     if (n != (int)strlen(s))
         panic("printk return semantics");
-    if (kobject_add(kernel_kobj) != 0)
-        return -1;
     return sysfs_create_group(kernel_kobj, &kernel_attr_group);
 }
 core_initcall(ksysfs_init);

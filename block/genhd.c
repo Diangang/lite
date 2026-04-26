@@ -219,6 +219,20 @@ struct disk_map_entry {
 static struct disk_map_entry disk_map[32];
 static uint32_t disk_map_count;
 
+/*
+ * Linux mapping: linux2.6/block/genhd.c::bdev_map
+ *
+ * Linux uses struct kobj_map. Lite keeps a tiny fixed-size whole-disk registry
+ * with the same symbol name and file placement.
+ */
+struct bdev_map_entry {
+    uint32_t devt;
+    struct block_device *bdev;
+};
+
+static struct bdev_map_entry bdev_map[32];
+static uint32_t bdev_map_count;
+
 static struct gendisk *disk_lookup(uint32_t devt)
 {
     for (uint32_t i = 0; i < disk_map_count; i++) {
@@ -238,6 +252,40 @@ static int disk_register(uint32_t devt, struct gendisk *disk)
     disk_map[disk_map_count].disk = disk;
     disk_map_count++;
     return 0;
+}
+
+struct block_device *bdev_lookup(uint32_t devt)
+{
+    for (uint32_t i = 0; i < bdev_map_count; i++) {
+        if (bdev_map[i].devt == devt)
+            return bdev_map[i].bdev;
+    }
+    return NULL;
+}
+
+int bdev_register(uint32_t devt, struct block_device *bdev)
+{
+    if (!bdev || bdev_map_count >= (sizeof(bdev_map) / sizeof(bdev_map[0])))
+        return -1;
+    if (bdev_lookup(devt))
+        return 0;
+    bdev_map[bdev_map_count].devt = devt;
+    bdev_map[bdev_map_count].bdev = bdev;
+    bdev_map_count++;
+    return 0;
+}
+
+int bdev_unregister(uint32_t devt)
+{
+    for (uint32_t i = 0; i < bdev_map_count; i++) {
+        if (bdev_map[i].devt == devt) {
+            for (uint32_t j = i + 1; j < bdev_map_count; j++)
+                bdev_map[j - 1] = bdev_map[j];
+            bdev_map_count--;
+            return 0;
+        }
+    }
+    return -1;
 }
 
 static int disk_unregister(uint32_t devt)

@@ -9,22 +9,11 @@
 #include "asm/pgtable.h"
 #include "base.h"
 
-static int pci_bus_match(struct device *dev, struct device_driver *drv);
-static const struct attribute_group *pci_dev_groups[];
+extern struct class pcibus_class;
 
-struct bus_type pci_bus_type = {
-    .name = "pci",
-    .match = pci_bus_match,
-    .dev_groups = pci_dev_groups,
-};
 static struct device *pci_root_dev;
-const struct device_type pci_dev_type = { .name = "pci" };
-static const struct device_type pci_bus_dev_type = { .name = "pci_bus" };
-static struct class pcibus_class = {
-    .name = "pci_bus",
-};
 static struct pci_bus *pci_buses[256];
-static uint8_t pci_next_bus = 1;
+static const struct device_type pci_bus_dev_type = { .name = "pci_bus" };
 
 static uint64_t pci_align64(uint64_t val, uint64_t align);
 static uint32_t pci_align32(uint32_t val, uint32_t align);
@@ -162,92 +151,6 @@ static struct pci_bus *pci_bus_create(uint8_t busnr, struct device *bridge)
         pci_bus_init_root_windows(bus);
     return bus;
 }
-
-static int pcibus_class_init(void)
-{
-    return class_register(&pcibus_class);
-}
-core_initcall(pcibus_class_init);
-
-static uint32_t pci_emit_hex_line(char *buffer, uint32_t cap, uint32_t value, uint32_t digits)
-{
-    static const char hex[] = "0123456789abcdef";
-    if (!buffer || cap < digits + 4)
-        return 0;
-    buffer[0] = '0';
-    buffer[1] = 'x';
-    for (uint32_t i = 0; i < digits; i++) {
-        uint32_t shift = (digits - 1 - i) * 4;
-        buffer[2 + i] = hex[(value >> shift) & 0xF];
-    }
-    buffer[2 + digits] = '\n';
-    buffer[3 + digits] = 0;
-    return 3 + digits;
-}
-
-static uint32_t pci_attr_show_vendor(struct device *dev, struct device_attribute *attr, char *buffer, uint32_t cap)
-{
-    (void)attr;
-    struct pci_dev *pdev = pci_get_pci_dev(dev);
-    return pdev ? pci_emit_hex_line(buffer, cap, (uint32_t)pdev->vendor, 4) : 0;
-}
-
-static uint32_t pci_attr_show_device(struct device *dev, struct device_attribute *attr, char *buffer, uint32_t cap)
-{
-    (void)attr;
-    struct pci_dev *pdev = pci_get_pci_dev(dev);
-    return pdev ? pci_emit_hex_line(buffer, cap, (uint32_t)pdev->device, 4) : 0;
-}
-
-static uint32_t pci_attr_show_class(struct device *dev, struct device_attribute *attr, char *buffer, uint32_t cap)
-{
-    (void)attr;
-    struct pci_dev *pdev = pci_get_pci_dev(dev);
-    uint32_t cls;
-    if (!pdev)
-        return 0;
-    cls = ((uint32_t)pdev->class << 16) | ((uint32_t)pdev->subclass << 8) | (uint32_t)pdev->prog_if;
-    return pci_emit_hex_line(buffer, cap, cls, 6);
-}
-
-static struct device_attribute pci_attr_vendor = {
-    .attr = { .name = "vendor", .mode = 0444 },
-    .show = pci_attr_show_vendor,
-};
-
-static struct device_attribute pci_attr_device = {
-    .attr = { .name = "device", .mode = 0444 },
-    .show = pci_attr_show_device,
-};
-
-static struct device_attribute pci_attr_class = {
-    .attr = { .name = "class", .mode = 0444 },
-    .show = pci_attr_show_class,
-};
-
-static uint32_t pci_dev_attr_visible(struct kobject *kobj, const struct attribute *attr)
-{
-    (void)attr;
-    return (kobj && pci_get_pci_dev(container_of(kobj, struct device, kobj))) ? 0444 : 0;
-}
-
-static const struct attribute *pci_dev_attrs[] = {
-    &pci_attr_vendor.attr,
-    &pci_attr_device.attr,
-    &pci_attr_class.attr,
-    NULL,
-};
-
-static const struct attribute_group pci_dev_group = {
-    .name = NULL,
-    .attrs = pci_dev_attrs,
-    .is_visible = pci_dev_attr_visible,
-};
-
-static const struct attribute_group *pci_dev_groups[] = {
-    &pci_dev_group,
-    NULL,
-};
 
 static void pci_device_release(struct device *dev)
 {
@@ -510,18 +413,18 @@ static void pci_make_name(char *buf, uint8_t bus, uint8_t dev, uint8_t func)
     buf[10] = 0;
 }
 
-static void pci_scan_bus(uint8_t bus);
+static void pci_scan_bus(uint8_t bus, uint8_t *next_bus);
 /* pci_assign_bridge_bus: Implement PCI assign bridge bus. */
-static uint8_t pci_assign_bridge_bus(struct pci_dev *pdev, uint8_t parent_bus)
+static uint8_t pci_assign_bridge_bus(struct pci_dev *pdev, uint8_t parent_bus, uint8_t *next_bus)
 {
     uint32_t bus_reg = 0;
     if (pci_read_config_dword(pdev, 0x18, &bus_reg) != 0)
         return 0;
     uint8_t secondary = (uint8_t)((bus_reg >> 8) & 0xFF);
     if (secondary == 0 || secondary == parent_bus) {
-        if (pci_next_bus == 0)
+        if (!next_bus || *next_bus == 0)
             return 0;
-        secondary = pci_next_bus++;
+        secondary = (*next_bus)++;
         uint32_t new_reg = (bus_reg & 0xFF000000) | ((uint32_t)0xFF << 16) | ((uint32_t)secondary << 8) | parent_bus;
         pci_write_config_dword(pdev, 0x18, new_reg);
     }
@@ -535,7 +438,7 @@ static uint8_t pci_assign_bridge_bus(struct pci_dev *pdev, uint8_t parent_bus)
 }
 
 /* pci_register_function: Implement PCI register function. */
-static void pci_register_function(uint8_t bus, uint8_t dev, uint8_t func)
+static void pci_register_function(uint8_t bus, uint8_t dev, uint8_t func, uint8_t *next_bus)
 {
     uint16_t vendor = pci_config_read16(bus, dev, func, 0x00);
     if (vendor == 0xFFFF)
@@ -688,35 +591,35 @@ static void pci_register_function(uint8_t bus, uint8_t dev, uint8_t func)
         }
         pdev->pref_base = pref_base;
         pdev->pref_limit = pref_limit;
-        uint8_t secondary = pci_assign_bridge_bus(pdev, bus);
+        uint8_t secondary = pci_assign_bridge_bus(pdev, bus, next_bus);
         if (secondary) {
             struct pci_bus *cb = pci_buses[secondary];
             if (cb)
                 pci_bus_set_bridge_windows(cb, pdev);
         }
         if (secondary && secondary != bus)
-            pci_scan_bus(secondary);
+            pci_scan_bus(secondary, next_bus);
     }
     pcie_scan_device(pdev);
 }
 
 /* pci_scan_device: Implement PCI scan device. */
-static void pci_scan_device(uint8_t bus, uint8_t dev)
+static void pci_scan_device(uint8_t bus, uint8_t dev, uint8_t *next_bus)
 {
     uint16_t vendor = pci_config_read16(bus, dev, 0, 0x00);
     if (vendor == 0xFFFF)
         return;
     uint8_t header = pci_config_read8(bus, dev, 0, 0x0E);
     uint8_t multi = header & 0x80;
-    pci_register_function(bus, dev, 0);
+    pci_register_function(bus, dev, 0, next_bus);
     if (!multi)
         return;
     for (uint8_t func = 1; func < 8; func++)
-        pci_register_function(bus, dev, func);
+        pci_register_function(bus, dev, func, next_bus);
 }
 
 /* pci_scan_bus: Implement PCI scan bus. */
-static void pci_scan_bus(uint8_t bus)
+static void pci_scan_bus(uint8_t bus, uint8_t *next_bus)
 {
     struct pci_bus *pb = pci_buses[bus];
     if (!pb)
@@ -727,92 +630,7 @@ static void pci_scan_bus(uint8_t bus)
         return;
     pb->scanned = 1;
     for (uint8_t dev = 0; dev < 32; dev++)
-        pci_scan_device(bus, dev);
-}
-
-static int pci_match_one(const struct pci_device_id *id, struct pci_dev *pdev)
-{
-    if (!id || !pdev)
-        return 0;
-    if (id->vendor != PCI_ANY_ID && id->vendor != (uint32_t)pdev->vendor)
-        return 0;
-    if (id->device != PCI_ANY_ID && id->device != (uint32_t)pdev->device)
-        return 0;
-    if (id->class_mask) {
-        uint32_t cls = ((uint32_t)pdev->class << 16) | ((uint32_t)pdev->subclass << 8) | (uint32_t)pdev->prog_if;
-        if ((cls & id->class_mask) != (id->class & id->class_mask))
-            return 0;
-    }
-    return 1;
-}
-
-static int pci_bus_match(struct device *dev, struct device_driver *drv)
-{
-    if (!dev || !drv)
-        return 0;
-    struct pci_dev *pdev = pci_get_pci_dev(dev);
-    if (!pdev)
-        return 0;
-    struct pci_driver *pdrv = to_pci_driver(drv);
-    if (!pdrv || !pdrv->id_table)
-        return 0;
-    const struct pci_device_id *id = pdrv->id_table;
-    while (id->vendor || id->device || id->class || id->class_mask) {
-        if (pci_match_one(id, pdev))
-            return 1;
-        id++;
-    }
-    return 0;
-}
-
-static int pci_driver_probe(struct device *dev)
-{
-    if (!dev || !dev->driver)
-        return -1;
-    struct pci_dev *pdev = pci_get_pci_dev(dev);
-    if (!pdev)
-        return -1;
-    struct pci_driver *pdrv = container_of(dev->driver, struct pci_driver, driver);
-    if (!pdrv || !pdrv->probe || !pdrv->id_table)
-        return 0;
-
-    const struct pci_device_id *id = pdrv->id_table;
-    while (id->vendor || id->device || id->class || id->class_mask) {
-        if (pci_match_one(id, pdev))
-            return pdrv->probe(pdev, id);
-        id++;
-    }
-    return 0;
-}
-
-static void pci_driver_remove(struct device *dev)
-{
-    if (!dev || !dev->driver)
-        return;
-    struct pci_dev *pdev = pci_get_pci_dev(dev);
-    if (!pdev)
-        return;
-    struct pci_driver *pdrv = container_of(dev->driver, struct pci_driver, driver);
-    if (pdrv && pdrv->remove)
-        pdrv->remove(pdev);
-}
-
-int pci_register_driver(struct pci_driver *drv)
-{
-    if (!drv || !drv->driver.name)
-        return -1;
-    if (!pci_bus_type.name || !pci_bus_type.name[0])
-        return -1;
-    init_driver(&drv->driver, drv->driver.name, &pci_bus_type, pci_driver_probe);
-    drv->driver.remove = pci_driver_remove;
-    return driver_register(&drv->driver);
-}
-
-void pci_unregister_driver(struct pci_driver *drv)
-{
-    if (!drv)
-        return;
-    driver_unregister(&drv->driver);
+        pci_scan_device(bus, dev, next_bus);
 }
 
 /* pci_init: Initialize PCI. */
@@ -821,7 +639,6 @@ static int pci_init(void)
     if (bus_register(&pci_bus_type) != 0)
         return -1;
     memset(pci_buses, 0, sizeof(pci_buses));
-    pci_next_bus = 1;
     struct device *root = (struct device*)kmalloc(sizeof(struct device));
     if (root) {
         memset(root, 0, sizeof(*root));
@@ -835,7 +652,8 @@ static int pci_init(void)
             kobject_put(&root->kobj);
         }
     }
-    pci_scan_bus(0);
+    uint8_t next_bus = 1;
+    pci_scan_bus(0, &next_bus);
     return 0;
 }
 subsys_initcall(pci_init);

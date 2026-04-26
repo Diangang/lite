@@ -1,0 +1,191 @@
+# Global Variables Alignment Audit
+Auto-generated. Placement-first audit vs linux2.6.
+## Summary
+- `globals_no_direct_linux_match`: 173
+- `globals_ok`: 15
+- `globals_placement_diff`: 6
+- `lite_files_scanned`: 116
+- `lite_files_with_globals`: 56
+
+## Globals: Placement DIFF
+- `NR_IRQS` (static): lite=`arch/x86/kernel/irq.c`, linux candidates: `linux2.6/arch/cris/arch-v10/kernel/irq.c`, `linux2.6/arch/ia64/sn/kernel/msi_sn.c`, `linux2.6/arch/m32r/platforms/m32104ut/setup.c`, `linux2.6/arch/m32r/platforms/mappi/setup.c`, `linux2.6/arch/m32r/platforms/mappi2/setup.c` (+5 more)
+- `NR_IRQS` (static): lite=`arch/x86/kernel/irq.c`, linux candidates: `linux2.6/arch/cris/arch-v10/kernel/irq.c`, `linux2.6/arch/ia64/sn/kernel/msi_sn.c`, `linux2.6/arch/m32r/platforms/m32104ut/setup.c`, `linux2.6/arch/m32r/platforms/mappi/setup.c`, `linux2.6/arch/m32r/platforms/mappi2/setup.c` (+5 more)
+- `idt_descr` (static): lite=`arch/x86/kernel/traps.c`, linux candidates: `linux2.6/arch/x86/kernel/head_32.S`
+- `setup_done` (static): lite=`drivers/base/devtmpfs.c`, linux candidates: `linux2.6/drivers/scsi/eata.c`, `linux2.6/drivers/scsi/u14-34f.c`
+- `hook` (static): lite=`drivers/tty/tty_io.c`, linux candidates: `linux2.6/net/socket.c`
+- `NULL` (global): lite=`mm/vmalloc.c`, linux candidates: `linux2.6/arch/alpha/kernel/smc37c669.c`, `linux2.6/arch/cris/arch-v10/kernel/debugport.c`, `linux2.6/arch/cris/arch-v10/kernel/io_interface_mux.c`, `linux2.6/arch/cris/arch-v32/drivers/axisflashmap.c`, `linux2.6/arch/cris/arch-v32/drivers/cryptocop.c` (+11 more)
+
+## Globals: NO_DIRECT_LINUX_MATCH
+- `lapic_enabled` (static): resolved; removed as redundant Lite-only mirror state, `apic_enabled()` now derives from `pic_mode`
+- `ioapic_enabled` (static): resolved; removed as redundant Lite-only mirror state, `io_apic_enabled()` now derives from `pic_mode`
+- `gdt_descr` (global): accepted Lite-only state; single-CPU GDT descriptor subset of Linux early/percpu descriptor handling
+- `gdt_table` (static): accepted Lite-only state; single-CPU GDT backing table
+- `tss` (static): accepted Lite-only state; single-CPU TSS backing state
+- `boot_mbi` (global): accepted Lite-only state; Multiboot handoff record for early x86 setup
+- `irq_stat` (global): audit false positive; Linux match `linux2.6/arch/x86/kernel/irq.c::irq_stat`
+- `vector_irq` (static): accepted Lite-only state; single-CPU subset of Linux `vector_irq` mapping
+- `idt_table` (global): audit false positive; Linux match `linux2.6/arch/x86/kernel/traps.c::idt_table`
+- `interrupt_count` (static): accepted Lite-only state; simplified trap accounting array
+- `interrupt_handlers` (static): accepted Lite-only state; simplified trap handler dispatch table
+- `block_class` (static): accepted Lite-only state; minimal block class object for `/sys/class/block`
+- `disk_map_count` (static): accepted Lite-only state; fixed-size whole-disk registry count
+- `bdev_map_count` (static): accepted Lite-only state; fixed-size `bdev_map` registry count
+- `bus_kset` (global): audit false positive; actual Linux match is `linux2.6/drivers/base/bus.c::bus_kset`
+- `class_kset` (global): audit false positive; actual Linux match is `linux2.6/drivers/base/class.c::class_kset`
+- `uevent_len` (static): accepted Lite-only state; backs `device_uevent_read()` for `/sys/kernel/uevent`
+- `deferred_devs` (static): stale ledger entry; symbol already removed from Lite in favor of Linux-style deferred-probe lists
+- `deferred_devs_count` (static): stale ledger entry; symbol already removed from Lite in favor of Linux-style deferred-probe lists
+- `dev_fs_type` (static): audit false positive; Linux match `linux2.6/drivers/base/devtmpfs.c::dev_fs_type`
+- `devtmpfs_console_inode` (static): accepted Lite-only state; caches `/dev/console` inode in simplified devtmpfs
+- `devtmpfs_root` (static): accepted Lite-only state; caches devtmpfs root dentry in simplified devtmpfs
+- `devtmpfs_sb` (static): accepted Lite-only state; caches single-instance devtmpfs superblock
+- `devtmpfs_tty_inode` (static): accepted Lite-only state; caches `/dev/tty` inode in simplified devtmpfs
+- `requests` (global): audit false positive; Linux match `linux2.6/drivers/base/devtmpfs.c::requests`
+- `drv_attr_bind` (static): resolved; moved to `drivers/base/bus.c` as Linux-matching `driver_attr_bind`
+- `drv_attr_name` (static): accepted Lite-only state; exports `/sys/.../driver/name` used by current smoke coverage
+- `drv_attr_unbind` (static): resolved; moved to `drivers/base/bus.c` as Linux-matching `driver_attr_unbind`
+- `platform_bus` (global): audit false positive; actual Linux match is `linux2.6/drivers/base/platform.c::platform_bus`
+- `platform_bus_type` (global): audit false positive; actual Linux match is `linux2.6/drivers/base/platform.c::platform_bus_type`
+- `ramdisk0_disk` (global): resolved; replaced by Linux-style `brd_device` objects linked on `drivers/block/brd.c::brd_devices`
+- `ramdisk1_disk` (static): resolved; replaced by Linux-style `brd_device` objects linked on `drivers/block/brd.c::brd_devices`
+- `i8042_initialized` (static): resolved; removed and replaced by presence state of `i8042_ports[I8042_KBD_PORT_NO].serio`
+- `i8042_pdev` (static): resolved; aligned to Linux naming `i8042_platform_device`
+- `i8042_port` (static): resolved; replaced by Linux-style `i8042_ports[]` (Lite keeps 1-port subset)
+- `serio_bus` (global): audit false positive; Linux match `linux2.6/drivers/input/serio/serio.c::serio_bus`
+- `serio_port_no` (static): resolved; replaced by Linux-style function-local `serio_no` counter inside `serio_init_port()`
+- `pci_bus_type` (global): resolved; moved to `drivers/pci/pci-driver.c` to match Linux placement
+- `pci_dev_groups` (global): resolved; moved to `drivers/pci/pci-sysfs.c` to match Linux placement
+- `pci_dev_type` (global): resolved; moved to `drivers/pci/pci-sysfs.c` to match Linux placement
+- `pcibus_class` (global): resolved; moved to `drivers/pci/probe.c` to match Linux placement
+- `pci_next_bus` (static): resolved; removed global and replaced by local scan counter
+- `pci_bus_dev_type` (static): accepted Lite-only state; required by Lite sysfs layout (`/sys/class/pci_bus/*/type`)
+- `scsi_host_next` (static): resolved; moved from `drivers/scsi/scsi.c` to host numbering state in `drivers/scsi/hosts.c`
+- `scsi_disk_next` (static): resolved; moved from `drivers/scsi/scsi.c` to disk numbering state inside `drivers/scsi/sd.c::scsi_alloc_disk()`
+- `scsi_report_luns_initial` (static): resolved; converted from global variable to non-global scan constant
+- `scsi_scan_tur_retries` (static): resolved; converted from global variable to non-global scan constant
+- `scsi_sequential_scan_max_luns` (static): resolved; converted from global variable to non-global scan constant
+- `tty_serial8250_driver` (global): accepted Lite-only state; tty glue object for simplified `uart_register_driver(drv, tty_drv)` API
+- `serial8250_pdev` (static): resolved; aligned to Linux naming `serial8250_isa_devs`
+- `uart_default_port` (static): accepted Lite-only state; default console sink used by early serial output path
+- `foreground_pid` (static): accepted Lite-only state; foreground pid cache for simplified tty core
+- `tty_active` (static): accepted Lite-only state; active tty pointer
+- `tty_drivers` (static): audit false positive; Linux match `linux2.6/drivers/tty/tty_io.c::tty_drivers`
+- `tty_ldisc` (static): accepted Lite-only state; single active line-discipline pointer
+- `tty_output_targets` (static): accepted Lite-only state; console output target bitmask
+- `user_exit_hook` (static): accepted Lite-only state; user exit callback hook
+- `virtio_index` (static): resolved; aligned to Linux naming `virtio_index_ida` (Lite keeps integer-only subset)
+- `blk_bytes_read` (static): accepted Lite-only state; bytes-read telemetry counter
+- `blk_bytes_written` (static): accepted Lite-only state; bytes-written telemetry counter
+- `blk_reads` (static): accepted Lite-only state; block read request counter
+- `blk_writes` (static): accepted Lite-only state; block write request counter
+- `BH_HASH_SIZE` (static): audit false positive; preprocessor macro, not a static symbol
+- `bh_all_head` (static): accepted Lite-only state; global buffer-head list head
+- `bh_all_tail` (static): accepted Lite-only state; global buffer-head list tail
+- `bh_total` (static): accepted Lite-only state; total buffer-head counter
+- `vfs_root_dentry` (global): accepted Lite-only state; explicit root dentry anchor for simplified VFS
+- `last_ino` (static): accepted Lite-only state; single global inode counter behind `get_next_ino()`
+- `vfs_mounts` (static): accepted Lite-only state; linear mount list head for simplified namespace model
+- `PROC_PID_MAX` (static): audit false positive; preprocessor constant, not a static symbol
+- `proc_blockstats` (static): accepted Lite-only state; fixed `/proc/blockstats` inode object
+- `proc_cow` (static): accepted Lite-only state; fixed `/proc/cow` inode object
+- `proc_diskstats` (static): accepted Lite-only state; fixed `/proc/diskstats` inode object
+- `proc_iomem` (static): accepted Lite-only state; fixed `/proc/iomem` inode object
+- `proc_maps` (static): accepted Lite-only state; fixed `/proc/maps` inode object
+- `proc_mounts` (static): accepted Lite-only state; fixed `/proc/mounts` inode object
+- `proc_pagecache` (static): accepted Lite-only state; fixed `/proc/pagecache` inode object
+- `proc_pfault` (static): accepted Lite-only state; fixed `/proc/pfault` inode object
+- `proc_sched` (static): accepted Lite-only state; fixed `/proc/sched` inode object
+- `proc_vmscan` (static): accepted Lite-only state; fixed `/proc/vmscan` inode object
+- `proc_writeback` (static): accepted Lite-only state; fixed `/proc/writeback` inode object
+- `proc_dirent` (static): accepted Lite-only state; fixed proc root dirent object
+- `proc_root_children` (global): accepted Lite-only state; linear proc root child list head
+- `proc_root_children_nr` (static): accepted Lite-only state; proc root child count
+- `procfs_dir_iops` (static): accepted Lite-only state; procfs root inode ops object
+- `x52414D46` (global): audit false positive; hexadecimal magic constant / enum value for `RAMFS_MAGIC`
+- `ramfs_dir_iops` (static): accepted Lite-only state; ramfs directory inode ops subset
+- `ramfs_dir_ops` (static): accepted Lite-only state; local dir file-ops wrapper for generic readdir subset
+- `ramfs_file_ops` (static): accepted Lite-only state; ramfs file ops subset
+- `ramfs_symlink_ops` (static): accepted Lite-only state; symlink file-ops subset under simplified VFS model
+- `sys_bus_devices_iops` (global): accepted Lite-only state; sysfs bus/devices inode ops object
+- `sys_bus_devices_ops` (global): accepted Lite-only state; sysfs bus/devices file ops object
+- `sys_bus_devices_ops` (global): duplicate audit entry; same Lite sysfs bus/devices file ops object
+- `sys_bus_dir_iops` (global): accepted Lite-only state; sysfs bus dir inode ops object
+- `sys_bus_dir_ops` (global): accepted Lite-only state; sysfs bus dir file ops object
+- `sys_bus_entry_iops` (global): accepted Lite-only state; sysfs bus entry inode ops object
+- `sys_bus_entry_ops` (global): accepted Lite-only state; sysfs bus entry file ops object
+- `sys_class_dir_iops` (global): accepted Lite-only state; sysfs class dir inode ops object
+- `sys_class_dir_ops` (global): accepted Lite-only state; sysfs class dir file ops object
+- `sys_class_root_iops` (global): accepted Lite-only state; sysfs class root inode ops object
+- `sys_class_root_ops` (global): accepted Lite-only state; sysfs class root file ops object
+- `sys_dead_ops` (global): accepted Lite-only state; dead sysfs node ops object
+- `sys_devices_dir_iops` (global): accepted Lite-only state; sysfs devices dir inode ops object
+- `sys_devices_dir_ops` (global): accepted Lite-only state; sysfs devices dir file ops object
+- `sys_dir_iops` (global): accepted Lite-only state; generic sysfs dir inode ops object
+- `sys_dir_ops` (global): accepted Lite-only state; generic sysfs dir file ops object
+- `sys_dirent` (global): accepted Lite-only state; root sysfs dirent object
+- `sys_kobj_dir_iops` (global): accepted Lite-only state; kobject sysfs dir inode ops object
+- `sysfs_next_ino` (static): accepted Lite-only state; sysfs inode counter for simplified sysfs namespace
+- `sysfs_root_dentry` (global): accepted Lite-only state; explicit sysfs root dentry anchor
+- `execute_command_buf` (static): accepted Lite-only state; fixed buffer backing Linux-named pointer `execute_command`
+- `saved_command_line_buf` (static): accepted Lite-only state; fixed buffer backing Linux-named pointer `saved_command_line`
+- `kernel_kobj` (global): audit false positive; Linux match `linux2.6/kernel/ksysfs.c::kernel_kobj`
+- `kthread_create_list` (global): audit false positive; Linux match `linux2.6/kernel/kthread.c::kthread_create_list`
+- `console_list` (static): resolved; aligned to Linux naming `console_drivers`
+- `printk_log_count` (static): accepted Lite-only state; ring-buffer count for printk history
+- `printk_log_head` (static): accepted Lite-only state; ring-buffer head for printk history
+- `current` (global): accepted Lite-only compatibility mirror; exported view of scheduler current task
+- `last_pid` (global): accepted Lite-only state; single global PID allocation counter
+- `need_resched` (global): accepted Lite-only compatibility mirror; exported resched state
+- `sched_switch_count` (global): accepted Lite-only state; scheduler switch telemetry counter
+- `tick_device` (static): accepted Lite-only state; single-CPU current tick device pointer standing in for Linux `tick_cpu_device`
+- `jiffies` (global): resolved; moved to Linux-matching file `kernel/time/jiffies.c`
+- `UEVENT_HELPER_PATH_LEN` (global): audit false positive; this is a macro in `include/linux/kobject.h`, not a global variable in `lib/kobject_uevent.c`
+- `bootmem` (static): accepted Lite-only state; aggregated bootmem/e820/module state container
+- `end` (global): audit false positive; extern linker symbol for kernel end, not a bootmem state variable
+- `mapping_list` (global): accepted Lite-only state; linear address_space registry head
+- `pcache_hits` (static): accepted Lite-only state; page-cache hit telemetry counter
+- `pcache_misses` (static): accepted Lite-only state; page-cache miss telemetry counter
+- `cow_copies` (static): accepted Lite-only state; copy-on-write copy telemetry counter
+- `cow_faults` (static): accepted Lite-only state; copy-on-write fault telemetry counter
+- `kernel_directory` (static): accepted Lite-only state; cached kernel page-directory root
+- `page_directory` (static): accepted Lite-only state; cached active page-directory root
+- `pf_kernel` (static): accepted Lite-only state; page-fault kernel-mode telemetry counter
+- `pf_kernel_addr` (static): accepted Lite-only state; kernel-address-range fault telemetry counter
+- `pf_not_present` (static): accepted Lite-only state; non-present fault telemetry counter
+- `pf_null` (static): accepted Lite-only state; null-address fault telemetry counter
+- `pf_out_of_range` (static): accepted Lite-only state; out-of-range fault telemetry counter
+- `pf_present` (static): accepted Lite-only state; protection/present fault telemetry counter
+- `pf_prot` (static): accepted Lite-only state; protection fault telemetry counter
+- `pf_reserved` (static): accepted Lite-only state; reserved-bit fault telemetry counter
+- `pf_total` (static): accepted Lite-only state; total page-fault telemetry counter
+- `pf_user` (static): accepted Lite-only state; page-fault user-mode telemetry counter
+- `pf_write` (static): accepted Lite-only state; page-fault write telemetry counter
+- `contig_zonelist` (global): accepted Lite-only state; single-node contiguous zonelist cache
+- `dma_zonelist` (global): accepted Lite-only state; single-node DMA zonelist cache
+- `mem_map_pages` (static): accepted Lite-only state; mem_map page-count cache
+- `wb_cleaned_pages` (static): accepted Lite-only state; cleaned-page telemetry counter
+- `wb_dirty_pages` (static): accepted Lite-only state; dirty-page telemetry counter
+- `wb_discarded_pages` (static): accepted Lite-only state; discarded-page telemetry counter
+- `wb_throttled` (static): accepted Lite-only state; writeback throttling event counter
+- `buddy_max_order` (static): accepted Lite-only state; simplified buddy allocator max order
+- `buddy_next` (static): accepted Lite-only state; buddy linked-list backing array
+- `buddy_ready` (static): accepted Lite-only state; bootmem-to-buddy readiness latch
+- `cached_mbi` (static): accepted Lite-only state; cached Multiboot handoff for allocator setup
+- `managed_pages_total` (static): accepted Lite-only state; aggregate managed page counter
+- `total_memory_kb` (static): accepted Lite-only state; cached physical memory size
+- `total_pages` (static): accepted Lite-only state; cached total page count
+- `SLAB_MAX_CACHE` (global): audit false positive; preprocessor macro, not a global symbol
+- `SLAB_MAX_CACHE` (static): audit false positive; preprocessor macro, not a static symbol
+- `SLAB_MAX_PAGES` (static): audit false positive; preprocessor macro, not a static symbol
+- `SLAB_MAX_PAGES` (static): duplicate macro audit hit; not a symbol
+- `slab_free_list` (static): accepted Lite-only state; slab metadata freelist
+- `slab_pages` (static): accepted Lite-only state; slab page count for fixed metadata map
+- `SWAP_SLOTS` (global): audit false positive; preprocessor constant, not a global symbol
+- `vmalloc_base` (static): accepted Lite-only state; cached vmalloc base address
+- `vmalloc_end` (static): accepted Lite-only state; cached vmalloc end address
+- `kswapd_anon_reclaims` (static): accepted Lite-only state; anonymous reclaim telemetry counter
+- `kswapd_file_reclaims` (static): accepted Lite-only state; file reclaim telemetry counter
+- `kswapd_reclaims` (static): accepted Lite-only state; total reclaim telemetry counter
+- `kswapd_running` (static): accepted Lite-only state; kswapd running latch
+- `kswapd_tries` (static): accepted Lite-only state; kswapd scan-attempt counter
+- `kswapd_wakeups` (static): accepted Lite-only state; kswapd wakeup counter

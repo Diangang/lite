@@ -35,6 +35,114 @@
 #include "linux/swap.h"
 #include "linux/slab.h"
 
+/*
+ * Linux mapping: linux2.6/init/main.c boot command line storage.
+ *
+ * Lite keeps fixed-size buffers (subsetting Linux), but uses Linux symbol names
+ * and placement: saved_command_line + execute_command live in init/main.c.
+ */
+static char saved_command_line_buf[256];
+char *saved_command_line = saved_command_line_buf;
+
+static char execute_command_buf[64];
+static char *execute_command = execute_command_buf;
+
+static void set_execute_command(const char *value, size_t len)
+{
+    if (len >= sizeof(execute_command_buf))
+        len = sizeof(execute_command_buf) - 1;
+    if (len)
+        memcpy(execute_command_buf, value, len);
+    execute_command_buf[len] = '\0';
+}
+
+static void parse_command_line(void)
+{
+    size_t i = 0;
+
+    strcpy(execute_command_buf, "/sbin/init");
+
+    while (saved_command_line && saved_command_line[i]) {
+        while (saved_command_line[i] == ' ')
+            i++;
+        if (!saved_command_line[i])
+            break;
+        if (!strncmp(&saved_command_line[i], "init=", 5)) {
+            size_t start = i + 5;
+            size_t end = start;
+            while (saved_command_line[end] && saved_command_line[end] != ' ')
+                end++;
+            set_execute_command(&saved_command_line[start], end - start);
+            return;
+        }
+        while (saved_command_line[i] && saved_command_line[i] != ' ')
+            i++;
+    }
+}
+
+void setup_command_line(const char *cmdline)
+{
+    size_t len = 0;
+
+    if (cmdline)
+        len = strlen(cmdline);
+
+    if (len >= sizeof(saved_command_line_buf))
+        len = sizeof(saved_command_line_buf) - 1;
+
+    if (len)
+        memcpy(saved_command_line_buf, cmdline, len);
+
+    saved_command_line_buf[len] = '\0';
+    parse_command_line();
+}
+
+const char *get_execute_command(void)
+{
+    return execute_command;
+}
+
+int get_cmdline_param(const char *key, char *value, size_t cap)
+{
+    if (!key || !key[0] || !value || cap == 0)
+        return -1;
+
+    value[0] = '\0';
+
+    size_t key_len = strlen(key);
+    size_t i = 0;
+    while (saved_command_line && saved_command_line[i]) {
+        while (saved_command_line[i] == ' ')
+            i++;
+        if (!saved_command_line[i])
+            break;
+
+        size_t start = i;
+        while (saved_command_line[i] && saved_command_line[i] != ' ')
+            i++;
+        size_t end = i;
+
+        if (end > start + key_len &&
+            !strncmp(&saved_command_line[start], key, key_len) &&
+            saved_command_line[start + key_len] == '=') {
+            size_t vstart = start + key_len + 1;
+            size_t vlen = end - vstart;
+            if (vlen >= cap)
+                vlen = cap - 1;
+            if (vlen)
+                memcpy(value, &saved_command_line[vstart], vlen);
+            value[vlen] = '\0';
+            return 0;
+        }
+        if (end == start + key_len &&
+            !strncmp(&saved_command_line[start], key, key_len)) {
+            value[0] = '\0';
+            return 0;
+        }
+    }
+    return -1;
+}
+
 extern initcall_t __initcall_start[];
 extern initcall_t __initcall0_start[];
 extern initcall_t __initcall1_start[];

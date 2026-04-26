@@ -1,4 +1,5 @@
 #include "linux/kobject.h"
+#include "linux/slab.h"
 #include "linux/kernel.h"
 #include "linux/io.h"
 #include "linux/string.h"
@@ -27,6 +28,25 @@ static void kobject_release(struct kref *kref)
 void kobject_init(struct kobject *kobj, const char *name, void (*release)(struct kobject *))
 {
     kobject_init_with_ktype(kobj, name, NULL, release);
+}
+
+static void kobject_free_release(struct kobject *kobj)
+{
+    kfree(kobj);
+}
+
+struct kobject *kobject_create_and_add(const char *name, struct kobject *parent)
+{
+    struct kobject *kobj = (struct kobject *)kmalloc(sizeof(*kobj));
+    if (!kobj)
+        return NULL;
+    kobject_init(kobj, name, kobject_free_release);
+    kobj->parent = parent;
+    if (kobject_add(kobj) != 0) {
+        kobject_put(kobj);
+        return NULL;
+    }
+    return kobj;
 }
 
 void kobject_init_with_ktype(struct kobject *kobj, const char *name, struct kobj_type *ktype,

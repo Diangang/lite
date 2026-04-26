@@ -82,6 +82,28 @@ static void scsi_disk_request_fn(struct request_queue *q)
     }
 }
 
+struct scsi_disk *scsi_alloc_disk(struct scsi_device *sdev)
+{
+    static uint32_t scsi_disk_index;
+    struct scsi_disk *sdkp;
+
+    if (!sdev)
+        return NULL;
+    sdkp = (struct scsi_disk *)kmalloc(sizeof(*sdkp));
+    if (!sdkp)
+        return NULL;
+    memset(sdkp, 0, sizeof(*sdkp));
+    sdkp->device = sdev;
+    sdkp->index = scsi_disk_index++;
+    sdkp->disk = (struct gendisk *)kmalloc(sizeof(*sdkp->disk));
+    if (!sdkp->disk) {
+        kfree(sdkp);
+        return NULL;
+    }
+    memset(sdkp->disk, 0, sizeof(*sdkp->disk));
+    return sdkp;
+}
+
 int scsi_add_disk(struct scsi_disk *sdkp)
 {
     if (!sdkp || !sdkp->device || !sdkp->disk)

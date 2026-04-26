@@ -11,7 +11,7 @@
 extern int uart8250_probe(struct device *dev);
 
 struct tty_driver tty_serial8250_driver;
-static struct platform_device *serial8250_pdev;
+static struct platform_device *serial8250_isa_devs;
 struct uart_driver serial8250_uart_driver = {
     .driver_name = "serial8250",
     .dev_name = "ttyS",
@@ -55,8 +55,8 @@ static int serial8250_driver_init(void)
     if (platform_driver_register(&serial8250_platform_driver) != 0)
         return -1;
 
-    serial8250_pdev = platform_device_register_simple("serial8250", PLATFORM_DEVID_NONE);
-    if (!serial8250_pdev) {
+    serial8250_isa_devs = platform_device_register_simple("serial8250", PLATFORM_DEVID_NONE);
+    if (!serial8250_isa_devs) {
         platform_driver_unregister(&serial8250_platform_driver);
         return -1;
     }

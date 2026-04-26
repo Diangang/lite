@@ -6,10 +6,17 @@
 #include "linux/printk.h"
 #include "linux/init.h"
 #include "linux/platform_device.h"
+#include "linux/slab.h"
 
-static struct serio i8042_port;
-static int i8042_initialized;
-static struct platform_device *i8042_pdev;
+struct i8042_port {
+    struct serio *serio;
+};
+
+#define I8042_KBD_PORT_NO 0
+#define I8042_NUM_PORTS 1
+
+static struct i8042_port i8042_ports[I8042_NUM_PORTS];
+static struct platform_device *i8042_platform_device;
 
 static void i8042_port_release(struct device *dev)
 {
@@ -18,15 +25,21 @@ static void i8042_port_release(struct device *dev)
 
 static struct pt_regs *i8042_irq(struct pt_regs *regs)
 {
+    struct serio *serio = i8042_ports[I8042_KBD_PORT_NO].serio;
+
     (void)regs;
+    if (!serio)
+        return regs;
     uint8_t scancode = inb(0x60);
-    serio_interrupt(&i8042_port, scancode);
+    serio_interrupt(serio, scancode);
     return regs;
 }
 
 static int i8042_hw_init(struct device *parent)
 {
-    if (i8042_initialized)
+    struct serio *serio;
+
+    if (i8042_ports[I8042_KBD_PORT_NO].serio)
         return 0;
     register_irq_handler(IRQ_KEYBOARD, i8042_irq);
 
@@ -55,29 +68,38 @@ static int i8042_hw_init(struct device *parent)
         ;
     outb(0x60, 0xF4);
 
-    i8042_port.name = "i8042";
-    i8042_port.id.type = SERIO_8042;
-    i8042_port.id.proto = SERIO_ANY;
-    i8042_port.id.id = SERIO_ANY;
-    i8042_port.id.extra = SERIO_ANY;
+    serio = (struct serio *)kmalloc(sizeof(*serio));
+    if (!serio)
+        return -1;
+    memset(serio, 0, sizeof(*serio));
+    serio->name = "i8042";
+    serio->id.type = SERIO_8042;
+    serio->id.proto = SERIO_ANY;
+    serio->id.id = SERIO_ANY;
+    serio->id.extra = SERIO_ANY;
     /* Provider responsibilities: set parent + release + id, then register. */
-    i8042_port.parent = parent;
-    i8042_port.dev.release = i8042_port_release; /* static port */
-    serio_register_port(&i8042_port);
+    serio->parent = parent;
+    serio->dev.release = i8042_port_release;
+    if (serio_register_port(serio) != 0) {
+        kfree(serio);
+        return -1;
+    }
+    i8042_ports[I8042_KBD_PORT_NO].serio = serio;
 
-    i8042_initialized = 1;
     printf("i8042 initialized.\n");
     return 0;
 }
 
 static void i8042_hw_exit(void)
 {
-    if (!i8042_initialized)
+    struct serio *serio = i8042_ports[I8042_KBD_PORT_NO].serio;
+
+    if (!serio)
         return;
-    serio_unregister_port(&i8042_port);
+    serio_unregister_port(serio);
+    i8042_ports[I8042_KBD_PORT_NO].serio = NULL;
     /* Best-effort: drop handler to avoid stale pointer use. */
     register_irq_handler(IRQ_KEYBOARD, 0);
-    i8042_initialized = 0;
 }
 
 static int i8042_platform_probe(struct platform_device *pdev)
@@ -112,8 +134,8 @@ static int i8042_init(void)
      */
     if (platform_driver_register(&i8042_driver) != 0)
         return -1;
-    i8042_pdev = platform_device_register_simple("i8042", 0);
-    if (!i8042_pdev) {
+    i8042_platform_device = platform_device_register_simple("i8042", 0);
+    if (!i8042_platform_device) {
         platform_driver_unregister(&i8042_driver);
         return -1;
     }

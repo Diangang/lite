@@ -188,6 +188,91 @@ static uint32_t bus_attr_store_drivers_probe(struct bus_type *bus, struct bus_at
     return (bus_probe_device_modalias(bus, tmp) == 0) ? size : 0;
 }
 
+static struct device *bus_find_driver_device(struct device_driver *drv, const char *name)
+{
+    struct klist_iter iter;
+    struct klist_node *node;
+
+    if (!drv || !drv->bus || !name || !name[0])
+        return NULL;
+    klist_iter_init(bus_devices_klist(drv->bus), &iter);
+    while ((node = klist_next(&iter)) != NULL) {
+        struct device *dev = bus_device_from_node(node);
+
+        if (!strcmp(dev->kobj.name, name)) {
+            klist_iter_exit(&iter);
+            return dev;
+        }
+    }
+    klist_iter_exit(&iter);
+    return NULL;
+}
+
+static uint32_t driver_attr_store_unbind(struct device_driver *drv, struct driver_attribute *attr,
+                                         uint32_t offset, uint32_t size, const uint8_t *buffer)
+{
+    char tmp[64];
+    uint32_t n = size;
+    struct device *dev;
+
+    (void)attr;
+    if (!drv || !buffer || offset || size == 0)
+        return 0;
+    if (n >= sizeof(tmp))
+        n = sizeof(tmp) - 1;
+    memcpy(tmp, buffer, n);
+    tmp[n] = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        if (tmp[i] == '\n' || tmp[i] == ' ' || tmp[i] == '\t') {
+            tmp[i] = 0;
+            break;
+        }
+    }
+    dev = bus_find_driver_device(drv, tmp);
+    if (!dev || dev->driver != drv)
+        return 0;
+    device_release_driver(dev);
+    return size;
+}
+
+static uint32_t driver_attr_store_bind(struct device_driver *drv, struct driver_attribute *attr,
+                                       uint32_t offset, uint32_t size, const uint8_t *buffer)
+{
+    char tmp[64];
+    uint32_t n = size;
+    struct device *dev;
+
+    (void)attr;
+    if (!drv || !buffer || offset || size == 0)
+        return 0;
+    if (n >= sizeof(tmp))
+        n = sizeof(tmp) - 1;
+    memcpy(tmp, buffer, n);
+    tmp[n] = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        if (tmp[i] == '\n' || tmp[i] == ' ' || tmp[i] == '\t') {
+            tmp[i] = 0;
+            break;
+        }
+    }
+    dev = bus_find_driver_device(drv, tmp);
+    if (!dev || dev->driver)
+        return 0;
+    if (driver_probe_device(drv, dev) != 0)
+        return 0;
+    return size;
+}
+
+static struct driver_attribute driver_attr_unbind = {
+    .attr = { .name = "unbind", .mode = 0222 },
+    .store = driver_attr_store_unbind,
+};
+
+static struct driver_attribute driver_attr_bind = {
+    .attr = { .name = "bind", .mode = 0222 },
+    .store = driver_attr_store_bind,
+};
+
 static struct bus_attribute bus_attr_drivers_autoprobe = {
     .attr = { .name = "drivers_autoprobe", .mode = 0644 },
     .show = bus_attr_show_drivers_autoprobe,
@@ -269,6 +354,25 @@ void buses_init(void)
     kset_init(bus_kset, "bus");
     /* Linux mapping: kset_create_and_add("bus", ...) */
     (void)kobject_add(&bus_kset->kobj);
+}
+
+int add_bind_files(struct device_driver *drv)
+{
+    int ret;
+
+    ret = driver_create_file(drv, &driver_attr_unbind);
+    if (ret == 0) {
+        ret = driver_create_file(drv, &driver_attr_bind);
+        if (ret)
+            driver_remove_file(drv, &driver_attr_unbind);
+    }
+    return ret;
+}
+
+void remove_bind_files(struct device_driver *drv)
+{
+    driver_remove_file(drv, &driver_attr_bind);
+    driver_remove_file(drv, &driver_attr_unbind);
 }
 
 /* bus_default_match: Implement bus default match. */

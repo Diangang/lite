@@ -74,6 +74,9 @@ extern struct kset *devices_kset;
 extern struct kset *bus_kset;
 extern struct kset *class_kset;
 
+int add_bind_files(struct device_driver *drv);
+void remove_bind_files(struct device_driver *drv);
+
 int devtmpfs_init(void);
 void devices_init(void);
 void buses_init(void);

@@ -1,6 +1,7 @@
 #include "asm/irqflags.h"
 #include "asm/desc.h"
 #include "asm/apic.h"
+#include "asm/hardirq.h"
 #include "asm/i8259.h"
 #include "asm/io_apic.h"
 #include "asm/irq_vectors.h"
@@ -12,6 +13,7 @@
 static struct irq_desc irq_descs[NR_IRQS];
 static struct irq_desc *vector_irq[256];
 static uint8_t irq_legacy_vectors[NR_IRQS];
+irq_cpustat_t irq_stat;
 
 /* IRQ stubs (defined in arch/x86/entry/entry_32.S). */
 extern void irq0(void);

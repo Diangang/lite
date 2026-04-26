@@ -19,9 +19,12 @@
  * - no manual_bind/bind_mode sysfs; rely on bus.drivers_autoprobe + driver core interfaces
  */
 
-struct bus_type serio_bus;
+static int serio_bus_match(struct device *dev, struct device_driver *drv);
 
-static uint32_t serio_port_no;
+struct bus_type serio_bus = {
+    .name = "serio",
+    .match = serio_bus_match,
+};
 
 static int serio_match_port(const struct serio_device_id *ids, struct serio *serio)
 {
@@ -95,7 +98,9 @@ static void serio_init_port(struct serio *serio)
     if (!serio)
         return;
     char name[16];
-    snprintf(name, sizeof(name), "serio%u", serio_port_no++);
+    /* Linux mapping: linux2.6/drivers/input/serio/serio.c::serio_init_port() */
+    static int serio_no = -1;
+    snprintf(name, sizeof(name), "serio%d", ++serio_no);
 
     int caller_set_release = (serio->dev.release != NULL);
     device_initialize(&serio->dev, name);
@@ -160,10 +165,6 @@ void serio_interrupt(struct serio *serio, uint8_t data)
 
 static int serio_core_init(void)
 {
-    memset(&serio_bus, 0, sizeof(serio_bus));
-    serio_bus.name = "serio";
-    serio_bus.match = serio_bus_match;
-    INIT_LIST_HEAD(&serio_bus.list);
     return bus_register(&serio_bus);
 }
 subsys_initcall(serio_core_init);

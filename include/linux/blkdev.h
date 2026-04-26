@@ -95,6 +95,10 @@ struct inode *blockdev_inode_create(struct block_device *bdev);
 void blockdev_inode_destroy(struct block_device *bdev);
 /* Linux mapping: get_gendisk(dev_t, int*) lives in block/genhd.c. Lite keeps a minimal variant. */
 struct gendisk *get_gendisk(uint32_t devt);
+/* Linux mapping: bdev_map lives under block/genhd.c; Lite exposes minimal helpers. */
+struct block_device *bdev_lookup(uint32_t devt);
+int bdev_register(uint32_t devt, struct block_device *bdev);
+int bdev_unregister(uint32_t devt);
 struct block_device *bdget(uint32_t devt);
 struct block_device *bdget_disk(struct gendisk *disk, int index);
 struct block_device *bdgrab(struct block_device *bdev);

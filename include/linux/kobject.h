@@ -42,9 +42,12 @@ struct subsystem {
     struct kset kset;
 };
 
+#define UEVENT_HELPER_PATH_LEN 128
+
 void kobject_init(struct kobject *kobj, const char *name, void (*release)(struct kobject *));
 void kobject_init_with_ktype(struct kobject *kobj, const char *name, struct kobj_type *ktype,
                              void (*release)(struct kobject *));
+struct kobject *kobject_create_and_add(const char *name, struct kobject *parent);
 int kobject_add(struct kobject *kobj);
 void kobject_del(struct kobject *kobj);
 struct kobject *kobject_get(struct kobject *kobj);
@@ -57,5 +60,6 @@ void subsystem_unregister(struct subsystem *subsys);
 
 /* Linux-like /sys/kernel root kobject. */
 extern struct kobject *kernel_kobj;
+extern char uevent_helper[UEVENT_HELPER_PATH_LEN];
 
 #endif

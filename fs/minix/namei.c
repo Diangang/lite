@@ -22,6 +22,11 @@ static struct inode *minix_dir_finddir(struct inode *node, const char *name)
 
 static struct inode *minix_create_child(struct inode *dir, const char *name, uint32_t type)
 {
+    /* #region debug-point deferred-probe-nvme-minix */
+    int watch = (name && !strcmp(name, "nvme_rw.txt"));
+    if (watch)
+        printf("TRAEDBG {\"ev\":\"minix_create_enter\",\"name\":\"%s\",\"type\":%u}\n", name, type);
+    /* #endregion debug-point deferred-probe-nvme-minix */
     if (!dir || !name || !*name)
         return NULL;
     if ((dir->flags & 0x7) != FS_DIRECTORY)
@@ -36,10 +41,20 @@ static struct inode *minix_create_child(struct inode *dir, const char *name, uin
 
     uint32_t ino = 0;
     uint16_t zone = 0;
-    if (minix_alloc_inode(dir_info->bdev, &dir_info->sb, &ino) != 0)
+    if (minix_alloc_inode(dir_info->bdev, &dir_info->sb, &ino) != 0) {
+        /* #region debug-point deferred-probe-nvme-minix */
+        if (watch)
+            printf("TRAEDBG {\"ev\":\"minix_create_fail\",\"name\":\"%s\",\"step\":\"alloc_inode\"}\n", name);
+        /* #endregion debug-point deferred-probe-nvme-minix */
         return NULL;
-    if (minix_alloc_zone(dir_info->bdev, &dir_info->sb, &zone) != 0)
+    }
+    if (minix_alloc_zone(dir_info->bdev, &dir_info->sb, &zone) != 0) {
+        /* #region debug-point deferred-probe-nvme-minix */
+        if (watch)
+            printf("TRAEDBG {\"ev\":\"minix_create_fail\",\"name\":\"%s\",\"step\":\"alloc_zone\"}\n", name);
+        /* #endregion debug-point deferred-probe-nvme-minix */
         return NULL;
+    }
 
     struct minix_inode_disk dinode;
     memset(&dinode, 0, sizeof(dinode));
@@ -64,17 +79,41 @@ static struct inode *minix_create_child(struct inode *dir, const char *name, uin
         de.name[1] = '.';
         memcpy(blk + 1 * sizeof(de), &de, sizeof(de));
     }
-    if (minix_bwrite(dir_info->bdev, minix_zone_to_block(zone), blk) != MINIX_BLOCK_SIZE)
+    if (minix_bwrite(dir_info->bdev, minix_zone_to_block(zone), blk) != MINIX_BLOCK_SIZE) {
+        /* #region debug-point deferred-probe-nvme-minix */
+        if (watch)
+            printf("TRAEDBG {\"ev\":\"minix_create_fail\",\"name\":\"%s\",\"step\":\"bwrite\"}\n", name);
+        /* #endregion debug-point deferred-probe-nvme-minix */
         return NULL;
-    if (minix_write_inode(dir_info->bdev, &dir_info->sb, ino, &dinode) != 0)
+    }
+    if (minix_write_inode(dir_info->bdev, &dir_info->sb, ino, &dinode) != 0) {
+        /* #region debug-point deferred-probe-nvme-minix */
+        if (watch)
+            printf("TRAEDBG {\"ev\":\"minix_create_fail\",\"name\":\"%s\",\"step\":\"write_inode\"}\n", name);
+        /* #endregion debug-point deferred-probe-nvme-minix */
         return NULL;
-    if (minix_dir_add_entry(dir_info->bdev, &dir_info->sb, dir_info, (uint16_t)ino, name) != 0)
+    }
+    if (minix_dir_add_entry(dir_info->bdev, &dir_info->sb, dir_info, (uint16_t)ino, name) != 0) {
+        /* #region debug-point deferred-probe-nvme-minix */
+        if (watch)
+            printf("TRAEDBG {\"ev\":\"minix_create_fail\",\"name\":\"%s\",\"step\":\"dir_add\"}\n", name);
+        /* #endregion debug-point deferred-probe-nvme-minix */
         return NULL;
+    }
     if (type == FS_DIRECTORY) {
         dir_info->dinode.i_nlinks++;
-        if (minix_write_inode(dir_info->bdev, &dir_info->sb, dir_info->ino, &dir_info->dinode) != 0)
+        if (minix_write_inode(dir_info->bdev, &dir_info->sb, dir_info->ino, &dir_info->dinode) != 0) {
+            /* #region debug-point deferred-probe-nvme-minix */
+            if (watch)
+                printf("TRAEDBG {\"ev\":\"minix_create_fail\",\"name\":\"%s\",\"step\":\"write_parent\"}\n", name);
+            /* #endregion debug-point deferred-probe-nvme-minix */
             return NULL;
+        }
     }
+    /* #region debug-point deferred-probe-nvme-minix */
+    if (watch)
+        printf("TRAEDBG {\"ev\":\"minix_create_ok\",\"name\":\"%s\",\"ino\":%u,\"zone\":%u}\n", name, ino, zone);
+    /* #endregion debug-point deferred-probe-nvme-minix */
     return minix_inode_from_disk(dir_info->bdev, &dir_info->sb, ino, &dinode);
 }
 

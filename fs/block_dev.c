@@ -9,53 +9,10 @@
 #include "linux/slab.h"
 #include "asm/pgtable.h"
 
-/* Whole-disk bdev registry keyed by devt (no partitions yet). */
-struct bdev_map_entry {
-    uint32_t devt;
-    struct block_device *bdev;
-};
-
-static struct bdev_map_entry bdev_map[32];
-static uint32_t bdev_map_count;
-
 static uint32_t blk_reads;
 static uint32_t blk_writes;
 static uint32_t blk_bytes_read;
 static uint32_t blk_bytes_written;
-
-static struct block_device *bdev_lookup(uint32_t devt)
-{
-    for (uint32_t i = 0; i < bdev_map_count; i++) {
-        if (bdev_map[i].devt == devt)
-            return bdev_map[i].bdev;
-    }
-    return NULL;
-}
-
-static int bdev_register(uint32_t devt, struct block_device *bdev)
-{
-    if (!bdev || bdev_map_count >= (sizeof(bdev_map) / sizeof(bdev_map[0])))
-        return -1;
-    if (bdev_lookup(devt))
-        return 0;
-    bdev_map[bdev_map_count].devt = devt;
-    bdev_map[bdev_map_count].bdev = bdev;
-    bdev_map_count++;
-    return 0;
-}
-
-static int bdev_unregister(uint32_t devt)
-{
-    for (uint32_t i = 0; i < bdev_map_count; i++) {
-        if (bdev_map[i].devt == devt) {
-            for (uint32_t j = i + 1; j < bdev_map_count; j++)
-                bdev_map[j - 1] = bdev_map[j];
-            bdev_map_count--;
-            return 0;
-        }
-    }
-    return -1;
-}
 
 int bd_remove(uint32_t devt)
 {

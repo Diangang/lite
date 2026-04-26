@@ -9,24 +9,11 @@
 #include "linux/console.h"
 
 /* vfs_get_mounts: Return the current mount list. */
-static struct file_system_type *file_systems;
 static struct vfsmount *vfs_mounts;
 
 struct vfsmount *vfs_get_mounts(void)
 {
     return vfs_mounts;
-}
-
-/* get_fs_type: Linux-style filesystem type lookup. */
-static struct file_system_type *get_fs_type(const char *name)
-{
-    if (!name)
-        return NULL;
-    for (struct file_system_type *fs = file_systems; fs; fs = fs->next) {
-        if (strcmp(fs->name, name) == 0)
-            return fs;
-    }
-    return NULL;
 }
 
 /* vfs_get_sb_single: Implement vfs get sb single. */
@@ -56,39 +43,6 @@ struct super_block *vfs_get_sb_single(struct file_system_type *fs_type, int flag
         panic("vfs_get_sb_single: root dentry missing.");
 
     return sb;
-}
-
-/* register_filesystem: Register filesystem. */
-int register_filesystem(struct file_system_type *fs)
-{
-    struct file_system_type **p;
-    if (!fs)
-        return -1;
-
-    for (p = &file_systems; *p; p = &(*p)->next) {
-        if (strcmp((*p)->name, fs->name) == 0)
-            return -1; // Already registered
-    }
-
-    fs->next = NULL;
-    *p = fs;
-    return 0;
-}
-
-/* unregister_filesystem: Unregister filesystem. */
-int unregister_filesystem(struct file_system_type *fs)
-{
-    struct file_system_type **p;
-    if (!fs)
-        return -1;
-
-    for (p = &file_systems; *p; p = &(*p)->next) {
-        if (*p == fs) {
-            *p = fs->next;
-            return 0;
-        }
-    }
-    return -1;
 }
 
 /* init_mount_tree: Install the initial root mount. */

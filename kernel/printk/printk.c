@@ -14,20 +14,20 @@
  * - A single linked list of console sinks.
  * - printk_putc() fans out to all registered sinks.
  */
-static struct console *console_list;
+static struct console *console_drivers;
 
 int register_console(struct console *con)
 {
     if (!con || !con->write)
         return -1;
-    con->next = console_list;
-    console_list = con;
+    con->next = console_drivers;
+    console_drivers = con;
     return 0;
 }
 
 void unregister_console(struct console *con)
 {
-    struct console **pp = &console_list;
+    struct console **pp = &console_drivers;
     while (*pp) {
         if (*pp == con) {
             *pp = con->next;
@@ -42,7 +42,7 @@ uint32_t console_write(const uint8_t *buf, uint32_t len)
 {
     if (!buf || len == 0)
         return 0;
-    for (struct console *con = console_list; con; con = con->next)
+    for (struct console *con = console_drivers; con; con = con->next)
         con->write(buf, len);
     return len;
 }

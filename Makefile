@@ -10,16 +10,16 @@ CFLAGS += -Iinclude -Ikernel -Iinit -Ilib -Iarch/x86 -Iarch/x86/include -Imm -If
 LDFLAGS = -m elf_i386 -T arch/x86/kernel/linker.ld -nostdlib
 
 SOURCES_S = arch/x86/boot/header.S arch/x86/entry/entry_32.S
-SOURCES_C = init/main.c init/version.c arch/x86/entry/syscall_32.c kernel/fork.c kernel/pid.c kernel/cred.c kernel/sched/core.c kernel/exit.c kernel/ksysfs.c kernel/panic.c kernel/printk/printk.c kernel/params.c kernel/time/time.c kernel/time/clockevents.c kernel/signal.c kernel/sched/wait.c kernel/kthread.c
+SOURCES_C = init/main.c init/version.c arch/x86/entry/syscall_32.c kernel/fork.c kernel/pid.c kernel/cred.c kernel/sched/core.c kernel/exit.c kernel/ksysfs.c kernel/panic.c kernel/printk/printk.c kernel/time/jiffies.c kernel/time/time.c kernel/time/clockevents.c kernel/signal.c kernel/sched/wait.c kernel/kthread.c
 SOURCES_C += arch/x86/kernel/cpu/common.c arch/x86/kernel/traps.c arch/x86/kernel/head32.c arch/x86/kernel/setup.c
 SOURCES_C += arch/x86/kernel/irq.c arch/x86/kernel/i8259.c arch/x86/kernel/apic/apic.c arch/x86/kernel/apic/io_apic.c
-SOURCES_C += mm/bootmem.c mm/mmzone.c mm/mmap.c mm/page_alloc.c mm/vmscan.c mm/memory.c mm/vmalloc.c mm/slab.c mm/filemap.c mm/page-writeback.c mm/rmap.c mm/swap.c lib/string.c lib/vsprintf.c lib/kobject.c lib/klist.c lib/bitmap.c lib/rbtree.c lib/radix-tree.c lib/idr.c lib/parser.c
-SOURCES_C += fs/file.c fs/exec.c fs/inode.c fs/dcache.c fs/namei.c fs/read_write.c fs/open.c fs/readdir.c fs/ioctl.c fs/namespace.c fs/ramfs/inode.c fs/proc/root.c fs/proc/base.c fs/proc/array.c fs/proc/task_mmu.c fs/proc/meminfo.c fs/proc/interrupts.c fs/proc/generic.c fs/block_dev.c fs/char_dev.c fs/minix/inode.c fs/minix/bitmap.c fs/minix/dir.c fs/minix/file.c fs/minix/namei.c fs/sysfs/dir.c fs/sysfs/file.c fs/sysfs/group.c fs/sysfs/symlink.c fs/sysfs/mount.c
+SOURCES_C += mm/bootmem.c mm/nobootmem.c mm/mmzone.c mm/mmap.c mm/page_alloc.c mm/vmscan.c mm/memory.c mm/vmalloc.c mm/slab.c mm/filemap.c mm/page-writeback.c mm/rmap.c mm/swap.c lib/string.c lib/vsprintf.c lib/kobject.c lib/kobject_uevent.c lib/klist.c lib/bitmap.c lib/rbtree.c lib/radix-tree.c lib/idr.c lib/parser.c
+SOURCES_C += fs/file.c fs/exec.c fs/inode.c fs/dcache.c fs/namei.c fs/read_write.c fs/open.c fs/readdir.c fs/ioctl.c fs/filesystems.c fs/namespace.c fs/ramfs/inode.c fs/proc/root.c fs/proc/base.c fs/proc/array.c fs/proc/task_mmu.c fs/proc/meminfo.c fs/proc/interrupts.c fs/proc/generic.c fs/block_dev.c fs/char_dev.c fs/minix/inode.c fs/minix/bitmap.c fs/minix/dir.c fs/minix/file.c fs/minix/namei.c fs/sysfs/dir.c fs/sysfs/file.c fs/sysfs/group.c fs/sysfs/symlink.c fs/sysfs/mount.c
 SOURCES_C += fs/buffer.c
 SOURCES_C += block/blk-core.c
 SOURCES_C += block/blk-sysfs.c block/genhd.c
 SOURCES_C += init/initramfs.c
-SOURCES_C += drivers/base/core.c drivers/base/bus.c drivers/base/class.c drivers/base/driver.c drivers/base/dd.c drivers/base/platform.c drivers/base/devtmpfs.c drivers/base/init.c drivers/pci/pci.c drivers/nvme/host/pci.c drivers/input/serio/serio.c drivers/input/serio/i8042.c drivers/input/keyboard/atkbd.c drivers/block/brd.c
+SOURCES_C += drivers/base/core.c drivers/base/bus.c drivers/base/class.c drivers/base/driver.c drivers/base/dd.c drivers/base/platform.c drivers/base/devtmpfs.c drivers/base/init.c drivers/pci/pci.c drivers/pci/pci-driver.c drivers/pci/pci-sysfs.c drivers/pci/probe.c drivers/nvme/host/pci.c drivers/input/serio/serio.c drivers/input/serio/i8042.c drivers/input/keyboard/atkbd.c drivers/block/brd.c
 SOURCES_C += drivers/clocksource/i8253.c drivers/tty/tty_io.c drivers/tty/n_tty.c drivers/tty/serial/serial_core.c drivers/tty/serial/8250/8250_core.c drivers/tty/serial/8250/8250_port.c drivers/tty/serial/8250/8250_early.c
 # printk/console core lives in kernel/printk/printk.c; no video console backends.
 SOURCES_C += drivers/virtio/virtio.c drivers/virtio/virtio_pci_common.c

@@ -76,7 +76,7 @@ struct pci_driver {
 };
 
 extern struct bus_type pci_bus_type;
-extern const struct device_type pci_dev_type;
+extern struct device_type pci_dev_type;
 
 static inline struct pci_driver *to_pci_driver(struct device_driver *drv)
 {

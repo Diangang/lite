@@ -73,6 +73,24 @@ static inline int list_empty(const struct list_head *head)
 	return head->next == head;
 }
 
+static inline void list_splice_tail_init(struct list_head *list, struct list_head *head)
+{
+	if (list_empty(list))
+		return;
+
+	struct list_head *first = list->next;
+	struct list_head *last = list->prev;
+	struct list_head *at = head;
+
+	first->prev = at->prev;
+	at->prev->next = first;
+
+	last->next = at;
+	at->prev = last;
+
+	INIT_LIST_HEAD(list);
+}
+
 #define list_entry(ptr, type, member) container_of(ptr, type, member)
 
 #define list_first_entry(ptr, type, member) list_entry((ptr)->next, type, member)

@@ -10,11 +10,9 @@
 #include "linux/time.h"
 #include "linux/kernel.h"
 
-static uint32_t scsi_host_next;
-static uint32_t scsi_disk_next;
-static const uint32_t scsi_scan_tur_retries = 3;
-static const uint32_t scsi_report_luns_initial = 511;
-static const uint32_t scsi_sequential_scan_max_luns = 8;
+#define SCSI_SCAN_TUR_RETRIES 3U
+#define SCSI_REPORT_LUNS_INITIAL 511U
+#define SCSI_SEQUENTIAL_SCAN_MAX_LUNS 8U
 
 struct scsi_lun {
     uint8_t scsi_lun[8];
@@ -43,23 +41,6 @@ static void scsi_copy_trim(char *dst, uint32_t dlen, const uint8_t *src, uint32_
     dst[n] = 0;
     while (n > 0 && dst[n - 1] == ' ')
         dst[--n] = 0;
-}
-
-struct Scsi_Host *scsi_host_alloc(struct scsi_host_template *sht, void *hostdata)
-{
-    if (!sht || !sht->queuecommand)
-        return NULL;
-    struct Scsi_Host *shost = (struct Scsi_Host *)kmalloc(sizeof(*shost));
-    if (!shost)
-        return NULL;
-    memset(shost, 0, sizeof(*shost));
-    shost->hostt = sht;
-    shost->hostdata = hostdata;
-    shost->host_no = scsi_host_next++;
-    shost->max_channel = 0;
-    shost->max_id = 1;
-    shost->max_lun = 1;
-    return shost;
 }
 
 int scsi_add_host(struct Scsi_Host *shost, struct device *parent)
@@ -268,25 +249,6 @@ static uint32_t scsi_min_u32(uint32_t a, uint32_t b)
     return a < b ? a : b;
 }
 
-struct scsi_disk *scsi_alloc_disk(struct scsi_device *sdev)
-{
-    if (!sdev)
-        return NULL;
-    struct scsi_disk *sdkp = (struct scsi_disk *)kmalloc(sizeof(*sdkp));
-    if (!sdkp)
-        return NULL;
-    memset(sdkp, 0, sizeof(*sdkp));
-    sdkp->device = sdev;
-    sdkp->index = scsi_disk_next++;
-    sdkp->disk = (struct gendisk *)kmalloc(sizeof(*sdkp->disk));
-    if (!sdkp->disk) {
-        kfree(sdkp);
-        return NULL;
-    }
-    memset(sdkp->disk, 0, sizeof(*sdkp->disk));
-    return sdkp;
-}
-
 int scsi_execute_cmd(struct scsi_device *sdev, const uint8_t *cdb, uint32_t cdb_len,
                      void *data, uint32_t data_len, int dir,
                      uint8_t *sense, uint32_t *sense_len, uint8_t *status)
@@ -456,7 +418,7 @@ static int scsi_report_lun_scan(struct Scsi_Host *shost, uint32_t channel, uint3
     if (!sdev)
         return -1;
 
-    uint32_t alloc_len = (scsi_report_luns_initial + 1U) * sizeof(struct scsi_lun);
+    uint32_t alloc_len = (SCSI_REPORT_LUNS_INITIAL + 1U) * sizeof(struct scsi_lun);
     uint8_t *buf = (uint8_t *)kmalloc(alloc_len);
     if (!buf) {
         kfree(sdev);
@@ -477,7 +439,7 @@ static int scsi_report_lun_scan(struct Scsi_Host *shost, uint32_t channel, uint3
         uint8_t status = 0;
         uint8_t sense[32];
         uint32_t sense_len = sizeof(sense);
-        for (uint32_t attempt = 0; attempt < scsi_scan_tur_retries && ret != 0; attempt++)
+        for (uint32_t attempt = 0; attempt < SCSI_SCAN_TUR_RETRIES && ret != 0; attempt++)
             ret = scsi_execute_cmd(sdev, cdb, sizeof(cdb), buf, alloc_len, SCSI_DATA_READ,
                                    sense, &sense_len, &status);
         if (ret != 0) {
@@ -542,7 +504,7 @@ static int scsi_sequential_lun_scan(struct Scsi_Host *shost, uint32_t channel, u
     if (!shost || shost->max_lun <= 1)
         return 0;
 
-    uint32_t max_lun = scsi_min_u32(shost->max_lun, scsi_sequential_scan_max_luns);
+    uint32_t max_lun = scsi_min_u32(shost->max_lun, SCSI_SEQUENTIAL_SCAN_MAX_LUNS);
     for (uint32_t lun = 1; lun < max_lun; lun++) {
         if (scsi_probe_and_add_lun(shost, channel, id, lun) != 0)
             return 0;
@@ -560,7 +522,7 @@ static int scsi_probe_and_add_lun(struct Scsi_Host *shost, uint32_t channel, uin
         return -1;
 
     int ret = -1;
-    for (uint32_t attempt = 0; attempt < scsi_scan_tur_retries && ret != 0; attempt++)
+    for (uint32_t attempt = 0; attempt < SCSI_SCAN_TUR_RETRIES && ret != 0; attempt++)
         ret = scsi_test_unit_ready(sdev);
     if (ret != 0) {
         kfree(sdev);

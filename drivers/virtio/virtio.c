@@ -16,7 +16,7 @@
  */
 
 static int virtio_bus_match(struct device *dev, struct device_driver *drv);
-static uint32_t virtio_index;
+static uint32_t virtio_index_ida;
 
 struct bus_type virtio_bus_type = {
     .name = "virtio",
@@ -157,7 +157,7 @@ int register_virtio_device(struct virtio_device *dev)
     if (!dev)
         return -1;
     dev->dev.bus = &virtio_bus_type;
-    dev->index = virtio_index++;
+    dev->index = virtio_index_ida++;
     snprintf(dev->dev.kobj.name, sizeof(dev->dev.kobj.name), "virtio%u", dev->index);
     virtio_reset_device(dev);
     virtio_add_status(dev, VIRTIO_CONFIG_S_ACKNOWLEDGE);

@@ -1,7 +1,5 @@
 #include "linux/time.h"
 
-volatile uint32_t jiffies = 0;
-
 /* time_set_hz: Implement time set hz. */
 void time_set_hz(uint32_t hz)
 {
@@ -35,4 +33,3 @@ uint32_t time_get_uptime(void)
 {
     return jiffies / HZ;
 }
-

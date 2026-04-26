@@ -72,6 +72,8 @@ struct zonelist {
     enum zone_type highest_zone;
 };
 
+/* Linux mapping: global mem_map is defined in mm/memory.c for MMU kernels. */
+extern struct page *mem_map;
 extern struct pglist_data contig_page_data;
 extern struct zonelist contig_zonelist;
 extern struct zonelist dma_zonelist;

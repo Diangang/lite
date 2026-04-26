@@ -16,6 +16,9 @@
 #include "asm/pgtable.h"
 #include "linux/mmzone.h"
 
+/* Linux mapping: linux2.6/mm/memory.c::mem_map */
+struct page *mem_map;
+
 static pgd_t* page_directory = NULL;
 static pgd_t* kernel_directory = NULL;
 static uint32_t cow_faults = 0;

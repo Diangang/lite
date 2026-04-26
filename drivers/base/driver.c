@@ -6,14 +6,41 @@
 #include "linux/errno.h"
 #include "base.h"
 
-static struct attribute drv_attr_name = { .name = "name", .mode = 0444 };
-static struct attribute drv_attr_bind = { .name = "bind", .mode = 0222 };
-static struct attribute drv_attr_unbind = { .name = "unbind", .mode = 0222 };
+static uint32_t sysfs_emit_text_line(char *buffer, uint32_t cap, const char *text)
+{
+    if (!buffer || cap < 2)
+        return 0;
+    if (!text)
+        text = "";
+    uint32_t n = (uint32_t)strlen(text);
+    if (n + 1 >= cap)
+        n = cap - 2;
+    memcpy(buffer, text, n);
+    buffer[n++] = '\n';
+    buffer[n] = 0;
+    return n;
+}
+
+static uint32_t driver_attr_show_name(struct device_driver *drv, struct driver_attribute *attr,
+                                      char *buffer, uint32_t cap)
+{
+    (void)attr;
+    if (!drv)
+        return 0;
+    if (!buffer || cap < 2)
+        return 0;
+    if (!drv->name)
+        return sysfs_emit_text_line(buffer, cap, "unknown");
+    return sysfs_emit_text_line(buffer, cap, drv->name);
+}
+
+static struct driver_attribute drv_attr_name = {
+    .attr = { .name = "name", .mode = 0444 },
+    .show = driver_attr_show_name,
+};
 
 static const struct attribute *driver_default_attrs[] = {
-    &drv_attr_name,
-    &drv_attr_bind,
-    &drv_attr_unbind,
+    &drv_attr_name.attr,
     NULL,
 };
 
@@ -34,85 +61,25 @@ static const struct attribute_group *driver_default_groups[] = {
     NULL,
 };
 
-
-static uint32_t sysfs_emit_text_line(char *buffer, uint32_t cap, const char *text)
-{
-    if (!buffer || cap < 2)
-        return 0;
-    if (!text)
-        text = "";
-    uint32_t n = (uint32_t)strlen(text);
-    if (n + 1 >= cap)
-        n = cap - 2;
-    memcpy(buffer, text, n);
-    buffer[n++] = '\n';
-    buffer[n] = 0;
-    return n;
-}
-
-static struct device *sysfs_find_driver_bus_device(struct device_driver *drv, const char *name)
-{
-    if (!drv || !drv->bus || !name || !name[0])
-        return NULL;
-    struct klist_iter iter;
-    struct klist_node *node;
-    klist_iter_init(bus_devices_klist(drv->bus), &iter);
-    while ((node = klist_next(&iter)) != NULL) {
-        struct device *cur = container_of(node, struct device, knode_bus);
-        if (!strcmp(cur->kobj.name, name))
-            break;
-    }
-    struct device *ret = node ? container_of(node, struct device, knode_bus) : NULL;
-    klist_iter_exit(&iter);
-    return ret;
-}
-
 static uint32_t driver_sysfs_show(struct kobject *kobj, const struct attribute *attr, char *buffer, uint32_t cap)
 {
+    struct driver_attribute *dattr;
+
     if (!kobj || !attr || !attr->name || !buffer)
         return 0;
-    struct device_driver *drv = container_of(kobj, struct device_driver, kobj);
-    if (!strcmp(attr->name, "name"))
-        return sysfs_emit_text_line(buffer, cap, (drv && drv->name) ? drv->name : "unknown");
-    return 0;
+    dattr = container_of(attr, struct driver_attribute, attr);
+    return dattr->show ? dattr->show(container_of(kobj, struct device_driver, kobj), dattr, buffer, cap) : 0;
 }
 
 static uint32_t driver_sysfs_store(struct kobject *kobj, const struct attribute *attr, uint32_t offset, uint32_t size, const uint8_t *buffer)
 {
-    if (!kobj || !attr || !attr->name || !buffer || offset)
-        return 0;
-    struct device_driver *drv = container_of(kobj, struct device_driver, kobj);
-    if (!drv)
-        return 0;
+    struct driver_attribute *dattr;
 
-    char tmp[64];
-    uint32_t n = size;
-    if (n >= sizeof(tmp))
-        n = sizeof(tmp) - 1;
-    memcpy(tmp, buffer, n);
-    tmp[n] = 0;
-    for (uint32_t i = 0; i < n; i++)
-        if (tmp[i] == '\n' || tmp[i] == ' ')
-            tmp[i] = 0;
-    if (!tmp[0])
+    if (!kobj || !attr || !attr->name || !buffer)
         return 0;
-
-    struct device *dev = sysfs_find_driver_bus_device(drv, tmp);
-    if (!dev)
-        return 0;
-
-    if (!strcmp(attr->name, "bind")) {
-        if (driver_probe_device(drv, dev) != 0)
-            return 0;
-        return size;
-    }
-    if (!strcmp(attr->name, "unbind")) {
-        if (dev->driver != drv)
-            return 0;
-        device_release_driver(dev);
-        return size;
-    }
-    return 0;
+    dattr = container_of(attr, struct driver_attribute, attr);
+    return dattr->store ? dattr->store(container_of(kobj, struct device_driver, kobj),
+                                       dattr, offset, size, buffer) : 0;
 }
 
 static const struct sysfs_ops driver_sysfs_ops = {
@@ -126,6 +93,20 @@ static struct kobj_type driver_ktype = {
     .default_attrs = NULL,
     .default_groups = driver_default_groups,
 };
+
+int driver_create_file(struct device_driver *drv, const struct driver_attribute *attr)
+{
+    if (!drv || !attr)
+        return -1;
+    return sysfs_create_file(&drv->kobj, &attr->attr);
+}
+
+void driver_remove_file(struct device_driver *drv, const struct driver_attribute *attr)
+{
+    if (!drv || !attr)
+        return;
+    sysfs_remove_file(&drv->kobj, &attr->attr);
+}
 
 /* driver_register: Implement driver register. */
 int driver_register(struct device_driver *drv)
@@ -147,6 +128,7 @@ int driver_register(struct device_driver *drv)
     drv->kobj.kset = bus_drivers_kset(drv->bus);
     kset_add(bus_drivers_kset(drv->bus), &drv->kobj);
     klist_add_tail(&drv->knode_bus, bus_drivers_klist(drv->bus));
+    (void)add_bind_files(drv);
     if (bus_drivers_autoprobe(drv->bus))
         driver_attach(drv);
     driver_deferred_probe_trigger();
@@ -158,6 +140,7 @@ void driver_unregister(struct device_driver *drv)
 {
     if (!drv || !drv->bus)
         return;
+    remove_bind_files(drv);
     struct klist_iter iter;
     struct klist_node *node;
     klist_iter_init(bus_devices_klist(drv->bus), &iter);
