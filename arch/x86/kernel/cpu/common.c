@@ -14,8 +14,13 @@
  * but the file placement follows Linux.
  */
 
-/* GDT entry structure. */
-struct gdt_entry {
+/*
+ * GDT entry structure.
+ *
+ * Linux mapping: struct desc_struct in linux2.6/arch/x86/include/asm/desc_defs.h.
+ * Lite uses explicit x86 i386 packed fields (subset of the Linux union form).
+ */
+struct desc_struct {
     uint16_t limit_low;
     uint16_t base_low;
     uint8_t base_middle;
@@ -24,13 +29,20 @@ struct gdt_entry {
     uint8_t base_high;
 } __attribute__((packed));
 
-/* GDTR structure (passed to lgdt). */
-struct gdt_ptr {
+/*
+ * GDTR/IDTR structure (passed to lgdt/lidt).
+ * Linux mapping: struct desc_ptr in linux2.6/arch/x86/include/asm/desc_defs.h.
+ */
+struct desc_ptr {
     uint16_t limit;
     uint32_t base;
 } __attribute__((packed));
 
-struct tss_entry {
+/*
+ * Linux mapping: struct x86_hw_tss in linux2.6/arch/x86/include/asm/processor.h.
+ * Lite keeps a compact i386-only field layout as a subset.
+ */
+struct x86_hw_tss {
     uint32_t prev_tss;
     uint32_t esp0;
     uint32_t ss0;
@@ -60,9 +72,9 @@ struct tss_entry {
     uint16_t iomap_base;
 } __attribute__((packed));
 
-static struct gdt_ptr gdt_descr;
-static struct gdt_entry gdt_table[6];
-static struct tss_entry tss;
+static struct desc_ptr gdt_descr;
+static struct desc_struct gdt_table[6];
+static struct x86_hw_tss tss;
 static uint8_t tss_stack[4096] __attribute__((aligned(16)));
 
 static inline void gdt_flush(uint32_t gdt_ptr_addr, uint16_t tss_selector)
@@ -122,7 +134,7 @@ static void init_tss(void)
 
 void init_gdt(void)
 {
-    gdt_descr.limit = (uint16_t)((sizeof(struct gdt_entry) * 6u) - 1u);
+    gdt_descr.limit = (uint16_t)((sizeof(struct desc_struct) * 6u) - 1u);
     gdt_descr.base = (uint32_t)(uintptr_t)&gdt_table;
 
     /* 0: Null descriptor. */

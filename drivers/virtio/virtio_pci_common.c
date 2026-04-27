@@ -96,8 +96,13 @@ static struct pci_driver virtio_pci_driver = {
     .remove = virtio_pci_remove,
 };
 
-static int virtio_pci_init(void)
+/*
+ * Linux: module_pci_driver(virtio_pci_driver) in the same file expands to
+ * virtio_pci_driver_init() via the module_driver() helper (include/linux/pci.h).
+ * Lite keeps the expanded function explicit but aligns the symbol name.
+ */
+static int virtio_pci_driver_init(void)
 {
     return pci_register_driver(&virtio_pci_driver);
 }
-module_init(virtio_pci_init);
+module_init(virtio_pci_driver_init);

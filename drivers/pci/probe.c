@@ -16,5 +16,4 @@ static int pcibus_class_init(void)
 {
     return class_register(&pcibus_class);
 }
-core_initcall(pcibus_class_init);
-
+postcore_initcall(pcibus_class_init);

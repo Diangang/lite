@@ -14,23 +14,32 @@
  * Linux file placement.
  */
 
-/* IDT entry structure. */
-struct idt_entry {
+/*
+ * IDT gate descriptor.
+ *
+ * Linux mapping (i386): typedef struct desc_struct gate_desc; in
+ * linux2.6/arch/x86/include/asm/desc_defs.h. Lite keeps the x86 i386
+ * gate-shaped packed fields as an explicit subset of Linux's union form.
+ */
+typedef struct {
     uint16_t base_low;
     uint16_t sel;
     uint8_t always0;
     uint8_t flags;
     uint16_t base_high;
-} __attribute__((packed));
+} __attribute__((packed)) gate_desc;
 
-/* IDTR structure. */
-struct idt_ptr {
+/*
+ * IDTR structure.
+ * Linux mapping: struct desc_ptr in linux2.6/arch/x86/include/asm/desc_defs.h.
+ */
+struct desc_ptr {
     uint16_t limit;
     uint32_t base;
 } __attribute__((packed));
 
-static struct idt_entry idt_table[256];
-static struct idt_ptr lite_idt_descr;
+static gate_desc idt_table[256];
+static struct desc_ptr lite_idt_descr;
 
 static isr_t interrupt_handlers[256];
 static uint32_t interrupt_count[256];
@@ -183,7 +192,7 @@ void isr_install(void)
 
 void init_idt(void)
 {
-    lite_idt_descr.limit = (uint16_t)(sizeof(struct idt_entry) * 256u - 1u);
+    lite_idt_descr.limit = (uint16_t)(sizeof(gate_desc) * 256u - 1u);
     lite_idt_descr.base = (uint32_t)(uintptr_t)&idt_table;
     memset(&idt_table, 0, sizeof(idt_table));
 

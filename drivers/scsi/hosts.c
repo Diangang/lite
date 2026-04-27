@@ -40,8 +40,7 @@ struct Scsi_Host *scsi_host_alloc(struct scsi_host_template *sht, void *hostdata
     return shost;
 }
 
-static int scsi_init_hosts(void)
+int scsi_init_hosts(void)
 {
     return class_register(&shost_class);
 }
-subsys_initcall(scsi_init_hosts);

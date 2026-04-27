@@ -16,11 +16,11 @@ static struct class sd_disk_class = {
     .name = "scsi_disk",
 };
 
-static int sd_disk_class_init(void)
+static int init_sd(void)
 {
     return class_register(&sd_disk_class);
 }
-subsys_initcall(sd_disk_class_init);
+module_init(init_sd);
 
 static void scsi_disk_name(uint32_t index, char *name)
 {

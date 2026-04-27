@@ -21,7 +21,7 @@ struct class sdev_class = {
     .name = "scsi_device",
 };
 
-static int scsi_sysfs_register(void)
+int scsi_sysfs_register(void)
 {
     if (bus_register(&scsi_bus_type) != 0)
         return -1;
@@ -30,4 +30,3 @@ static int scsi_sysfs_register(void)
         return -1;
     return 0;
 }
-subsys_initcall(scsi_sysfs_register);

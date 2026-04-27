@@ -178,4 +178,4 @@ static int virtio_init(void)
 {
     return bus_register(&virtio_bus_type);
 }
-subsys_initcall(virtio_init);
+core_initcall(virtio_init);

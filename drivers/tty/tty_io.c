@@ -232,7 +232,7 @@ static int tty_class_init(void)
     INIT_LIST_HEAD(&tty_drivers);
     return class_register(&tty_class);
 }
-core_initcall(tty_class_init);
+postcore_initcall(tty_class_init);
 
 /*
  * Linux mapping: drivers/tty/tty_io.c:tty_init()

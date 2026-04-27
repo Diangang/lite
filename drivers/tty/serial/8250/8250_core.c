@@ -48,7 +48,7 @@ static struct platform_driver serial8250_platform_driver = {
     .remove = serial8250_platform_remove,
 };
 
-static int serial8250_driver_init(void)
+static int serial8250_init(void)
 {
     if (uart_register_driver(&serial8250_uart_driver, &tty_serial8250_driver) != 0)
         return -1;
@@ -62,4 +62,4 @@ static int serial8250_driver_init(void)
     }
     return 0;
 }
-module_init(serial8250_driver_init);
+module_init(serial8250_init);

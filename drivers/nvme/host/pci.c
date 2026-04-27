@@ -992,16 +992,16 @@ static struct pci_driver nvme_driver = {
 
 static int nvme_init(void)
 {
-    return pci_register_driver(&nvme_driver);
-}
-module_init(nvme_init);
-
-static int nvme_class_init(void)
-{
     memset(&nvme_class, 0, sizeof(nvme_class));
     nvme_class.name = "nvme";
     INIT_LIST_HEAD(&nvme_class.list);
     INIT_LIST_HEAD(&nvme_class.devices);
-    return class_register(&nvme_class);
+    if (class_register(&nvme_class) != 0)
+        return -1;
+    if (pci_register_driver(&nvme_driver) != 0) {
+        class_unregister(&nvme_class);
+        return -1;
+    }
+    return 0;
 }
-core_initcall(nvme_class_init);
+module_init(nvme_init);

@@ -631,6 +631,22 @@ int scsi_scan_host(struct Scsi_Host *shost)
     return scsi_scan_host_selected(shost, SCSI_SCAN_WILD_CARD, SCSI_SCAN_WILD_CARD, SCSI_SCAN_WILD_CARD_LUN);
 }
 
+static int init_scsi(void)
+{
+    int error;
+
+    error = scsi_init_hosts();
+    if (error != 0)
+        return error;
+
+    error = scsi_sysfs_register();
+    if (error != 0)
+        return error;
+
+    return 0;
+}
+subsys_initcall(init_scsi);
+
 void scsi_remove_host(struct Scsi_Host *shost)
 {
     if (!shost)

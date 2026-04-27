@@ -23,6 +23,8 @@ struct scsi_disk;
 extern struct bus_type scsi_bus_type;
 extern struct class shost_class;
 extern struct class sdev_class;
+int scsi_init_hosts(void);
+int scsi_sysfs_register(void);
 
 struct scsi_host_template {
     const char *name;

@@ -163,8 +163,8 @@ void serio_interrupt(struct serio *serio, uint8_t data)
         drv->interrupt(serio, data);
 }
 
-static int serio_core_init(void)
+static int serio_init(void)
 {
     return bus_register(&serio_bus);
 }
-subsys_initcall(serio_core_init);
+subsys_initcall(serio_init);

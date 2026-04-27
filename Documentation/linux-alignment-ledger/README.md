@@ -65,7 +65,7 @@ Linux reference: `linux2.6/`
 - blockdev_inode_destroy (/data25/lidg/lite/fs/block_dev.c:95)
 
 ### struct
-- count: 35
+- count: 31
 - bdev_map_entry (/data25/lidg/lite/block/blkdev.c:219)
 - bootmem_data (/data25/lidg/lite/mm/bootmem.c:27)
 - bootmem_e820_entry (/data25/lidg/lite/mm/bootmem.c:16)
@@ -76,9 +76,6 @@ Linux reference: `linux2.6/`
 - dcache_hash (/data25/lidg/lite/fs/dentry.c:10)
 - dirent (/data25/lidg/lite/include/linux/fs.h:62)
 - disk_map_entry (/data25/lidg/lite/block/blkdev.c:228)
-- gdt_entry (/data25/lidg/lite/arch/x86/kernel/gdt.c:4)
-- idt_entry (/data25/lidg/lite/arch/x86/kernel/idt.c:5)
-- idt_ptr (/data25/lidg/lite/arch/x86/kernel/idt.c:14)
 - kthread_create_info (/data25/lidg/lite/kernel/kthread.c:9)
 - large_hdr (/data25/lidg/lite/mm/slab.c:26)
 - minix_inode_disk (/data25/lidg/lite/fs/minixfs/minixfs.c:26)
@@ -97,7 +94,6 @@ Linux reference: `linux2.6/`
 - swap_slot (/data25/lidg/lite/mm/swap.c:15)
 - sysfs_dirent (/data25/lidg/lite/fs/sysfs/sysfs.c:27)
 - sysfs_named_inode (/data25/lidg/lite/fs/sysfs/sysfs.c:1042)
-- tss_entry (/data25/lidg/lite/arch/x86/kernel/gdt.c:19)
 - virtqueue_buf (/data25/lidg/lite/include/linux/virtio.h:81)
 - vmalloc_block (/data25/lidg/lite/mm/vmalloc.c:9)
 - vsn_ctx (/data25/lidg/lite/lib/vsprintf.c:7)
@@ -171,7 +167,6 @@ Linux reference: `linux2.6/`
 - count: 13
 - nvme_class_init
 - pci_init
-- pcie_init
 - proc_root_init
 - ramdisk_init
 - scsi_init_hosts
@@ -182,4 +177,3 @@ Linux reference: `linux2.6/`
 - tty_init
 - virtio_pci_init
 - virtio_scsi_init
-
