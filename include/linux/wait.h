@@ -45,6 +45,7 @@ void __init_waitqueue_head(wait_queue_head_t *q);
 void init_waitqueue_entry(wait_queue_entry_t *entry, struct task_struct *task);
 int default_wake_function(wait_queue_t *wait, unsigned mode, int flags, void *key);
 void add_wait_queue(wait_queue_head_t *q, wait_queue_t *wait);
+void add_wait_queue_exclusive(wait_queue_head_t *q, wait_queue_t *wait);
 void remove_wait_queue(wait_queue_head_t *q, wait_queue_t *wait);
 void wait_queue_block(wait_queue_head_t *q);
 void wait_queue_block_locked(wait_queue_head_t *q);

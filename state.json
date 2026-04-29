@@ -83,15 +83,17 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-remove-wait-queue-inline-helper",
+    "id": "stage3-add-wait-queue-exclusive-api",
     "status": "review_clean",
-    "summary": "Add Linux __remove_wait_queue helper.",
+    "summary": "Add Linux add_wait_queue_exclusive API.",
     "files": [
       "include/linux/wait.h",
+      "kernel/sched/wait.c",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/wait.h"
+      "linux2.6/include/linux/wait.h",
+      "linux2.6/kernel/sched/wait.c"
     ]
   },
   "validation": {
@@ -108,12 +110,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "79e747c1f55adafb323241d3c3825cce539ef620",
+    "pre_review_hash": "fc107c205d3f5f97a58996117326c6167ea7baaf",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage3-remove-wait-queue-inline-helper.md",
+    "record": "Documentation/reviews/2026-04-29-stage3-add-wait-queue-exclusive-api.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
