@@ -73,6 +73,12 @@ static inline void __add_wait_queue_tail_exclusive(wait_queue_head_t *q, wait_qu
     __add_wait_queue_tail(q, wait);
 }
 
+static inline void __remove_wait_queue(wait_queue_head_t *head, wait_queue_t *old)
+{
+    (void)head;
+    list_del(&old->task_list);
+}
+
 static inline void init_waitqueue_head(wait_queue_head_t *q)
 {
     __init_waitqueue_head(q);
