@@ -45,7 +45,7 @@ static char saved_command_line_buf[256];
 char *saved_command_line = saved_command_line_buf;
 
 static char execute_command_buf[64];
-static char *execute_command = execute_command_buf;
+static char *execute_command;
 
 static void set_execute_command(const char *value, size_t len)
 {
@@ -54,13 +54,15 @@ static void set_execute_command(const char *value, size_t len)
     if (len)
         memcpy(execute_command_buf, value, len);
     execute_command_buf[len] = '\0';
+    execute_command = execute_command_buf;
 }
 
 static void parse_command_line(void)
 {
     size_t i = 0;
 
-    strcpy(execute_command_buf, "/sbin/init");
+    execute_command = NULL;
+    execute_command_buf[0] = '\0';
 
     while (saved_command_line && saved_command_line[i]) {
         while (saved_command_line[i] == ' ')
@@ -279,22 +281,24 @@ static void prepare_namespace(void)
     }
 
     const char *init = get_execute_command();
-    if (run_init_process(init) != 0) {
-        const char *fallbacks[] = {
-            "/sbin/init",
-            "/etc/init",
-            "/bin/init",
-            "/sbin/sh",
-            "/bin/sh"
-        };
-        for (uint32_t i = 0; i < (sizeof(fallbacks) / sizeof(fallbacks[0])); i++) {
-            if (!strcmp(init, fallbacks[i]))
-                continue;
-            if (run_init_process(fallbacks[i]) == 0)
-                return;
-        }
-        panic("No init found. Try passing init= option to kernel.");
+    if (init) {
+        if (run_init_process(init) == 0)
+            return;
+        panic("Requested init failed.");
     }
+
+    const char *fallbacks[] = {
+        "/sbin/init",
+        "/etc/init",
+        "/bin/init",
+        "/sbin/sh",
+        "/bin/sh"
+    };
+    for (uint32_t i = 0; i < (sizeof(fallbacks) / sizeof(fallbacks[0])); i++) {
+        if (run_init_process(fallbacks[i]) == 0)
+            return;
+    }
+    panic("No init found. Try passing init= option to kernel.");
 }
 
 /* kernel_init: Finish core setup and launch the first user-space init process. */

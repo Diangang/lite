@@ -83,12 +83,11 @@
     }
   ],
   "current_patch": {
-    "id": "stage2-rootfs-initcall-level",
+    "id": "stage2-init-command-fallback",
     "status": "review_clean",
-    "summary": "Add the Linux-shaped rootfs initcall level between fs and device initcalls.",
+    "summary": "Match Linux init= handling by only falling back when no explicit init command is requested.",
     "files": [
-      "include/linux/init.h",
-      "arch/x86/kernel/linker.ld",
+      "init/main.c",
       "state.json"
     ],
     "linux_reference": [
@@ -110,17 +109,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "37e3b5542a584057b22889c1a28630579a69098a",
+    "pre_review_hash": "0dd4d67302a46dcd320f72ad1094b0ded0d13c3f",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage2-rootfs-initcall-level.md",
+    "record": "Documentation/reviews/2026-04-29-stage2-init-command-fallback.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/init.h arch/x86/kernel/linker.ld state.json"
+      "git show -- init/main.c state.json"
     ]
   },
   "next_patch": {
