@@ -83,6 +83,15 @@ static inline bool try_wait_for_completion(struct completion *x)
     return ret;
 }
 
+static inline bool completion_done(struct completion *x)
+{
+    if (!x || !x->done)
+        return false;
+    smp_rmb();
+    spin_unlock_wait(&x->wait.lock);
+    return true;
+}
+
 static inline void wait_for_completion(struct completion *x)
 {
     if (!x)

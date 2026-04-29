@@ -83,21 +83,22 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-spin-unlock-wait-helper",
+    "id": "stage3-completion-done-helper",
     "status": "review_clean",
-    "summary": "Add Linux spin_unlock_wait helper.",
+    "summary": "Add Linux completion_done helper.",
     "files": [
-      "include/linux/spinlock.h",
+      "include/linux/completion.h",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/spinlock.h"
+      "linux2.6/include/linux/completion.h",
+      "linux2.6/kernel/sched/completion.c"
     ]
   },
   "validation": {
     "make_j4": "passed",
     "smoke_128": "passed",
-    "smoke_512": "passed",
+    "smoke_512": "passed_after_rerun",
     "last_run": "2026-04-29",
     "commands": [
       "make -j4",
@@ -108,17 +109,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "1a26022e3b90159fa0285d63d0e765d988934530",
+    "pre_review_hash": "c2f8247579419aa773bc1453bfe432091da0dba1",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage3-spin-unlock-wait-helper.md",
+    "record": "Documentation/reviews/2026-04-29-stage3-completion-done-helper.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/spinlock.h state.json"
+      "git show -- include/linux/completion.h state.json"
     ]
   },
   "next_patch": {
