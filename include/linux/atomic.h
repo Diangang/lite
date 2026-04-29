@@ -41,6 +41,10 @@
 #define atomic_dec_return_release atomic_dec_return
 #endif
 
+#ifndef atomic_xchg_relaxed
+#define atomic_xchg_relaxed atomic_xchg
+#endif
+
 #define atomic_cmpxchg_acquire(v, o, n) atomic_cmpxchg((v), (o), (n))
 #define atomic_cmpxchg_release(v, o, n) atomic_cmpxchg((v), (o), (n))
 #define atomic_xchg_acquire(v, n) atomic_xchg((v), (n))

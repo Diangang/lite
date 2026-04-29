@@ -83,9 +83,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-atomic-dec-return-ordering-aliases",
+    "id": "stage3-atomic-xchg-relaxed-alias",
     "status": "review_clean",
-    "summary": "Add Linux atomic_dec_return ordering aliases.",
+    "summary": "Add Linux atomic_xchg_relaxed alias.",
     "files": [
       "include/linux/atomic.h",
       "state.json"
@@ -97,7 +97,7 @@
   "validation": {
     "make_j4": "passed",
     "smoke_128": "passed",
-    "smoke_512": "passed_after_rerun",
+    "smoke_512": "passed",
     "last_run": "2026-04-29",
     "commands": [
       "make -j4",
@@ -108,12 +108,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "a43da052acdd5562b8191777e1c334512308437d",
+    "pre_review_hash": "60bc9693b954504d7f21e40d22275647285fc8d7",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage3-atomic-dec-return-ordering-aliases.md",
+    "record": "Documentation/reviews/2026-04-29-stage3-atomic-xchg-relaxed-alias.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
