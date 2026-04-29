@@ -191,14 +191,14 @@ int do_one_initcall(initcall_t fn)
 }
 
 /* do_pre_smp_initcalls: Lite subset runs early initcalls before driver_init. */
-static void do_pre_smp_initcalls(void)
+static void __init do_pre_smp_initcalls(void)
 {
     initcall_t *call;
     for (call = __initcall_start; call < __initcall0_start; call++)
         (void)do_one_initcall(*call);
 }
 
-static void do_initcall_level(int level)
+static void __init do_initcall_level(int level)
 {
     initcall_t *call;
     if (level < 0 ||
@@ -212,14 +212,14 @@ static void do_initcall_level(int level)
 }
 
 /* do_initcalls: Perform initcalls by Linux-shaped level (0..7). */
-static void do_initcalls(void)
+static void __init do_initcalls(void)
 {
     for (int level = 0; level < (int)(sizeof(initcall_levels) / sizeof(initcall_levels[0])) - 1; level++)
         do_initcall_level(level);
 }
 
 /* do_basic_setup: Perform basic setup. */
-static void do_basic_setup(void)
+static void __init do_basic_setup(void)
 {
     driver_init();
     do_initcalls();
