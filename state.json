@@ -83,9 +83,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage2-rdinit-command-line",
+    "id": "stage2-default-ramdisk-init",
     "status": "review_clean",
-    "summary": "Add Linux rdinit= command-line handling before regular init fallback.",
+    "summary": "Match Linux default /init probing for early userspace init.",
     "files": [
       "init/main.c",
       "include/linux/init.h",
@@ -110,12 +110,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "2bb1e67d8454adf53672070a887d299a28647358",
+    "pre_review_hash": "a7514c59558285f066b35c41312c4be4e83c62e7",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage2-rdinit-command-line.md",
+    "record": "Documentation/reviews/2026-04-29-stage2-default-ramdisk-init.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",

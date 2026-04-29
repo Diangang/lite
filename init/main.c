@@ -333,6 +333,9 @@ static void prepare_namespace(void)
         vfs_mount_fs_dev("/mnt_nvme", "minix", "/dev/nvme0n1");
     }
 
+    if (!ramdisk_execute_command && vfs_resolve("/init"))
+        ramdisk_execute_command = "/init";
+
     const char *rdinit = ramdisk_execute_command;
     if (rdinit) {
         if (run_init_process(rdinit) == 0)
