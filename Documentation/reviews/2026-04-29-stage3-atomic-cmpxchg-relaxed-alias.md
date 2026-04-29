@@ -1,0 +1,35 @@
+# Review: stage3-atomic-cmpxchg-relaxed-alias
+
+Final commit: see `git log -1`.
+Pre-review commit: 4b4b1ead340041280ea8a4eb1ae6ab81193438c3
+
+## Scope
+
+- `include/linux/atomic.h`
+- `state.json`
+
+## Linux Alignment
+
+- Linux reference: `linux2.6/include/linux/atomic.h::atomic_cmpxchg_relaxed`
+- Lite target: `include/linux/atomic.h::atomic_cmpxchg_relaxed`
+- Single difference: Lite now provides Linux's relaxed alias name for `atomic_cmpxchg()`.
+
+Linux 2.6 maps `atomic_cmpxchg_relaxed` to the fully ordered `atomic_cmpxchg()`
+when no relaxed primitive is supplied by the architecture. Lite now provides the
+same alias over its existing x86 atomic helper.
+
+## Review Commands
+
+- `git show --stat --oneline --decorate HEAD`
+- `git show --check --oneline HEAD`
+- `git show -- include/linux/atomic.h state.json`
+
+## Validation
+
+- `make -j4`: passed
+- `make smoke-128`: passed
+- `make smoke-512`: passed
+
+## Findings
+
+None.
