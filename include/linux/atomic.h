@@ -23,6 +23,12 @@
 #define atomic_add_return_release atomic_add_return
 #endif
 
+#ifndef atomic_inc_return_relaxed
+#define atomic_inc_return_relaxed atomic_inc_return
+#define atomic_inc_return_acquire atomic_inc_return
+#define atomic_inc_return_release atomic_inc_return
+#endif
+
 #define atomic_cmpxchg_acquire(v, o, n) atomic_cmpxchg((v), (o), (n))
 #define atomic_cmpxchg_release(v, o, n) atomic_cmpxchg((v), (o), (n))
 #define atomic_xchg_acquire(v, n) atomic_xchg((v), (n))
