@@ -83,12 +83,12 @@
     }
   ],
   "current_patch": {
-    "id": "stage2-initcall-do-one-entry",
+    "id": "stage2-initcall-sync-levels",
     "status": "review_clean",
-    "summary": "Route Lite initcall execution through the Linux-shaped do_one_initcall entry point.",
+    "summary": "Add Linux-shaped synchronous initcall level macros and linker ordering.",
     "files": [
-      "init/main.c",
       "include/linux/init.h",
+      "arch/x86/kernel/linker.ld",
       "state.json"
     ],
     "linux_reference": [
@@ -110,17 +110,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "cc2feb143f568094da32df0ddeeecec7d4135422",
+    "pre_review_hash": "d0f304820bcc802ce80951dd2098c83afa8bda90",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage2-initcall-do-one-entry.md",
+    "record": "Documentation/reviews/2026-04-29-stage2-initcall-sync-levels.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- init/main.c include/linux/init.h state.json"
+      "git show -- include/linux/init.h arch/x86/kernel/linker.ld state.json"
     ]
   },
   "next_patch": {
