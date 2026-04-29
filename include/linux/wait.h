@@ -24,6 +24,15 @@ typedef struct wait_queue_head {
     struct list_head task_list;
 } wait_queue_head_t;
 
+#define __WAITQUEUE_INITIALIZER(name, tsk) { \
+    .private = tsk, \
+    .func = default_wake_function, \
+    .task_list = { NULL, NULL } \
+}
+
+#define DECLARE_WAITQUEUE(name, tsk) \
+    wait_queue_t name = __WAITQUEUE_INITIALIZER(name, tsk)
+
 void __init_waitqueue_head(wait_queue_head_t *q);
 void init_waitqueue_entry(wait_queue_entry_t *entry, struct task_struct *task);
 int default_wake_function(wait_queue_t *wait, unsigned mode, int flags, void *key);
