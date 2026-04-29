@@ -70,6 +70,7 @@ SECTIONS
 		__initcall5_start = .;
 		KEEP(*(.initcall5.init))
 		KEEP(*(.initcall5s.init))
+		KEEP(*(.initcallrootfs.init))
 		__initcall6_start = .;
 		KEEP(*(.initcall6.init))
 		KEEP(*(.initcall6s.init))

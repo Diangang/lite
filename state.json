@@ -83,9 +83,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage2-initcall-sync-levels",
+    "id": "stage2-rootfs-initcall-level",
     "status": "review_clean",
-    "summary": "Add Linux-shaped synchronous initcall level macros and linker ordering.",
+    "summary": "Add the Linux-shaped rootfs initcall level between fs and device initcalls.",
     "files": [
       "include/linux/init.h",
       "arch/x86/kernel/linker.ld",
@@ -110,12 +110,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "d0f304820bcc802ce80951dd2098c83afa8bda90",
+    "pre_review_hash": "37e3b5542a584057b22889c1a28630579a69098a",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage2-initcall-sync-levels.md",
+    "record": "Documentation/reviews/2026-04-29-stage2-rootfs-initcall-level.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
