@@ -58,6 +58,12 @@ static inline int raw_spin_is_locked(raw_spinlock_t *lock)
     return lock ? (int)lock->locked : 0;
 }
 
+static inline void raw_spin_unlock_wait(raw_spinlock_t *lock)
+{
+    while (raw_spin_is_locked(lock))
+        barrier();
+}
+
 static inline int raw_spin_trylock(raw_spinlock_t *lock)
 {
     raw_spin_lock(lock);
@@ -133,6 +139,13 @@ static inline int spin_trylock(spinlock_t *lock)
 static inline int spin_is_locked(spinlock_t *lock)
 {
     return lock ? raw_spin_is_locked(&lock->raw_lock) : 0;
+}
+
+static inline void spin_unlock_wait(spinlock_t *lock)
+{
+    if (!lock)
+        return;
+    raw_spin_unlock_wait(&lock->raw_lock);
 }
 
 static inline void spin_lock_irq(spinlock_t *lock)
