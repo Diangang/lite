@@ -171,6 +171,18 @@ static initcall_t *initcall_levels[] __initdata = {
     __initcall_end
 };
 
+/* Keep these in sync with initcalls in include/linux/init.h */
+static char *initcall_level_names[] __initdata = {
+    "early",
+    "core",
+    "postcore",
+    "arch",
+    "subsys",
+    "fs",
+    "device",
+    "late"
+};
+
 int do_one_initcall(initcall_t fn)
 {
     if (!fn)
@@ -189,7 +201,9 @@ static void do_pre_smp_initcalls(void)
 static void do_initcall_level(int level)
 {
     initcall_t *call;
-    if (level < 0 || level >= (int)(sizeof(initcall_levels) / sizeof(initcall_levels[0])) - 1)
+    if (level < 0 ||
+        level >= (int)(sizeof(initcall_level_names) / sizeof(initcall_level_names[0])) ||
+        level >= (int)(sizeof(initcall_levels) / sizeof(initcall_levels[0])) - 1)
         return;
 
     strcpy(initcall_command_line, saved_command_line);

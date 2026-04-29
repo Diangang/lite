@@ -83,9 +83,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage2-initcall-levels-initdata",
+    "id": "stage2-initcall-level-names",
     "status": "review_clean",
-    "summary": "Match Linux initcall_levels lifetime annotation with __initdata.",
+    "summary": "Add Linux-shaped initcall_level_names metadata in init/main.c.",
     "files": [
       "init/main.c",
       "state.json"
@@ -109,12 +109,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "32cebe55d4e5a0497ce123a1ae66137569049f0e",
+    "pre_review_hash": "0aee4791ff1f41533975d628f1f6fa6e09811471",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage2-initcall-levels-initdata.md",
+    "record": "Documentation/reviews/2026-04-29-stage2-initcall-level-names.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
