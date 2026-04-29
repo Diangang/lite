@@ -33,6 +33,14 @@ typedef struct wait_queue_head {
 #define DECLARE_WAITQUEUE(name, tsk) \
     wait_queue_t name = __WAITQUEUE_INITIALIZER(name, tsk)
 
+#define __WAIT_QUEUE_HEAD_INITIALIZER(name) { \
+    .lock = __SPIN_LOCK_UNLOCKED(name.lock), \
+    .task_list = { &(name).task_list, &(name).task_list } \
+}
+
+#define DECLARE_WAIT_QUEUE_HEAD(name) \
+    wait_queue_head_t name = __WAIT_QUEUE_HEAD_INITIALIZER(name)
+
 void __init_waitqueue_head(wait_queue_head_t *q);
 void init_waitqueue_entry(wait_queue_entry_t *entry, struct task_struct *task);
 int default_wake_function(wait_queue_t *wait, unsigned mode, int flags, void *key);
