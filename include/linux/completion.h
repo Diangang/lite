@@ -25,6 +25,13 @@ static inline void init_completion(struct completion *x)
     init_waitqueue_head(&x->wait);
 }
 
+static inline void reinit_completion(struct completion *x)
+{
+    if (!x)
+        return;
+    x->done = 0;
+}
+
 static inline void complete(struct completion *x)
 {
     uint32_t flags;
