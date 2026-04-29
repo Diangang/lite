@@ -1,6 +1,7 @@
 #ifndef LINUX_COMPLETION_H
 #define LINUX_COMPLETION_H
 
+#include <stdbool.h>
 #include <stdint.h>
 #include "linux/sched.h"
 #include "linux/wait.h"
@@ -64,6 +65,22 @@ static inline void complete_all(struct completion *x)
     x->done += ((uint32_t)~0U) / 2;
     wake_up_all(&x->wait);
     irq_restore(flags);
+}
+
+static inline bool try_wait_for_completion(struct completion *x)
+{
+    uint32_t flags;
+    bool ret = true;
+
+    if (!x || !x->done)
+        return false;
+    flags = irq_save();
+    if (!x->done)
+        ret = false;
+    else
+        x->done--;
+    irq_restore(flags);
+    return ret;
 }
 
 static inline void wait_for_completion(struct completion *x)

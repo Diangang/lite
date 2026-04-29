@@ -83,9 +83,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-complete-all-helper",
+    "id": "stage3-try-wait-for-completion-helper",
     "status": "review_clean",
-    "summary": "Add Linux complete_all helper.",
+    "summary": "Add Linux try_wait_for_completion helper.",
     "files": [
       "include/linux/completion.h",
       "state.json"
@@ -97,7 +97,7 @@
   "validation": {
     "make_j4": "passed",
     "smoke_128": "passed",
-    "smoke_512": "passed",
+    "smoke_512": "passed_after_rerun",
     "last_run": "2026-04-29",
     "commands": [
       "make -j4",
@@ -108,12 +108,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "7433df15d6d58495064fbf2ba17c9ca96d37d1a5",
+    "pre_review_hash": "218bb2fe6eb2b2465c2e52da32301831c061dccc",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage3-complete-all-helper.md",
+    "record": "Documentation/reviews/2026-04-29-stage3-try-wait-for-completion-helper.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
