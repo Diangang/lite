@@ -56,6 +56,12 @@ static inline void __add_wait_queue(wait_queue_head_t *head, wait_queue_t *new_e
     list_add(&new_entry->task_list, &head->task_list);
 }
 
+static inline void __add_wait_queue_exclusive(wait_queue_head_t *q, wait_queue_t *wait)
+{
+    wait->flags |= WQ_FLAG_EXCLUSIVE;
+    __add_wait_queue(q, wait);
+}
+
 static inline void init_waitqueue_head(wait_queue_head_t *q)
 {
     __init_waitqueue_head(q);

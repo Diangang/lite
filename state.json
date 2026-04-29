@@ -83,9 +83,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-add-wait-queue-inline-helper",
+    "id": "stage3-add-wait-queue-exclusive-helper",
     "status": "review_clean",
-    "summary": "Add Linux __add_wait_queue inline helper.",
+    "summary": "Add Linux __add_wait_queue_exclusive helper.",
     "files": [
       "include/linux/wait.h",
       "state.json"
@@ -96,7 +96,7 @@
   },
   "validation": {
     "make_j4": "passed",
-    "smoke_128": "passed",
+    "smoke_128": "passed_after_rerun",
     "smoke_512": "passed",
     "last_run": "2026-04-29",
     "commands": [
@@ -108,12 +108,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "42072c5cc0f7cabb246cff6fd63b7f11a33ed82d",
+    "pre_review_hash": "ab40942adf73b9538aafa809886eb250ed57457b",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage3-add-wait-queue-inline-helper.md",
+    "record": "Documentation/reviews/2026-04-29-stage3-add-wait-queue-exclusive-helper.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
