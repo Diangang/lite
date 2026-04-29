@@ -83,9 +83,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage2-default-ramdisk-init",
+    "id": "stage2-init-fallback-list",
     "status": "review_clean",
-    "summary": "Match Linux default /init probing for early userspace init.",
+    "summary": "Match Linux regular init fallback list by removing /sbin/sh.",
     "files": [
       "init/main.c",
       "include/linux/init.h",
@@ -110,12 +110,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "a7514c59558285f066b35c41312c4be4e83c62e7",
+    "pre_review_hash": "9b453ba6987066e4713440bfeee8eeec66314c53",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage2-default-ramdisk-init.md",
+    "record": "Documentation/reviews/2026-04-29-stage2-init-fallback-list.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
