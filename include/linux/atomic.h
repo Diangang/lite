@@ -17,6 +17,12 @@
 #define atomic_set_release(v, i) smp_store_release(&(v)->counter, (i))
 #endif
 
+#ifndef atomic_add_return_relaxed
+#define atomic_add_return_relaxed atomic_add_return
+#define atomic_add_return_acquire atomic_add_return
+#define atomic_add_return_release atomic_add_return
+#endif
+
 #define atomic_cmpxchg_acquire(v, o, n) atomic_cmpxchg((v), (o), (n))
 #define atomic_cmpxchg_release(v, o, n) atomic_cmpxchg((v), (o), (n))
 #define atomic_xchg_acquire(v, n) atomic_xchg((v), (n))

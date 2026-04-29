@@ -83,15 +83,15 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-wait-bit-action-type",
+    "id": "stage3-atomic-add-return-ordering-aliases",
     "status": "review_clean",
-    "summary": "Add Linux wait_bit_action_f type.",
+    "summary": "Add Linux atomic_add_return ordering aliases.",
     "files": [
-      "include/linux/wait.h",
+      "include/linux/atomic.h",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/wait.h"
+      "linux2.6/include/linux/atomic.h"
     ]
   },
   "validation": {
@@ -108,12 +108,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "8a1021dcbced4086a06cd056191dad76f6ca715c",
+    "pre_review_hash": "2a37993c020a1240398d89231662f7e5f0635407",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage3-wait-bit-action-type.md",
+    "record": "Documentation/reviews/2026-04-29-stage3-atomic-add-return-ordering-aliases.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
