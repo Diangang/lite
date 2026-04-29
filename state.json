@@ -83,9 +83,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage2-command-line-buffer-size",
+    "id": "stage2-rdinit-command-line",
     "status": "review_clean",
-    "summary": "Use COMMAND_LINE_SIZE for Lite command-line backing buffers.",
+    "summary": "Add Linux rdinit= command-line handling before regular init fallback.",
     "files": [
       "init/main.c",
       "include/linux/init.h",
@@ -110,12 +110,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "e99b4fb8696c95d96f3b4e8bdc83659a8b9771b4",
+    "pre_review_hash": "2bb1e67d8454adf53672070a887d299a28647358",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage2-command-line-buffer-size.md",
+    "record": "Documentation/reviews/2026-04-29-stage2-rdinit-command-line.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",

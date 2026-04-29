@@ -51,6 +51,8 @@ static char *initcall_command_line = initcall_command_line_buf;
 
 static char execute_command_buf[64];
 static char *execute_command;
+static char ramdisk_execute_command_buf[64];
+static char *ramdisk_execute_command;
 
 static void set_execute_command(const char *value, size_t len)
 {
@@ -62,12 +64,24 @@ static void set_execute_command(const char *value, size_t len)
     execute_command = execute_command_buf;
 }
 
+static void set_ramdisk_execute_command(const char *value, size_t len)
+{
+    if (len >= sizeof(ramdisk_execute_command_buf))
+        len = sizeof(ramdisk_execute_command_buf) - 1;
+    if (len)
+        memcpy(ramdisk_execute_command_buf, value, len);
+    ramdisk_execute_command_buf[len] = '\0';
+    ramdisk_execute_command = ramdisk_execute_command_buf;
+}
+
 static void parse_command_line(void)
 {
     size_t i = 0;
 
     execute_command = NULL;
     execute_command_buf[0] = '\0';
+    ramdisk_execute_command = NULL;
+    ramdisk_execute_command_buf[0] = '\0';
 
     while (saved_command_line && saved_command_line[i]) {
         while (saved_command_line[i] == ' ')
@@ -80,7 +94,13 @@ static void parse_command_line(void)
             while (saved_command_line[end] && saved_command_line[end] != ' ')
                 end++;
             set_execute_command(&saved_command_line[start], end - start);
-            return;
+        }
+        if (!strncmp(&saved_command_line[i], "rdinit=", 7)) {
+            size_t start = i + 7;
+            size_t end = start;
+            while (saved_command_line[end] && saved_command_line[end] != ' ')
+                end++;
+            set_ramdisk_execute_command(&saved_command_line[start], end - start);
         }
         while (saved_command_line[i] && saved_command_line[i] != ' ')
             i++;
@@ -311,6 +331,13 @@ static void prepare_namespace(void)
             }
         }
         vfs_mount_fs_dev("/mnt_nvme", "minix", "/dev/nvme0n1");
+    }
+
+    const char *rdinit = ramdisk_execute_command;
+    if (rdinit) {
+        if (run_init_process(rdinit) == 0)
+            return;
+        printf("Failed to execute %s as rdinit\n", rdinit);
     }
 
     const char *init = get_execute_command();
