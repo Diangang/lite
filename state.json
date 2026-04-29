@@ -83,9 +83,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-waitqueue-woken-flag",
+    "id": "stage3-waitqueue-active-helper",
     "status": "review_clean",
-    "summary": "Add Linux WQ_FLAG_WOKEN waitqueue flag constant.",
+    "summary": "Add Linux waitqueue_active helper.",
     "files": [
       "include/linux/wait.h",
       "state.json"
@@ -108,12 +108,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "fa73153d02367ebd3d8cb2d26a0b094898b71c11",
+    "pre_review_hash": "d068881f435b03ce5dcc62b493fd62317a76a207",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage3-waitqueue-woken-flag.md",
+    "record": "Documentation/reviews/2026-04-29-stage3-waitqueue-active-helper.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
