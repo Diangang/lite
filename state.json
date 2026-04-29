@@ -83,9 +83,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-atomic-inc-return-ordering-aliases",
+    "id": "stage3-atomic-sub-return-ordering-aliases",
     "status": "review_clean",
-    "summary": "Add Linux atomic_inc_return ordering aliases.",
+    "summary": "Add Linux atomic_sub_return ordering aliases.",
     "files": [
       "include/linux/atomic.h",
       "state.json"
@@ -96,8 +96,8 @@
   },
   "validation": {
     "make_j4": "passed",
-    "smoke_128": "passed",
-    "smoke_512": "passed_after_rerun",
+    "smoke_128": "passed_after_rerun",
+    "smoke_512": "passed",
     "last_run": "2026-04-29",
     "commands": [
       "make -j4",
@@ -108,12 +108,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "3c02d26e31ca644b9cd671da39ae50e359bfb798",
+    "pre_review_hash": "fe55c4b0017a34d52a15f753cc33c8ab6d841c6e",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage3-atomic-inc-return-ordering-aliases.md",
+    "record": "Documentation/reviews/2026-04-29-stage3-atomic-sub-return-ordering-aliases.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
