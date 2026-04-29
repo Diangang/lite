@@ -42,7 +42,7 @@
  * and placement: saved_command_line + execute_command live in init/main.c.
  */
 char boot_command_line[COMMAND_LINE_SIZE] __initdata;
-static char saved_command_line_buf[256];
+static char saved_command_line_buf[COMMAND_LINE_SIZE];
 char *saved_command_line = saved_command_line_buf;
 static char static_command_line_buf[sizeof(saved_command_line_buf)];
 static char *static_command_line = static_command_line_buf;

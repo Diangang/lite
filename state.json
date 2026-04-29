@@ -83,9 +83,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage2-static-command-line-storage",
+    "id": "stage2-command-line-buffer-size",
     "status": "review_clean",
-    "summary": "Add Linux static_command_line storage for command-line parsing alignment.",
+    "summary": "Use COMMAND_LINE_SIZE for Lite command-line backing buffers.",
     "files": [
       "init/main.c",
       "include/linux/init.h",
@@ -110,12 +110,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "0e09b5c51846c51e17a38b29bcfe4b781492ab55",
+    "pre_review_hash": "e99b4fb8696c95d96f3b4e8bdc83659a8b9771b4",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage2-static-command-line-storage.md",
+    "record": "Documentation/reviews/2026-04-29-stage2-command-line-buffer-size.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
