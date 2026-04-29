@@ -8,7 +8,7 @@
   },
   "boundaries": {
     "roadmap": "Documentation/Linux26-Roadmap.md",
-    "active_stage": "Stage 2: Init Flow and Initcall Ordering",
+    "active_stage": "Stage 3: Core Synchronization Foundations",
     "stage_transition": "When the active stage has no remaining narrow in-scope patch, update active_stage to the next roadmap stage and continue automatically. Do not stop just because the next patch crosses a stage boundary.",
     "requires_linux_reference_first": true,
     "single_patch_scope": true,
@@ -34,12 +34,12 @@
     {
       "stage": 2,
       "name": "Init Flow and Initcall Ordering",
-      "status": "active"
+      "status": "done"
     },
     {
       "stage": 3,
       "name": "Core Synchronization Foundations",
-      "status": "pending"
+      "status": "active"
     },
     {
       "stage": 4,
@@ -83,17 +83,15 @@
     }
   ],
   "current_patch": {
-    "id": "stage2-no-init-panic-message",
+    "id": "stage3-waitqueue-woken-flag",
     "status": "review_clean",
-    "summary": "Match Linux no-working-init panic guidance text.",
+    "summary": "Add Linux WQ_FLAG_WOKEN waitqueue flag constant.",
     "files": [
-      "init/main.c",
-      "include/linux/init.h",
+      "include/linux/wait.h",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/init/main.c",
-      "linux2.6/include/linux/init.h"
+      "linux2.6/include/linux/wait.h"
     ]
   },
   "validation": {
@@ -110,21 +108,21 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "ae533ae69cae9d56ff6894819377f8ca4f945c8c",
+    "pre_review_hash": "fa73153d02367ebd3d8cb2d26a0b094898b71c11",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage2-no-init-panic-message.md",
+    "record": "Documentation/reviews/2026-04-29-stage3-waitqueue-woken-flag.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- init/main.c include/linux/init.h state.json"
+      "git show -- include/linux/wait.h state.json"
     ]
   },
   "next_patch": {
     "status": "ready",
-    "candidate": "Continue Stage 2 by auditing the next narrow init flow or initcall ordering difference against linux2.6/init/main.c and linux2.6/include/linux/init.h."
+    "candidate": "After review_clean, continue Stage 3 by auditing the next narrow synchronization primitive difference against linux2.6 include/linux spinlock, atomic, wait, or completion references."
   }
 }

@@ -10,6 +10,7 @@ typedef struct wait_queue_entry wait_queue_t;
 typedef int (*wait_queue_func_t)(wait_queue_t *wait, unsigned mode, int flags, void *key);
 
 #define WQ_FLAG_EXCLUSIVE 0x01
+#define WQ_FLAG_WOKEN 0x02
 
 typedef struct wait_queue_entry {
     unsigned int flags;
