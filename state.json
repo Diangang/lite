@@ -20,9 +20,9 @@
     ]
   },
   "current_patch": {
-    "id": "stage1-nvme-namespace-gendisk-unwind",
+    "id": "stage1-nvme-probe-instance-unwind-order",
     "status": "review_clean",
-    "summary": "Use the gendisk release helper when NVMe namespace setup unwinds after gendisk initialization.",
+    "summary": "Release the NVMe instance before freeing the controller object on probe failure unwind.",
     "files": [
       "drivers/nvme/host/pci.c"
     ],
@@ -44,12 +44,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "d33edaa45ea0418fe709f7be06f5fe985643c8f4",
+    "pre_review_hash": "e70f3eeaacb857b813738d5e51fcc4690f0ce044",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage1-nvme-namespace-gendisk-unwind.md",
+    "record": "Documentation/reviews/2026-04-29-stage1-nvme-probe-instance-unwind-order.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
@@ -59,6 +59,6 @@
   },
   "next_patch": {
     "status": "ready",
-    "candidate": "Continue Stage 1 by auditing the remaining NVMe host setup/remove paths against linux2.6/drivers/nvme/host/pci.c for the next narrow lifetime or cleanup difference."
+    "candidate": "Continue Stage 1 by auditing remaining NVMe host class/device publication against linux2.6/drivers/nvme/host/pci.c, without adding char-device infrastructure unless a narrow direct match already exists in Lite."
   }
 }

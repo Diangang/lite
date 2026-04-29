@@ -843,32 +843,32 @@ static int nvme_probe(struct pci_dev *pdev, const struct pci_device_id *id)
     if (nvme_map_mmio(dev) != 0) {
         printf("nvme: mmio map failed\n");
         pdev->dev.driver_data = NULL;
-        nvme_free_dev(dev);
         nvme_release_instance(instance);
+        nvme_free_dev(dev);
         return -1;
     }
     if (nvme_dev_init(dev) != 0) {
         printf("nvme: controller init failed\n");
         pdev->dev.driver_data = NULL;
         nvme_dev_shutdown(dev);
-        nvme_free_dev(dev);
         nvme_release_instance(instance);
+        nvme_free_dev(dev);
         return -1;
     }
     if (nvme_create_io_queues(dev) != 0) {
         printf("nvme: io queue init failed\n");
         pdev->dev.driver_data = NULL;
         nvme_dev_shutdown(dev);
-        nvme_free_dev(dev);
         nvme_release_instance(instance);
+        nvme_free_dev(dev);
         return -1;
     }
     if (nvme_ctrl_register(dev) != 0) {
         printf("nvme: controller device register failed\n");
         pdev->dev.driver_data = NULL;
         nvme_dev_shutdown(dev);
-        nvme_free_dev(dev);
         nvme_release_instance(instance);
+        nvme_free_dev(dev);
         return -1;
     }
     if (nvme_ns_init(dev) != 0) {
@@ -876,8 +876,8 @@ static int nvme_probe(struct pci_dev *pdev, const struct pci_device_id *id)
         nvme_dev_shutdown(dev);
         nvme_ctrl_unregister(dev);
         pdev->dev.driver_data = NULL;
-        nvme_free_dev(dev);
         nvme_release_instance(instance);
+        nvme_free_dev(dev);
         return -1;
     }
     printf("nvme: %sn1 ready\n", dev->name);
