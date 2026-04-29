@@ -24,6 +24,18 @@ typedef struct wait_queue_head {
     struct list_head task_list;
 } wait_queue_head_t;
 
+struct wait_bit_key {
+    void *flags;
+    int bit_nr;
+#define WAIT_ATOMIC_T_BIT_NR -1
+    unsigned long timeout;
+};
+
+struct wait_bit_queue {
+    struct wait_bit_key key;
+    wait_queue_t wait;
+};
+
 #define __WAITQUEUE_INITIALIZER(name, tsk) { \
     .private = tsk, \
     .func = default_wake_function, \
