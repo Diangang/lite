@@ -83,9 +83,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-add-wait-queue-tail-helper",
+    "id": "stage3-add-wait-queue-tail-exclusive-helper",
     "status": "review_clean",
-    "summary": "Add Linux __add_wait_queue_tail helper.",
+    "summary": "Add Linux __add_wait_queue_tail_exclusive helper.",
     "files": [
       "include/linux/wait.h",
       "state.json"
@@ -108,12 +108,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "9694baf74fe5e98234a47ac68f09a98536933620",
+    "pre_review_hash": "78f8189047f34135355550f1e045f7d41daa9c11",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage3-add-wait-queue-tail-helper.md",
+    "record": "Documentation/reviews/2026-04-29-stage3-add-wait-queue-tail-exclusive-helper.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
