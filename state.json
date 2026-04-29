@@ -83,22 +83,21 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-completion-done-helper",
+    "id": "stage3-add-wait-queue-inline-helper",
     "status": "review_clean",
-    "summary": "Add Linux completion_done helper.",
+    "summary": "Add Linux __add_wait_queue inline helper.",
     "files": [
-      "include/linux/completion.h",
+      "include/linux/wait.h",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/completion.h",
-      "linux2.6/kernel/sched/completion.c"
+      "linux2.6/include/linux/wait.h"
     ]
   },
   "validation": {
     "make_j4": "passed",
     "smoke_128": "passed",
-    "smoke_512": "passed_after_rerun",
+    "smoke_512": "passed",
     "last_run": "2026-04-29",
     "commands": [
       "make -j4",
@@ -109,17 +108,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "c2f8247579419aa773bc1453bfe432091da0dba1",
+    "pre_review_hash": "42072c5cc0f7cabb246cff6fd63b7f11a33ed82d",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage3-completion-done-helper.md",
+    "record": "Documentation/reviews/2026-04-29-stage3-add-wait-queue-inline-helper.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/completion.h state.json"
+      "git show -- include/linux/wait.h state.json"
     ]
   },
   "next_patch": {

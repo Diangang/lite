@@ -51,6 +51,11 @@ void wait_queue_block_locked(wait_queue_head_t *q);
 void __wake_up(wait_queue_head_t *q, unsigned int mode, int nr, void *key);
 void wait_queue_remove(wait_queue_head_t *q, struct task_struct *task);
 
+static inline void __add_wait_queue(wait_queue_head_t *head, wait_queue_t *new_entry)
+{
+    list_add(&new_entry->task_list, &head->task_list);
+}
+
 static inline void init_waitqueue_head(wait_queue_head_t *q)
 {
     __init_waitqueue_head(q);
