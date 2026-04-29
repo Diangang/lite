@@ -54,6 +54,18 @@ static inline void complete(struct completion *x)
     irq_restore(flags);
 }
 
+static inline void complete_all(struct completion *x)
+{
+    uint32_t flags;
+
+    if (!x)
+        return;
+    flags = irq_save();
+    x->done += ((uint32_t)~0U) / 2;
+    wake_up_all(&x->wait);
+    irq_restore(flags);
+}
+
 static inline void wait_for_completion(struct completion *x)
 {
     if (!x)

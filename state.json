@@ -83,9 +83,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-declare-completion-onstack-macro",
+    "id": "stage3-complete-all-helper",
     "status": "review_clean",
-    "summary": "Add Linux DECLARE_COMPLETION_ONSTACK initializer macros.",
+    "summary": "Add Linux complete_all helper.",
     "files": [
       "include/linux/completion.h",
       "state.json"
@@ -97,7 +97,7 @@
   "validation": {
     "make_j4": "passed",
     "smoke_128": "passed",
-    "smoke_512": "passed_after_rerun",
+    "smoke_512": "passed",
     "last_run": "2026-04-29",
     "commands": [
       "make -j4",
@@ -108,12 +108,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "3c94b32cd44ac47a9f838a25374480e848602776",
+    "pre_review_hash": "7433df15d6d58495064fbf2ba17c9ca96d37d1a5",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage3-declare-completion-onstack-macro.md",
+    "record": "Documentation/reviews/2026-04-29-stage3-complete-all-helper.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
