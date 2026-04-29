@@ -83,16 +83,17 @@
     }
   ],
   "current_patch": {
-    "id": "stage2-x86-command-line-size",
+    "id": "stage2-boot-command-line-storage",
     "status": "review_clean",
-    "summary": "Add Linux x86 COMMAND_LINE_SIZE constant for command-line storage alignment.",
+    "summary": "Add Linux boot_command_line storage before saved command-line parsing.",
     "files": [
-      "arch/x86/include/asm/setup.h",
+      "init/main.c",
+      "include/linux/init.h",
       "state.json"
     ],
     "linux_reference": [
       "linux2.6/init/main.c",
-      "linux2.6/arch/x86/include/asm/setup.h"
+      "linux2.6/include/linux/init.h"
     ]
   },
   "validation": {
@@ -109,17 +110,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "55e43d4b878d88a07f7e668db1db64b9a8af2c0f",
+    "pre_review_hash": "550c23840500704068aa9b35aaa729b904809f22",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage2-x86-command-line-size.md",
+    "record": "Documentation/reviews/2026-04-29-stage2-boot-command-line-storage.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- arch/x86/include/asm/setup.h state.json"
+      "git show -- init/main.c include/linux/init.h state.json"
     ]
   },
   "next_patch": {

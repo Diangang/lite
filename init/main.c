@@ -41,6 +41,7 @@
  * Lite keeps fixed-size buffers (subsetting Linux), but uses Linux symbol names
  * and placement: saved_command_line + execute_command live in init/main.c.
  */
+char boot_command_line[COMMAND_LINE_SIZE] __initdata;
 static char saved_command_line_buf[256];
 char *saved_command_line = saved_command_line_buf;
 static char initcall_command_line_buf[sizeof(saved_command_line_buf)];
@@ -86,16 +87,26 @@ static void parse_command_line(void)
 
 void setup_command_line(const char *cmdline)
 {
+    size_t boot_len = 0;
     size_t len = 0;
 
     if (cmdline)
-        len = strlen(cmdline);
+        boot_len = strlen(cmdline);
+
+    if (boot_len >= sizeof(boot_command_line))
+        boot_len = sizeof(boot_command_line) - 1;
+
+    if (boot_len)
+        memcpy(boot_command_line, cmdline, boot_len);
+
+    boot_command_line[boot_len] = '\0';
+    len = boot_len;
 
     if (len >= sizeof(saved_command_line_buf))
         len = sizeof(saved_command_line_buf) - 1;
 
     if (len)
-        memcpy(saved_command_line_buf, cmdline, len);
+        memcpy(saved_command_line_buf, boot_command_line, len);
 
     saved_command_line_buf[len] = '\0';
     strcpy(initcall_command_line, saved_command_line);

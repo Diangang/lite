@@ -57,6 +57,7 @@ typedef int (*initcall_t)(void);
 void populate_rootfs(void);
 
 extern char *saved_command_line;
+extern char boot_command_line[];
 int do_one_initcall(initcall_t fn);
 void setup_command_line(const char *cmdline);
 const char *get_execute_command(void);
