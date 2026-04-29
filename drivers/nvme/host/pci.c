@@ -749,14 +749,14 @@ static int nvme_ns_init(struct nvme_dev *dev)
     /* Linux mapping: namespace gendisk is parented by controller object (nvmeX). */
     if (!dev->device) {
         blk_cleanup_queue(ns->disk->queue);
-        kfree(ns->disk);
+        put_disk(ns->disk);
         kfree(ns);
         return -1;
     }
     ns->disk->parent = dev->device;
     if (add_disk(ns->disk) != 0) {
         blk_cleanup_queue(ns->disk->queue);
-        kfree(ns->disk);
+        put_disk(ns->disk);
         kfree(ns);
         return -1;
     }

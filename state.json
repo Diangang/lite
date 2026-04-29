@@ -20,9 +20,9 @@
     ]
   },
   "current_patch": {
-    "id": "stage1-nvme-remove-instance-release-order",
+    "id": "stage1-nvme-namespace-gendisk-unwind",
     "status": "review_clean",
-    "summary": "Release NVMe instance before freeing the controller object in remove teardown.",
+    "summary": "Use the gendisk release helper when NVMe namespace setup unwinds after gendisk initialization.",
     "files": [
       "drivers/nvme/host/pci.c"
     ],
@@ -43,13 +43,13 @@
   },
   "commit": {
     "status": "committed",
-    "hash": "HEAD",
-    "pre_review_hash": "7a294d4cdf0c488c5277a8eb587ce6f646537e5a",
+    "hash": null,
+    "pre_review_hash": "d33edaa45ea0418fe709f7be06f5fe985643c8f4",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage1-nvme-remove-instance-release-order.md",
+    "record": "Documentation/reviews/2026-04-29-stage1-nvme-namespace-gendisk-unwind.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
@@ -59,6 +59,6 @@
   },
   "next_patch": {
     "status": "ready",
-    "candidate": "Continue Stage 1 by auditing NVMe namespace add/remove failure unwinding against linux2.6/drivers/nvme/host/pci.c::nvme_alloc_ns and nvme_ns_remove."
+    "candidate": "Continue Stage 1 by auditing the remaining NVMe host setup/remove paths against linux2.6/drivers/nvme/host/pci.c for the next narrow lifetime or cleanup difference."
   }
 }
