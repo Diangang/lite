@@ -38,8 +38,9 @@ static void scsi_disk_request_fn(struct request_queue *q)
         return;
     struct scsi_disk *sdkp = (struct scsi_disk *)q->queuedata;
     if (!sdkp || !sdkp->device) {
-        while (blk_fetch_request(q))
-            ;
+        struct request *rq;
+        while ((rq = blk_fetch_request(q)) != NULL)
+            blk_complete_request(q, rq, -1);
         return;
     }
 

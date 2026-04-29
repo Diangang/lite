@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "task": "linux26-alignment-long-run",
+  "mode": "recoverable-long-task",
+  "supervisor": {
+    "enabled": false,
+    "note": "No external supervisor is running in this session; state.json is the recovery boundary."
+  },
+  "boundaries": {
+    "roadmap": "Documentation/Linux26-Roadmap.md",
+    "active_stage": "Stage 1: NVMe Host and Storage Debug Cleanup",
+    "requires_linux_reference_first": true,
+    "single_patch_scope": true,
+    "ask_before": [
+      "route_change",
+      "scope_expansion",
+      "skipping_required_tests",
+      "new_non_linux_abstraction",
+      "destructive_operation"
+    ]
+  },
+  "current_patch": {
+    "id": "stage1-storage-debug-cleanup-checkpoint",
+    "status": "review_clean",
+    "summary": "Remove stale NVMe/storage smoke debug traces and record current Linux 2.6 alignment state.",
+    "files": [
+      "drivers/nvme/host/pci.c",
+      "fs/namespace.c",
+      "fs/minix/inode.c",
+      "fs/file.c",
+      "fs/minix/namei.c",
+      "Documentation/Current-State.md",
+      "Documentation/Linux26-Roadmap.md"
+    ],
+    "linux_reference": [
+      "linux2.6/drivers/nvme/host/pci.c",
+      "linux2.6/fs/minix/inode.c",
+      "linux2.6/fs/minix/namei.c",
+      "linux2.6/fs/open.c",
+      "linux2.6/fs/namei.c"
+    ]
+  },
+  "validation": {
+    "make_j4": "passed",
+    "smoke_128": "passed",
+    "smoke_512": "passed",
+    "last_run": "2026-04-29",
+    "commands": [
+      "make -j4",
+      "make smoke-128",
+      "make smoke-512"
+    ]
+  },
+  "commit": {
+    "status": "committed",
+    "hash": "HEAD",
+    "pre_review_hash": "4f8108a23e76b4f4b7ff896282a72eb0ca6896ad",
+    "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
+  },
+  "review": {
+    "status": "clean",
+    "record": "Documentation/reviews/2026-04-29-stage1-storage-debug-cleanup.md",
+    "findings": [],
+    "commands": [
+      "git show --stat --oneline --decorate HEAD",
+      "git show --check --oneline HEAD",
+      "git show --name-only --format=fuller HEAD"
+    ]
+  },
+  "next_patch": {
+    "status": "ready",
+    "candidate": "Continue Stage 1 by reviewing remaining device-core TRAEDBG traces against Linux driver-core probe flow before changing them."
+  }
+}

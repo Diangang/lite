@@ -11,78 +11,32 @@
 #include "linux/ramfs.h"
 #include "linux/pagemap.h"
 
-/* #region debug-point deferred-probe-nvme-open */
-static int dbg_watch_nvme_path(const char *path)
-{
-    return path &&
-           (!strcmp(path, "/mnt_nvme") ||
-            !strcmp(path, "/mnt_nvme/") ||
-            !strcmp(path, "/mnt_nvme/nvme_rw.txt"));
-}
-/* #endregion debug-point deferred-probe-nvme-open */
-
 /* vfs_open: Implement vfs open. */
 struct file *vfs_open(const char *path, uint32_t flags)
 {
     struct path lookup;
     struct dentry *dentry = NULL;
     struct inode *node = dentry ? dentry->inode : NULL;
-    int watch = dbg_watch_nvme_path(path);
-
-    /* #region debug-point deferred-probe-nvme-open */
-    if (watch)
-        printf("TRAEDBG {\"ev\":\"vfs_open_enter\",\"path\":\"%s\",\"flags\":%u}\n", path, flags);
-    /* #endregion debug-point deferred-probe-nvme-open */
 
     if (kern_path(path, 0, &lookup) == 0) {
         dentry = lookup.dentry;
         node = dentry ? dentry->inode : NULL;
     }
 
-    /* #region debug-point deferred-probe-nvme-open */
-    if (watch)
-        printf("TRAEDBG {\"ev\":\"vfs_open_lookup\",\"path\":\"%s\",\"found\":%d,\"inode\":%d}\n",
-               path, dentry ? 1 : 0, node ? 1 : 0);
-    /* #endregion debug-point deferred-probe-nvme-open */
-
     if ((!dentry || !node) && (flags & VFS_O_CREAT)) {
         struct path parent;
         char name[128];
         int last_type;
 
-        if (filename_parentat(AT_FDCWD, path, 0, &parent, name, sizeof(name), &last_type) != 0) {
-            /* #region debug-point deferred-probe-nvme-open */
-            if (watch)
-                printf("TRAEDBG {\"ev\":\"vfs_open_parent_fail\",\"path\":\"%s\"}\n", path);
-            /* #endregion debug-point deferred-probe-nvme-open */
+        if (filename_parentat(AT_FDCWD, path, 0, &parent, name, sizeof(name), &last_type) != 0)
             return NULL;
-        }
-        if (last_type != LAST_NORM) {
-            /* #region debug-point deferred-probe-nvme-open */
-            if (watch)
-                printf("TRAEDBG {\"ev\":\"vfs_open_bad_last_type\",\"path\":\"%s\",\"type\":%d}\n", path, last_type);
-            /* #endregion debug-point deferred-probe-nvme-open */
+        if (last_type != LAST_NORM)
             return NULL;
-        }
         if (!parent.dentry || !parent.dentry->inode ||
-            (parent.dentry->inode->flags & 0x7) != FS_DIRECTORY) {
-            /* #region debug-point deferred-probe-nvme-open */
-            if (watch)
-                printf("TRAEDBG {\"ev\":\"vfs_open_bad_parent\",\"path\":\"%s\",\"has_dentry\":%d,\"has_inode\":%d,\"flags\":%u}\n",
-                       path,
-                       parent.dentry ? 1 : 0,
-                       (parent.dentry && parent.dentry->inode) ? 1 : 0,
-                       (parent.dentry && parent.dentry->inode) ? (parent.dentry->inode->flags & 0x7) : 0);
-            /* #endregion debug-point deferred-probe-nvme-open */
+            (parent.dentry->inode->flags & 0x7) != FS_DIRECTORY)
             return NULL;
-        }
 
         struct inode *created = create_fs(parent.dentry->inode, name);
-        /* #region debug-point deferred-probe-nvme-open */
-        if (watch)
-            printf("TRAEDBG {\"ev\":\"vfs_open_create\",\"path\":\"%s\",\"name\":\"%s\",\"created\":%d}\n",
-                   path, name, created ? 1 : 0);
-        /* #endregion debug-point deferred-probe-nvme-open */
         if (!created)
             return NULL;
 
@@ -114,11 +68,6 @@ struct file *vfs_open(const char *path, uint32_t flags)
     }
 
     struct file *f = vfs_open_dentry(dentry, flags);
-    /* #region debug-point deferred-probe-nvme-open */
-    if (watch)
-        printf("TRAEDBG {\"ev\":\"vfs_open_result\",\"path\":\"%s\",\"ok\":%d,\"mode\":%u}\n",
-               path, f ? 1 : 0, node->flags & 0x7);
-    /* #endregion debug-point deferred-probe-nvme-open */
     if (!f)
         return NULL;
     if ((flags & VFS_O_TRUNC) && (node->flags & 0x7) == FS_FILE) {

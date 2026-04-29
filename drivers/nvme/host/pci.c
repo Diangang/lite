@@ -23,26 +23,6 @@
 
 #include "nvme.h"
 
-/* #region debug-point nvme-minixfs-timeout */
-/*
- * Structured debug lines (timing-sensitive issue; keep minimal but present).
- * Format: "TRAEDBG <json...>\n"
- */
-#ifndef TRAE_DEBUG_NVME
-#define TRAE_DEBUG_NVME 1
-#endif
-
-static void nvme_dbg(const char *s)
-{
-#if TRAE_DEBUG_NVME
-    if (s)
-        printf("TRAEDBG %s\n", s);
-#else
-    (void)s;
-#endif
-}
-/* #endregion debug-point nvme-minixfs-timeout */
-
 /*
  * Linux mapping: private queue state is owned by drivers/nvme/host/pci.c
  * instead of the shared nvme host header.
@@ -85,6 +65,7 @@ struct nvme_dev_wrap {
 #define NVME_CC_MPS(mps)    (((uint32_t)(mps) & 0xF) << 7)     /* MPS = log2(page_size)-12 */
 #define NVME_CC_AMS_RR      (0u << 11)
 #define NVME_CC_SHN_NONE    (0u << 14)
+#define NVME_CC_SHN_MASK    (3u << 14)
 #define NVME_CC_IOSQES(v)   (((uint32_t)(v) & 0xF) << 16)      /* 6 => 64B */
 #define NVME_CC_IOCQES(v)   (((uint32_t)(v) & 0xF) << 20)      /* 4 => 16B */
 
@@ -202,7 +183,7 @@ static int nvme_wait_ready(struct nvme_dev *dev, uint64_t cap, int enabled)
         int rdy = (csts & NVME_CSTS_RDY) != 0;
         if (rdy == enabled)
             return 0;
-        if (time_after_eq(time_get_jiffies(), deadline))
+        if (time_before(deadline, time_get_jiffies()))
             return -1;
     }
 }
@@ -215,18 +196,18 @@ static void nvme_dev_shutdown(struct nvme_dev *dev)
         return;
     cap = dev->cap ? dev->cap : mmio_read64(dev->bar, NVME_REG_CAP);
 
-    /* Disable controller and wait RDY=0, matching Linux26 remove/shutdown intent. */
-    mmio_write32(dev->bar, NVME_REG_CC, 0);
+    /* Linux mapping: nvme_disable_ctrl() clears SHN and EN from ctrl_config. */
+    dev->ctrl_config &= ~NVME_CC_SHN_MASK;
+    dev->ctrl_config &= ~NVME_CC_EN;
+    mmio_write32(dev->bar, NVME_REG_CC, dev->ctrl_config);
     (void)nvme_wait_ready(dev, cap, 0);
 }
 
 static uint32_t nvme_cap_to_ticks(uint64_t cap)
 {
-    /* CAP.TO is in 500ms units (NVMe spec). Map to jiffies (HZ=100). */
+    /* Linux mapping: timeout is (CAP.TO + 1) 500ms units. */
     uint32_t to = (uint32_t)((cap >> 24) & 0xFFu);
-    if (to == 0)
-        to = 1;
-    return msecs_to_jiffies(to * 500u);
+    return msecs_to_jiffies((to + 1u) * 500u);
 }
 
 static void nvme_queue_init_doorbells(struct nvme_dev *dev, struct nvme_queue *q)
@@ -262,13 +243,6 @@ static uint16_t __nvme_submit_cmd(struct nvme_queue *q, const struct nvme_comman
         tail = 0;
     q->sq_tail = tail;
     nvme_doorbell_write(q->sq_db, tail);
-    /* #region debug-point nvme-minixfs-timeout */
-    char j[160];
-    snprintf(j, sizeof(j),
-             "{\"ev\":\"sq_submit\",\"qid\":%u,\"cid\":%u,\"opc\":%u,\"tail\":%u}",
-             (unsigned)q->qid, (unsigned)tmp.command_id, (unsigned)tmp.opcode, (unsigned)tail);
-    nvme_dbg(j);
-    /* #endregion debug-point nvme-minixfs-timeout */
     return tmp.command_id;
 }
 
@@ -306,40 +280,15 @@ static int nvme_cq_poll_cid(struct nvme_queue *q, uint16_t cid, struct nvme_comp
             if (cpl.command_id == cid && cpl.sq_id == q->qid) {
                 if (cpl_out)
                     *cpl_out = cpl;
-                /* #region debug-point nvme-minixfs-timeout */
-                char j[200];
-                snprintf(j, sizeof(j),
-                         "{\"ev\":\"cq_match\",\"qid\":%u,\"cid\":%u,\"st\":%u,\"res\":%u,\"sqh\":%u,\"cqh\":%u}",
-                         (unsigned)q->qid, (unsigned)cid, (unsigned)cpl.status, (unsigned)cpl.result,
-                         (unsigned)cpl.sq_head, (unsigned)q->cq_head);
-                nvme_dbg(j);
-                /* #endregion debug-point nvme-minixfs-timeout */
                 /* Status code is bits 15:1 (0 means success). */
                 if ((cpl.status >> 1) != 0)
                     return -EIO;
                 return 0;
             }
-            /* #region debug-point nvme-minixfs-timeout */
-            char j[200];
-            snprintf(j, sizeof(j),
-                     "{\"ev\":\"cq_other\",\"qid\":%u,\"want_cid\":%u,\"got_cid\":%u,\"sqid\":%u,\"st\":%u,\"cqh\":%u}",
-                     (unsigned)q->qid, (unsigned)cid, (unsigned)cpl.command_id, (unsigned)cpl.sq_id,
-                     (unsigned)cpl.status, (unsigned)q->cq_head);
-            nvme_dbg(j);
-            /* #endregion debug-point nvme-minixfs-timeout */
             /* Unrelated completion: keep polling until our CID completes. */
         }
-        if (time_after_eq(time_get_jiffies(), deadline)) {
-            /* #region debug-point nvme-minixfs-timeout */
-            char j[200];
-            snprintf(j, sizeof(j),
-                     "{\"ev\":\"cq_timeout\",\"qid\":%u,\"cid\":%u,\"cqh\":%u,\"phase\":%u,\"now\":%u,\"dl\":%u}",
-                     (unsigned)q->qid, (unsigned)cid, (unsigned)q->cq_head, (unsigned)q->cq_phase,
-                     (unsigned)time_get_jiffies(), (unsigned)deadline);
-            nvme_dbg(j);
-            /* #endregion debug-point nvme-minixfs-timeout */
+        if (time_after_eq(time_get_jiffies(), deadline))
             return -ETIMEDOUT;
-        }
     }
 }
 
@@ -407,11 +356,16 @@ static int set_queue_count(struct nvme_dev *dev, int count)
     struct nvme_command cmd;
     struct nvme_completion cpl;
     memset(&cmd, 0, sizeof(cmd));
+    memset(&cpl, 0, sizeof(cpl));
     cmd.opcode = NVME_ADMIN_OPC_SET_FEATURES;
     cmd.cdw10 = NVME_FEAT_NUM_QUEUES;
     cmd.cdw11 = (uint32_t)(count - 1) | ((uint32_t)(count - 1) << 16);
-    if (nvme_submit_sync_admin_cmd(dev, &cmd, &cpl) != 0)
+    int ret = nvme_submit_sync_admin_cmd(dev, &cmd, &cpl);
+    if (ret != 0) {
+        if ((cpl.status >> 1) != 0)
+            return 0;
         return -1;
+    }
     uint16_t ncqa = (uint16_t)((cpl.result & 0xFFFFu) + 1u);
     uint16_t nsqa = (uint16_t)(((cpl.result >> 16) & 0xFFFFu) + 1u);
     return (nsqa < ncqa) ? nsqa : ncqa;
@@ -424,20 +378,9 @@ static int nvme_create_io_queues(struct nvme_dev *dev)
 
     /* Linux flow: Set Features - Number of Queues, then create I/O CQ/SQ. */
     int queue_count = set_queue_count(dev, 1);
-    if (queue_count < 0) {
-        printf("nvme: Set Features (Number of Queues) failed, continuing\n");
-    } else {
-        printf("nvme: num_queues allocated: %u\n", (unsigned)queue_count);
-    }
-    /* #region debug-point nvme-minixfs-timeout */
-    {
-        char j[160];
-        snprintf(j, sizeof(j),
-                 "{\"ev\":\"set_queue_count\",\"rc\":%d,\"cap_to\":%u}",
-                 queue_count, (unsigned)((dev->cap >> 24) & 0xFFu));
-        nvme_dbg(j);
-    }
-    /* #endregion debug-point nvme-minixfs-timeout */
+    if (queue_count <= 0)
+        return -1;
+    printf("nvme: num_queues allocated: %u\n", (unsigned)queue_count);
     /* Choose a small, safe depth. Must be <= (CAP.MQES + 1). */
     uint16_t max_depth = (uint16_t)(dev->mqes + 1u);
     uint16_t depth = 32;
@@ -574,15 +517,6 @@ static int nvme_io_rw(struct nvme_ns *ns, int write, uint64_t lba, uint32_t nlb,
     memset(&cpl, 0, sizeof(cpl));
     int ret = nvme_submit_sync_io_cmd(dev, &cmd, &cpl);
     if (ret != 0) {
-        /* #region debug-point nvme-minixfs-timeout */
-        {
-            char j[220];
-            snprintf(j, sizeof(j),
-                     "{\"ev\":\"io_fail\",\"wr\":%u,\"lba\":%u,\"nlb\":%u,\"len\":%u,\"ret\":%d}",
-                     (unsigned)write, (unsigned)lba, (unsigned)nlb, (unsigned)buf_len, ret);
-            nvme_dbg(j);
-        }
-        /* #endregion debug-point nvme-minixfs-timeout */
         /*
          * Linux mapping: request completion status is only meaningful if we
          * consumed a CQE for this command. Timeouts must not print a bogus
@@ -601,15 +535,6 @@ static int nvme_io_rw(struct nvme_ns *ns, int write, uint64_t lba, uint32_t nlb,
             kfree(bounce);
         return -1;
     }
-    /* #region debug-point nvme-minixfs-timeout */
-    {
-        char j[200];
-        snprintf(j, sizeof(j),
-                 "{\"ev\":\"io_ok\",\"wr\":%u,\"lba\":%u,\"nlb\":%u,\"len\":%u}",
-                 (unsigned)write, (unsigned)lba, (unsigned)nlb, (unsigned)buf_len);
-        nvme_dbg(j);
-    }
-    /* #endregion debug-point nvme-minixfs-timeout */
     if (bounce) {
         if (!write)
             memcpy(buf, dma_buf, buf_len);
@@ -632,7 +557,6 @@ static void nvme_request_fn(struct request_queue *q)
             blk_complete_request(q, rq, -1);
             continue;
         }
-
         uint32_t offset = (uint32_t)bio->bi_sector * 512u + bio->bi_byte_offset;
         struct block_device *bdev = ns->disk ? bdget_disk(ns->disk, 0) : NULL;
         if (!bdev || offset + bio->bi_size > bdev->size) {

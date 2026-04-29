@@ -17,7 +17,7 @@
 - `bus`：设备与驱动的组织域，提供 `match(dev, drv)` 决定谁能绑定谁。
 - `class`：面向用户语义的分组（例如 tty、block、net），主要用于 `/sys/class` 与 `/dev` 视图组织。
 
-在 Lite 中这些对象关系与可见化已经具备最小框架（参考 [Annotation.md](file:///data25/lidg/lite/Documentation/Annotation.md#L426-L486)、[QA.md](file:///data25/lidg/lite/Documentation/QA.md#L352-L409)）。
+在 Lite 中这些对象关系与可见化已经具备最小框架。全局现状以 `Current-State.md` 为入口；本文只展开 driver model 细节。
 
 ## 2. Lite 当前实现：它是“Linux 2.6 风格骨架”，但仍是极简版
 

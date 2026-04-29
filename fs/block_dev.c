@@ -128,7 +128,7 @@ uint32_t block_device_read(struct block_device *bdev, uint32_t offset, uint32_t 
         return 0;
     if (offset >= bdev->size)
         return 0;
-    if (offset + size > bdev->size)
+    if (size > bdev->size - offset)
         size = (uint32_t)(bdev->size - offset);
     struct bio bio;
     memset(&bio, 0, sizeof(bio));
@@ -151,7 +151,7 @@ uint32_t block_device_write(struct block_device *bdev, uint32_t offset, uint32_t
         return 0;
     if (offset >= bdev->size)
         return 0;
-    if (offset + size > bdev->size)
+    if (size > bdev->size - offset)
         size = (uint32_t)(bdev->size - offset);
     struct bio bio;
     memset(&bio, 0, sizeof(bio));
@@ -268,13 +268,16 @@ struct inode *blockdev_inode_create(struct block_device *bdev)
     bdgrab(bdev);
     struct inode *inode = alloc_special_inode(FS_BLOCKDEVICE, bdev->devt, &def_blk_fops,
                                               0666, 0, 0);
-    if (!inode)
+    if (!inode) {
+        bdput(bdev);
         return NULL;
+    }
     inode->i_size = bdev->size;
     inode->private_data = bdev;
     struct address_space *mapping = (struct address_space *)kmalloc(sizeof(struct address_space));
     if (!mapping) {
         kfree(inode);
+        bdput(bdev);
         return NULL;
     }
     address_space_init(mapping, inode);
