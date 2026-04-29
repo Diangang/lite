@@ -900,8 +900,8 @@ static void nvme_remove(struct pci_dev *pdev)
     }
     nvme_dev_shutdown(dev);
     nvme_ctrl_unregister(dev);
-    nvme_free_dev(dev);
     nvme_release_instance((int)dev->instance);
+    nvme_free_dev(dev);
 }
 
 static struct pci_driver nvme_driver = {

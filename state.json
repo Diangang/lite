@@ -20,16 +20,14 @@
     ]
   },
   "current_patch": {
-    "id": "stage1-nvme-include-dedup",
+    "id": "stage1-nvme-remove-instance-release-order",
     "status": "review_clean",
-    "summary": "Remove duplicate NVMe host include directives to match Linux-style single include placement.",
+    "summary": "Release NVMe instance before freeing the controller object in remove teardown.",
     "files": [
-      "drivers/nvme/host/pci.c",
-      "drivers/nvme/host/nvme.h"
+      "drivers/nvme/host/pci.c"
     ],
     "linux_reference": [
-      "linux2.6/drivers/nvme/host/pci.c",
-      "linux2.6/drivers/nvme/host/nvme.h"
+      "linux2.6/drivers/nvme/host/pci.c"
     ]
   },
   "validation": {
@@ -40,31 +38,27 @@
     "commands": [
       "make -j4",
       "make smoke-128",
-      "make smoke-128",
       "make smoke-512"
-    ],
-    "notes": [
-      "First smoke-128 run timed out at NVMe Raw R/W; exact rerun passed."
     ]
   },
   "commit": {
     "status": "committed",
     "hash": "HEAD",
-    "pre_review_hash": "2f2da339afc2544427f45883bef43d2c8685cf1b",
+    "pre_review_hash": "7a294d4cdf0c488c5277a8eb587ce6f646537e5a",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage1-nvme-include-dedup.md",
+    "record": "Documentation/reviews/2026-04-29-stage1-nvme-remove-instance-release-order.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- drivers/nvme/host/pci.c drivers/nvme/host/nvme.h state.json"
+      "git show -- drivers/nvme/host/pci.c state.json"
     ]
   },
   "next_patch": {
     "status": "ready",
-    "candidate": "Continue Stage 1 by auditing NVMe controller/namespace registration flow against linux2.6/drivers/nvme/host/pci.c and linux2.6/drivers/nvme/host/nvme.h."
+    "candidate": "Continue Stage 1 by auditing NVMe namespace add/remove failure unwinding against linux2.6/drivers/nvme/host/pci.c::nvme_alloc_ns and nvme_ns_remove."
   }
 }
