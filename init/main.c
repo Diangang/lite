@@ -159,7 +159,7 @@ extern initcall_t __initcall6_start[];
 extern initcall_t __initcall7_start[];
 extern initcall_t __initcall_end[];
 
-static initcall_t *initcall_levels[] = {
+static initcall_t *initcall_levels[] __initdata = {
     __initcall0_start,
     __initcall1_start,
     __initcall2_start,

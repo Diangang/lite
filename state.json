@@ -83,9 +83,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage2-initcall-command-line",
+    "id": "stage2-initcall-levels-initdata",
     "status": "review_clean",
-    "summary": "Match Linux initcall level command-line handling by refreshing initcall_command_line before each level.",
+    "summary": "Match Linux initcall_levels lifetime annotation with __initdata.",
     "files": [
       "init/main.c",
       "state.json"
@@ -109,12 +109,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "e0611f04328f1317a315f4c4117903967fd41cc6",
+    "pre_review_hash": "32cebe55d4e5a0497ce123a1ae66137569049f0e",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage2-initcall-command-line.md",
+    "record": "Documentation/reviews/2026-04-29-stage2-initcall-levels-initdata.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
