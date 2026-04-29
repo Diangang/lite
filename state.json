@@ -83,9 +83,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage2-boot-command-line-storage",
+    "id": "stage2-static-command-line-storage",
     "status": "review_clean",
-    "summary": "Add Linux boot_command_line storage before saved command-line parsing.",
+    "summary": "Add Linux static_command_line storage for command-line parsing alignment.",
     "files": [
       "init/main.c",
       "include/linux/init.h",
@@ -110,12 +110,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "550c23840500704068aa9b35aaa729b904809f22",
+    "pre_review_hash": "0e09b5c51846c51e17a38b29bcfe4b781492ab55",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage2-boot-command-line-storage.md",
+    "record": "Documentation/reviews/2026-04-29-stage2-static-command-line-storage.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",

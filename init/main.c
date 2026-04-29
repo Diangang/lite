@@ -44,6 +44,8 @@
 char boot_command_line[COMMAND_LINE_SIZE] __initdata;
 static char saved_command_line_buf[256];
 char *saved_command_line = saved_command_line_buf;
+static char static_command_line_buf[sizeof(saved_command_line_buf)];
+static char *static_command_line = static_command_line_buf;
 static char initcall_command_line_buf[sizeof(saved_command_line_buf)];
 static char *initcall_command_line = initcall_command_line_buf;
 
@@ -109,6 +111,7 @@ void setup_command_line(const char *cmdline)
         memcpy(saved_command_line_buf, boot_command_line, len);
 
     saved_command_line_buf[len] = '\0';
+    strcpy(static_command_line, saved_command_line);
     strcpy(initcall_command_line, saved_command_line);
     parse_command_line();
 }
