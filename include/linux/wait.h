@@ -36,6 +36,8 @@ struct wait_bit_queue {
     wait_queue_t wait;
 };
 
+typedef int wait_bit_action_f(struct wait_bit_key *, int mode);
+
 #define __WAITQUEUE_INITIALIZER(name, tsk) { \
     .private = tsk, \
     .func = default_wake_function, \

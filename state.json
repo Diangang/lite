@@ -83,9 +83,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-wait-bit-key-types",
+    "id": "stage3-wait-bit-action-type",
     "status": "review_clean",
-    "summary": "Add Linux wait-bit key queue types.",
+    "summary": "Add Linux wait_bit_action_f type.",
     "files": [
       "include/linux/wait.h",
       "state.json"
@@ -108,12 +108,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "db386e9dfa8dcde463946151fc77a4114e263cb1",
+    "pre_review_hash": "8a1021dcbced4086a06cd056191dad76f6ca715c",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage3-wait-bit-key-types.md",
+    "record": "Documentation/reviews/2026-04-29-stage3-wait-bit-action-type.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
