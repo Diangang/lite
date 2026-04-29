@@ -20,24 +20,16 @@
     ]
   },
   "current_patch": {
-    "id": "stage1-storage-debug-cleanup-checkpoint",
+    "id": "stage1-driver-core-traedbg-cleanup",
     "status": "review_clean",
-    "summary": "Remove stale NVMe/storage smoke debug traces and record current Linux 2.6 alignment state.",
+    "summary": "Remove stale deferred-probe-nvme TRAEDBG traces from driver-core probe/attach flow.",
     "files": [
-      "drivers/nvme/host/pci.c",
-      "fs/namespace.c",
-      "fs/minix/inode.c",
-      "fs/file.c",
-      "fs/minix/namei.c",
-      "Documentation/Current-State.md",
-      "Documentation/Linux26-Roadmap.md"
+      "drivers/base/dd.c",
+      "drivers/base/core.c",
+      "Documentation/Current-State.md"
     ],
     "linux_reference": [
-      "linux2.6/drivers/nvme/host/pci.c",
-      "linux2.6/fs/minix/inode.c",
-      "linux2.6/fs/minix/namei.c",
-      "linux2.6/fs/open.c",
-      "linux2.6/fs/namei.c"
+      "linux2.6/drivers/base/dd.c"
     ]
   },
   "validation": {
@@ -48,27 +40,32 @@
     "commands": [
       "make -j4",
       "make smoke-128",
+      "make smoke-128",
       "make smoke-512"
+    ],
+    "notes": [
+      "First smoke-128 run timed out at NVMe MinixFS start; exact rerun passed."
     ]
   },
   "commit": {
     "status": "committed",
     "hash": "HEAD",
-    "pre_review_hash": "4f8108a23e76b4f4b7ff896282a72eb0ca6896ad",
+    "pre_review_hash": "dc303fd8f8d6631028b48022755a5d4eaac5c274",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage1-storage-debug-cleanup.md",
+    "record": "Documentation/reviews/2026-04-29-stage1-driver-core-traedbg-cleanup.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show --name-only --format=fuller HEAD"
+      "git show -- drivers/base/dd.c drivers/base/core.c Documentation/Current-State.md state.json",
+      "rg -n \"TRAEDBG|debug-point\" ."
     ]
   },
   "next_patch": {
     "status": "ready",
-    "candidate": "Continue Stage 1 by reviewing remaining device-core TRAEDBG traces against Linux driver-core probe flow before changing them."
+    "candidate": "Continue Stage 1 by auditing NVMe host placement and remaining Linux 2.6 flow differences in drivers/nvme/host/pci.c and drivers/nvme/host/nvme.h."
   }
 }

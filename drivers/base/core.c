@@ -375,11 +375,6 @@ int device_attach(struct device *dev)
         return -1;
     if (dev->driver)
         return 0;
-    /* #region debug-point deferred-probe-nvme-core */
-    printf("TRAEDBG {\"ev\":\"device_attach_enter\",\"dev\":\"%s\",\"bus\":\"%s\"}\n",
-           dev->kobj.name[0] ? dev->kobj.name : "-",
-           dev->bus->subsys.kset.kobj.name ? dev->bus->subsys.kset.kobj.name : "-");
-    /* #endregion debug-point deferred-probe-nvme-core */
     klist_iter_init(bus_drivers_klist(dev->bus), &iter);
     while ((node = klist_next(&iter)) != NULL) {
         struct device_driver *drv = container_of(node, struct device_driver, knode_bus);
@@ -388,32 +383,15 @@ int device_attach(struct device *dev)
             if (rc == -EPROBE_DEFER) {
                 klist_iter_exit(&iter);
                 driver_deferred_probe_add(dev);
-                /* #region debug-point deferred-probe-nvme-core */
-                printf("TRAEDBG {\"ev\":\"device_attach_defer\",\"dev\":\"%s\",\"bus\":\"%s\",\"drv\":\"%s\"}\n",
-                       dev->kobj.name[0] ? dev->kobj.name : "-",
-                       dev->bus->subsys.kset.kobj.name ? dev->bus->subsys.kset.kobj.name : "-",
-                       drv->name ? drv->name : "-");
-                /* #endregion debug-point deferred-probe-nvme-core */
                 return 0;
             }
             if (rc == 0) {
                 klist_iter_exit(&iter);
-                /* #region debug-point deferred-probe-nvme-core */
-                printf("TRAEDBG {\"ev\":\"device_attach_bound\",\"dev\":\"%s\",\"bus\":\"%s\",\"drv\":\"%s\"}\n",
-                       dev->kobj.name[0] ? dev->kobj.name : "-",
-                       dev->bus->subsys.kset.kobj.name ? dev->bus->subsys.kset.kobj.name : "-",
-                       drv->name ? drv->name : "-");
-                /* #endregion debug-point deferred-probe-nvme-core */
                 return 0;
             }
         }
     }
     klist_iter_exit(&iter);
-    /* #region debug-point deferred-probe-nvme-core */
-    printf("TRAEDBG {\"ev\":\"device_attach_nomatch\",\"dev\":\"%s\",\"bus\":\"%s\"}\n",
-           dev->kobj.name[0] ? dev->kobj.name : "-",
-           dev->bus->subsys.kset.kobj.name ? dev->bus->subsys.kset.kobj.name : "-");
-    /* #endregion debug-point deferred-probe-nvme-core */
     return 0;
 }
 

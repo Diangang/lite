@@ -261,7 +261,8 @@ Current status:
 - `make -j4` builds kernel and initramfs payloads.
 - `make smoke-128` and `make smoke-512` run QEMU smoke tests.
 - `/proc`, `/sys`, and devtmpfs expose minimal runtime state.
-- There are still `TRAEDBG` traces left in device-core observability paths.
+- The old `deferred-probe-nvme` driver-core `TRAEDBG` probe/attach traces have
+  been removed.
 
 Main gaps:
 
