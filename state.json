@@ -83,9 +83,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-waitqueue-active-helper",
+    "id": "stage3-waitqueue-func-entry-helper",
     "status": "review_clean",
-    "summary": "Add Linux waitqueue_active helper.",
+    "summary": "Add Linux init_waitqueue_func_entry helper.",
     "files": [
       "include/linux/wait.h",
       "state.json"
@@ -97,7 +97,7 @@
   "validation": {
     "make_j4": "passed",
     "smoke_128": "passed",
-    "smoke_512": "passed",
+    "smoke_512": "passed_after_rerun",
     "last_run": "2026-04-29",
     "commands": [
       "make -j4",
@@ -108,12 +108,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "d068881f435b03ce5dcc62b493fd62317a76a207",
+    "pre_review_hash": "dbc27bce02969cf6ab77b6de32b9074fd4ecaccf",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage3-waitqueue-active-helper.md",
+    "record": "Documentation/reviews/2026-04-29-stage3-waitqueue-func-entry-helper.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
