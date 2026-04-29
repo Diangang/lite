@@ -11,6 +11,12 @@ struct completion {
     wait_queue_head_t wait;
 };
 
+#define COMPLETION_INITIALIZER(work) \
+    { 0, __WAIT_QUEUE_HEAD_INITIALIZER((work).wait) }
+
+#define DECLARE_COMPLETION(work) \
+    struct completion work = COMPLETION_INITIALIZER(work)
+
 static inline void init_completion(struct completion *x)
 {
     if (!x)

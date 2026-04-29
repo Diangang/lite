@@ -83,15 +83,15 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-declare-waitqueue-head-macro",
+    "id": "stage3-declare-completion-macro",
     "status": "review_clean",
-    "summary": "Add Linux DECLARE_WAIT_QUEUE_HEAD initializer macros.",
+    "summary": "Add Linux DECLARE_COMPLETION initializer macros.",
     "files": [
-      "include/linux/wait.h",
+      "include/linux/completion.h",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/wait.h"
+      "linux2.6/include/linux/completion.h"
     ]
   },
   "validation": {
@@ -108,17 +108,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "1b6025d1cafdcfa1b8f04bfcfd4cac0e178c0806",
+    "pre_review_hash": "fb38dcd8988db57fdf42b659e89691bda3870b3e",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage3-declare-waitqueue-head-macro.md",
+    "record": "Documentation/reviews/2026-04-29-stage3-declare-completion-macro.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/wait.h state.json"
+      "git show -- include/linux/completion.h state.json"
     ]
   },
   "next_patch": {
