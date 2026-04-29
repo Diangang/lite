@@ -95,6 +95,11 @@ static inline void wake_up(wait_queue_head_t *q)
     __wake_up(q, 0, 1, (void *)0);
 }
 
+static inline void wake_up_nr(wait_queue_head_t *q, int nr)
+{
+    __wake_up(q, 0, nr, (void *)0);
+}
+
 static inline int waitqueue_active(wait_queue_head_t *q)
 {
     return !list_empty(&q->task_list);

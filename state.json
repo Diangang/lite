@@ -83,17 +83,15 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-add-wait-queue-exclusive-api",
+    "id": "stage3-wake-up-nr-helper",
     "status": "review_clean",
-    "summary": "Add Linux add_wait_queue_exclusive API.",
+    "summary": "Add Linux wake_up_nr helper.",
     "files": [
       "include/linux/wait.h",
-      "kernel/sched/wait.c",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/wait.h",
-      "linux2.6/kernel/sched/wait.c"
+      "linux2.6/include/linux/wait.h"
     ]
   },
   "validation": {
@@ -110,12 +108,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "fc107c205d3f5f97a58996117326c6167ea7baaf",
+    "pre_review_hash": "fb10db8c5a668fc56f5217c3682e29b21ce0d526",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage3-add-wait-queue-exclusive-api.md",
+    "record": "Documentation/reviews/2026-04-29-stage3-wake-up-nr-helper.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
