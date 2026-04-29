@@ -83,16 +83,16 @@
     }
   ],
   "current_patch": {
-    "id": "stage2-initcall-helper-init-annotations",
+    "id": "stage2-x86-command-line-size",
     "status": "review_clean",
-    "summary": "Match Linux init-only annotations on initcall setup helper functions.",
+    "summary": "Add Linux x86 COMMAND_LINE_SIZE constant for command-line storage alignment.",
     "files": [
-      "init/main.c",
+      "arch/x86/include/asm/setup.h",
       "state.json"
     ],
     "linux_reference": [
       "linux2.6/init/main.c",
-      "linux2.6/include/linux/init.h"
+      "linux2.6/arch/x86/include/asm/setup.h"
     ]
   },
   "validation": {
@@ -109,17 +109,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "7ce4b40767f5abfed57c7cc55753c4b7165650d2",
+    "pre_review_hash": "55e43d4b878d88a07f7e668db1db64b9a8af2c0f",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage2-initcall-helper-init-annotations.md",
+    "record": "Documentation/reviews/2026-04-29-stage2-x86-command-line-size.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- init/main.c state.json"
+      "git show -- arch/x86/include/asm/setup.h state.json"
     ]
   },
   "next_patch": {

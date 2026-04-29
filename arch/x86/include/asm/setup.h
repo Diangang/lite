@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#define COMMAND_LINE_SIZE 2048
+
 struct multiboot_info;
 void setup_arch(struct multiboot_info* mbi);
 void i386_start_kernel(uint32_t magic, struct multiboot_info* mbi);
