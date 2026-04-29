@@ -360,7 +360,7 @@ static void prepare_namespace(void)
         if (run_init_process(fallbacks[i]) == 0)
             return;
     }
-    panic("No init found. Try passing init= option to kernel.");
+    panic("No working init found. Try passing init= option to kernel. See Linux Documentation/init.txt for guidance.");
 }
 
 /* kernel_init: Finish core setup and launch the first user-space init process. */

@@ -83,9 +83,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage2-init-fallback-list",
+    "id": "stage2-no-init-panic-message",
     "status": "review_clean",
-    "summary": "Match Linux regular init fallback list by removing /sbin/sh.",
+    "summary": "Match Linux no-working-init panic guidance text.",
     "files": [
       "init/main.c",
       "include/linux/init.h",
@@ -110,12 +110,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "9b453ba6987066e4713440bfeee8eeec66314c53",
+    "pre_review_hash": "ae533ae69cae9d56ff6894819377f8ca4f945c8c",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage2-init-fallback-list.md",
+    "record": "Documentation/reviews/2026-04-29-stage2-no-init-panic-message.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
