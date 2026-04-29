@@ -9,16 +9,79 @@
   "boundaries": {
     "roadmap": "Documentation/Linux26-Roadmap.md",
     "active_stage": "Stage 1: NVMe Host and Storage Debug Cleanup",
+    "stage_transition": "When the active stage has no remaining narrow in-scope patch, update active_stage to the next roadmap stage and continue automatically. Do not stop just because the next patch crosses a stage boundary.",
     "requires_linux_reference_first": true,
     "single_patch_scope": true,
     "ask_before": [
-      "route_change",
+      "route_change_outside_roadmap",
       "scope_expansion",
       "skipping_required_tests",
       "new_non_linux_abstraction",
       "destructive_operation"
     ]
   },
+  "stage_plan": [
+    {
+      "stage": 0,
+      "name": "Documentation Baseline",
+      "status": "done"
+    },
+    {
+      "stage": 1,
+      "name": "NVMe Host and Storage Debug Cleanup",
+      "status": "active"
+    },
+    {
+      "stage": 2,
+      "name": "Init Flow and Initcall Ordering",
+      "status": "next"
+    },
+    {
+      "stage": 3,
+      "name": "Core Synchronization Foundations",
+      "status": "pending"
+    },
+    {
+      "stage": 4,
+      "name": "MM Second Pass",
+      "status": "pending"
+    },
+    {
+      "stage": 5,
+      "name": "Kernel Core Remaining Gaps",
+      "status": "pending"
+    },
+    {
+      "stage": 6,
+      "name": "APIC, IOAPIC, and SMP Runtime",
+      "status": "pending_after_stage_5"
+    },
+    {
+      "stage": 7,
+      "name": "Block Core Correctness Pass",
+      "status": "pending"
+    },
+    {
+      "stage": 8,
+      "name": "Buffer Cache, Page Cache, and Writeback",
+      "status": "pending"
+    },
+    {
+      "stage": 9,
+      "name": "Device Model and Sysfs Lifetime",
+      "status": "pending"
+    },
+    {
+      "stage": 10,
+      "name": "PCI, Virtio, SCSI Peripheral Alignment",
+      "status": "pending"
+    },
+    {
+      "stage": 11,
+      "name": "Console, TTY, and Printk",
+      "status": "pending"
+    }
+  ],
   "current_patch": {
     "id": "stage1-nvme-success-debug-print-cleanup",
     "status": "review_clean",
@@ -59,6 +122,6 @@
   },
   "next_patch": {
     "status": "ready",
-    "candidate": "Continue Stage 1 by checking for any remaining active NVMe/storage debug-only output or narrow NVMe lifetime mismatch; if no direct narrow Stage 1 item remains, stop before changing stages."
+    "candidate": "Continue Stage 1 by checking for any remaining active NVMe/storage debug-only output or narrow NVMe lifetime mismatch. If no direct narrow Stage 1 item remains, mark Stage 1 complete in state.json, set active_stage to Stage 2, and continue automatically with Init Flow and Initcall Ordering."
   }
 }
