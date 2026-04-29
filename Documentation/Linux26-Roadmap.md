@@ -120,7 +120,80 @@ Exit criteria:
 - Existing callers are adjusted only where required.
 - Build and smoke pass.
 
-## Stage 4: Block Core Correctness Pass
+## Stage 4: MM Second Pass
+
+Status: `PENDING`
+
+Reference:
+
+- `linux2.6/mm/page_alloc.c`
+- `linux2.6/mm/slab.c`
+- `linux2.6/mm/vmalloc.c`
+- `linux2.6/mm/rmap.c`
+- `linux2.6/lib/radix-tree.c`
+- `linux2.6/lib/idr.c`
+
+Goals:
+
+- Improve allocator, vmalloc, rmap, and reclaim semantics.
+- Replace simplified IDR/radix behavior where it blocks device or VFS work.
+- Keep highmem/PAE/NUMA out of scope unless explicitly approved.
+
+Exit criteria:
+
+- Existing user processes, COW, VFS, and storage smoke paths still pass.
+
+## Stage 5: Kernel Core Remaining Gaps
+
+Status: `PENDING`
+
+Reference:
+
+- `linux2.6/kernel/sched.c`
+- `linux2.6/kernel/fork.c`
+- `linux2.6/kernel/exit.c`
+- `linux2.6/kernel/signal.c`
+
+Goals:
+
+- Improve task lifetime and references.
+- Tighten tasklist/waitqueue/signal semantics.
+- Prepare for eventual per-CPU and SMP work without implementing SMP early.
+
+Exit criteria:
+
+- Process, shell, and smoke behavior remains stable.
+
+## Stage 6: APIC, IOAPIC, and SMP Runtime
+
+Status: `PENDING_AFTER_STAGE_5`
+
+Reference:
+
+- `linux2.6/arch/x86/kernel/apic/*`
+- `linux2.6/arch/x86/kernel/smp.c`
+- `linux2.6/arch/x86/include/asm/irq_vectors.h`
+
+Dependency:
+
+- Run after synchronization primitives, memory management, and kernel core task
+  lifetime work are complete enough to support APIC/SMP semantics.
+
+Goals:
+
+- LAPIC timer.
+- IPI send/receive path.
+- IOAPIC routing.
+- Per-CPU IRQ accounting.
+- SMP scheduler interaction.
+
+Exit criteria:
+
+- APIC/IOAPIC behavior is documented against the implemented runtime.
+- SMP work remains scoped to prerequisites already present in Lite.
+- Build and smoke pass.
+
+## Stage 7: Block Core Correctness Pass
 
 Status: `PENDING`
 
@@ -153,7 +226,7 @@ Exit criteria:
 - Build and both smoke targets pass.
 - Storage path remains compatible with ramdisk, SCSI disk, and NVMe namespace.
 
-## Stage 5: Buffer Cache, Page Cache, and Writeback
+## Stage 8: Buffer Cache, Page Cache, and Writeback
 
 Status: `PENDING`
 
@@ -178,7 +251,7 @@ Exit criteria:
 - Dirty page and buffer cache behavior is documented in `Current-State.md` or a
   focused reference doc if needed.
 
-## Stage 6: Device Model and Sysfs Lifetime
+## Stage 9: Device Model and Sysfs Lifetime
 
 Status: `PENDING`
 
@@ -200,7 +273,7 @@ Exit criteria:
 - Storage devices still appear under `/dev` and `/sys`.
 - Build and smoke pass.
 
-## Stage 7: PCI, Virtio, SCSI Peripheral Alignment
+## Stage 10: PCI, Virtio, SCSI Peripheral Alignment
 
 Status: `PENDING`
 
@@ -223,51 +296,7 @@ Exit criteria:
 - Virtio-scsi still produces `/dev/sda` in smoke.
 - NVMe and SCSI can coexist in one smoke boot.
 
-## Stage 8: MM Second Pass
-
-Status: `PENDING`
-
-Reference:
-
-- `linux2.6/mm/page_alloc.c`
-- `linux2.6/mm/slab.c`
-- `linux2.6/mm/vmalloc.c`
-- `linux2.6/mm/rmap.c`
-- `linux2.6/lib/radix-tree.c`
-- `linux2.6/lib/idr.c`
-
-Goals:
-
-- Improve allocator, vmalloc, rmap, and reclaim semantics.
-- Replace simplified IDR/radix behavior where it blocks device or VFS work.
-- Keep highmem/PAE/NUMA out of scope unless explicitly approved.
-
-Exit criteria:
-
-- Existing user processes, COW, VFS, and storage smoke paths still pass.
-
-## Stage 9: Kernel Core Remaining Gaps
-
-Status: `PENDING`
-
-Reference:
-
-- `linux2.6/kernel/sched.c`
-- `linux2.6/kernel/fork.c`
-- `linux2.6/kernel/exit.c`
-- `linux2.6/kernel/signal.c`
-
-Goals:
-
-- Improve task lifetime and references.
-- Tighten tasklist/waitqueue/signal semantics.
-- Prepare for eventual per-CPU and SMP work without implementing SMP early.
-
-Exit criteria:
-
-- Process, shell, and smoke behavior remains stable.
-
-## Stage 10: Console, TTY, and Printk
+## Stage 11: Console, TTY, and Printk
 
 Status: `PENDING`
 
@@ -287,33 +316,6 @@ Goals:
 Exit criteria:
 
 - Serial console and shell interaction remain stable.
-
-## Stage 11: APIC, IOAPIC, and SMP Runtime
-
-Status: `HOLD`
-
-Reference:
-
-- `linux2.6/arch/x86/kernel/apic/*`
-- `linux2.6/arch/x86/kernel/smp.c`
-- `linux2.6/arch/x86/include/asm/irq_vectors.h`
-
-Hold reason:
-
-- This depends on synchronization primitives, per-CPU foundations, scheduler
-  shape, task lifetime, waitqueues, and IRQ core semantics.
-
-Goals when unblocked:
-
-- LAPIC timer.
-- IPI send/receive path.
-- IOAPIC routing.
-- Per-CPU IRQ accounting.
-- SMP scheduler interaction.
-
-Exit criteria:
-
-- To be defined when the stage is unblocked.
 
 ## Working Definition of Done
 
