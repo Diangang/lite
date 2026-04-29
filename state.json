@@ -8,7 +8,7 @@
   },
   "boundaries": {
     "roadmap": "Documentation/Linux26-Roadmap.md",
-    "active_stage": "Stage 1: NVMe Host and Storage Debug Cleanup",
+    "active_stage": "Stage 2: Init Flow and Initcall Ordering",
     "stage_transition": "When the active stage has no remaining narrow in-scope patch, update active_stage to the next roadmap stage and continue automatically. Do not stop just because the next patch crosses a stage boundary.",
     "requires_linux_reference_first": true,
     "single_patch_scope": true,
@@ -29,12 +29,12 @@
     {
       "stage": 1,
       "name": "NVMe Host and Storage Debug Cleanup",
-      "status": "active"
+      "status": "done"
     },
     {
       "stage": 2,
       "name": "Init Flow and Initcall Ordering",
-      "status": "next"
+      "status": "active"
     },
     {
       "stage": 3,
@@ -83,14 +83,17 @@
     }
   ],
   "current_patch": {
-    "id": "stage1-nvme-success-debug-print-cleanup",
+    "id": "stage2-initcall-do-one-entry",
     "status": "review_clean",
-    "summary": "Remove NVMe success-path bring-up register debug prints while keeping failure diagnostics.",
+    "summary": "Route Lite initcall execution through the Linux-shaped do_one_initcall entry point.",
     "files": [
-      "drivers/nvme/host/pci.c"
+      "init/main.c",
+      "include/linux/init.h",
+      "state.json"
     ],
     "linux_reference": [
-      "linux2.6/drivers/nvme/host/pci.c"
+      "linux2.6/init/main.c",
+      "linux2.6/include/linux/init.h"
     ]
   },
   "validation": {
@@ -107,21 +110,21 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "16069d2f849fc0221d47c0c3bd8b8e9ed868d26c",
+    "pre_review_hash": "cc2feb143f568094da32df0ddeeecec7d4135422",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage1-nvme-success-debug-print-cleanup.md",
+    "record": "Documentation/reviews/2026-04-29-stage2-initcall-do-one-entry.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- drivers/nvme/host/pci.c state.json"
+      "git show -- init/main.c include/linux/init.h state.json"
     ]
   },
   "next_patch": {
     "status": "ready",
-    "candidate": "Continue Stage 1 by checking for any remaining active NVMe/storage debug-only output or narrow NVMe lifetime mismatch. If no direct narrow Stage 1 item remains, mark Stage 1 complete in state.json, set active_stage to Stage 2, and continue automatically with Init Flow and Initcall Ordering."
+    "candidate": "Continue Stage 2 by auditing the next narrow init flow or initcall ordering difference against linux2.6/init/main.c and linux2.6/include/linux/init.h."
   }
 }
