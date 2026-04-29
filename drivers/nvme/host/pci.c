@@ -377,7 +377,6 @@ static int nvme_create_io_queues(struct nvme_dev *dev)
     int queue_count = set_queue_count(dev, 1);
     if (queue_count <= 0)
         return -1;
-    printf("nvme: num_queues allocated: %u\n", (unsigned)queue_count);
     /* Choose a small, safe depth. Must be <= (CAP.MQES + 1). */
     uint16_t max_depth = (uint16_t)(dev->mqes + 1u);
     uint16_t depth = 32;
@@ -611,8 +610,6 @@ static int nvme_map_mmio(struct nvme_dev *dev)
         size = 0x100000u; /* map 1MB max for safety */
 
     dev->bar = ioremap((uint32_t)base, (uint32_t)size);
-    if (dev->bar)
-        printf("nvme: BAR0 mmio base=0x%x size=0x%x\n", (uint32_t)base, (uint32_t)size);
     return dev->bar ? 0 : -1;
 }
 
@@ -626,9 +623,6 @@ static int nvme_dev_init(struct nvme_dev *dev)
     dev->mqes = (uint16_t)(dev->cap & 0xFFFFu);
     uint32_t dstrd = (uint32_t)((dev->cap >> 32) & 0xFu);
     dev->db_stride = 4u << dstrd;
-    printf("nvme: CAP=0x%x%08x MQES=%u TO=%u DSTRD=%u\n",
-           (uint32_t)(dev->cap >> 32), (uint32_t)dev->cap,
-           (unsigned)(dev->mqes + 1u), (unsigned)((dev->cap >> 24) & 0xFFu), (unsigned)dstrd);
 
     /* Disable controller, then configure admin queue. */
     dev->ctrl_config = 0;

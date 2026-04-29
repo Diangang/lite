@@ -20,9 +20,9 @@
     ]
   },
   "current_patch": {
-    "id": "stage1-nvme-probe-instance-unwind-order",
+    "id": "stage1-nvme-success-debug-print-cleanup",
     "status": "review_clean",
-    "summary": "Release the NVMe instance before freeing the controller object on probe failure unwind.",
+    "summary": "Remove NVMe success-path bring-up register debug prints while keeping failure diagnostics.",
     "files": [
       "drivers/nvme/host/pci.c"
     ],
@@ -44,12 +44,12 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "e70f3eeaacb857b813738d5e51fcc4690f0ce044",
+    "pre_review_hash": "16069d2f849fc0221d47c0c3bd8b8e9ed868d26c",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage1-nvme-probe-instance-unwind-order.md",
+    "record": "Documentation/reviews/2026-04-29-stage1-nvme-success-debug-print-cleanup.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
@@ -59,6 +59,6 @@
   },
   "next_patch": {
     "status": "ready",
-    "candidate": "Continue Stage 1 by auditing remaining NVMe host class/device publication against linux2.6/drivers/nvme/host/pci.c, without adding char-device infrastructure unless a narrow direct match already exists in Lite."
+    "candidate": "Continue Stage 1 by checking for any remaining active NVMe/storage debug-only output or narrow NVMe lifetime mismatch; if no direct narrow Stage 1 item remains, stop before changing stages."
   }
 }
