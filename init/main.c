@@ -43,6 +43,8 @@
  */
 static char saved_command_line_buf[256];
 char *saved_command_line = saved_command_line_buf;
+static char initcall_command_line_buf[sizeof(saved_command_line_buf)];
+static char *initcall_command_line = initcall_command_line_buf;
 
 static char execute_command_buf[64];
 static char *execute_command;
@@ -96,6 +98,7 @@ void setup_command_line(const char *cmdline)
         memcpy(saved_command_line_buf, cmdline, len);
 
     saved_command_line_buf[len] = '\0';
+    strcpy(initcall_command_line, saved_command_line);
     parse_command_line();
 }
 
@@ -188,6 +191,8 @@ static void do_initcall_level(int level)
     initcall_t *call;
     if (level < 0 || level >= (int)(sizeof(initcall_levels) / sizeof(initcall_levels[0])) - 1)
         return;
+
+    strcpy(initcall_command_line, saved_command_line);
     for (call = initcall_levels[level]; call < initcall_levels[level + 1]; call++)
         (void)do_one_initcall(*call);
 }
