@@ -2,6 +2,8 @@
 #define LINUX_SLAB_H
 
 #include <stddef.h>
+#include "linux/gfp.h"
+#include "linux/string.h"
 
 struct kmem_cache;
 
@@ -14,6 +16,16 @@ void kmem_cache_free(struct kmem_cache *cache, void *ptr);
 void *kmalloc(size_t size);
 void kfree(const void *ptr);
 size_t ksize(const void *ptr);
+static inline void *kzalloc(size_t size, gfp_t flags)
+{
+    void *ptr;
+
+    (void)flags;
+    ptr = kmalloc(size);
+    if (ptr)
+        memset(ptr, 0, ksize(ptr));
+    return ptr;
+}
 void kheap_print_stats(void);
 
 /* Minimal slab reclaim hook (Linux mapping: shrinkers / cache reaping). */
