@@ -258,9 +258,7 @@ const char *task_get_current_comm(void)
 uint32_t task_get_current_id(void)
 {
     struct task_struct *task = task_current();
-    if (!task)
-        return 0;
-    return task->pid;
+    return task_tgid_nr(task);
 }
 
 /* task_current_is_user: Implement task current is user. */
