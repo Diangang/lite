@@ -83,15 +83,17 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-atomic-cmpxchg-fallback-group",
+    "id": "stage3-spinlock-types-placement",
     "status": "review_clean",
-    "summary": "Align atomic_cmpxchg fallback acquire/release group with Linux.",
+    "summary": "Move spinlock types to Linux spinlock_types.h placement.",
     "files": [
-      "include/linux/atomic.h",
+      "include/linux/spinlock.h",
+      "include/linux/spinlock_types.h",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/atomic.h"
+      "linux2.6/include/linux/spinlock.h",
+      "linux2.6/include/linux/spinlock_types.h"
     ]
   },
   "validation": {
@@ -108,17 +110,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "d46fe8b11e50049d33e4fe61ecb4191e9a46a5d2",
+    "pre_review_hash": "dcc1e819a873a4a489ba1545b2a4981cb9890906",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage3-atomic-cmpxchg-fallback-group.md",
+    "record": "Documentation/reviews/2026-04-30-stage3-spinlock-types-placement.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/atomic.h state.json Documentation/reviews/2026-04-30-stage3-atomic-cmpxchg-fallback-group.md"
+      "git show -- include/linux/spinlock.h include/linux/spinlock_types.h state.json Documentation/reviews/2026-04-30-stage3-spinlock-types-placement.md"
     ]
   },
   "next_patch": {
