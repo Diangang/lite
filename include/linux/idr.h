@@ -15,6 +15,11 @@ struct idr {
 
 void idr_init(struct idr *idp);
 int idr_pre_get(struct idr *idp, unsigned int gfp_mask);
+void idr_preload(gfp_t gfp_mask);
+static inline void idr_preload_end(void)
+{
+}
+
 int idr_alloc(struct idr *idp, void *ptr, int start, int end, gfp_t gfp_mask);
 int idr_alloc_cyclic(struct idr *idp, void *ptr, int start, int end, gfp_t gfp_mask);
 int idr_get_new(struct idr *idp, void *ptr, int *id);

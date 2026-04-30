@@ -19,6 +19,11 @@ int idr_pre_get(struct idr *idp, unsigned int gfp_mask)
     return 1;
 }
 
+void idr_preload(gfp_t gfp_mask)
+{
+    (void)gfp_mask;
+}
+
 int idr_alloc(struct idr *idp, void *ptr, int start, int end, gfp_t gfp_mask)
 {
     int id;

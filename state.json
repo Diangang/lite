@@ -122,15 +122,17 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-radix-tree-replace-slot-helper",
+    "id": "stage4-idr-preload-api-pair",
     "status": "review_clean",
-    "summary": "Add Linux's radix_tree_replace_slot helper for Lite's non-RCU radix-tree subset.",
+    "summary": "Add Linux's IDR preload API pair as a no-op Lite subset.",
     "files": [
-      "include/linux/radix-tree.h",
+      "lib/idr.c",
+      "include/linux/idr.h",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/radix-tree.h"
+      "linux2.6/lib/idr.c",
+      "linux2.6/include/linux/idr.h"
     ]
   },
   "validation": {
@@ -147,17 +149,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "86ff9f8d06e1a33d6d95cf543162e515902b2529",
+    "pre_review_hash": "5b5f648692ce495d2db27c3bb8adca820dff0d70",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-radix-tree-replace-slot-helper.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-idr-preload-api-pair.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/radix-tree.h state.json Documentation/reviews/2026-04-30-stage4-radix-tree-replace-slot-helper.md"
+      "git show -- lib/idr.c include/linux/idr.h state.json Documentation/reviews/2026-04-30-stage4-idr-preload-api-pair.md"
     ]
   },
   "next_patch": {
