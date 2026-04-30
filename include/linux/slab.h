@@ -16,6 +16,16 @@ void kmem_cache_free(struct kmem_cache *cache, void *ptr);
 void *kmalloc(size_t size);
 void kfree(const void *ptr);
 size_t ksize(const void *ptr);
+static inline void *kmem_cache_zalloc(struct kmem_cache *cache, gfp_t flags)
+{
+    void *ptr;
+
+    (void)flags;
+    ptr = kmem_cache_alloc(cache);
+    if (ptr)
+        memset(ptr, 0, ksize(ptr));
+    return ptr;
+}
 static inline void *kzalloc(size_t size, gfp_t flags)
 {
     void *ptr;

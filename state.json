@@ -122,9 +122,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-slab-kzalloc-api",
+    "id": "stage4-slab-kmem-cache-zalloc-api",
     "status": "review_clean",
-    "summary": "Add Linux's kzalloc API as a zero-fill kmalloc wrapper.",
+    "summary": "Add Linux's kmem_cache_zalloc API as a zero-fill kmem_cache_alloc wrapper.",
     "files": [
       "include/linux/slab.h",
       "state.json"
@@ -147,17 +147,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "d2ff278774c780c5930777cc4f57539689f88c00",
+    "pre_review_hash": "9544105c5ee1028e4acacf249badb057ad0662e2",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-slab-kzalloc-api.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-slab-kmem-cache-zalloc-api.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/slab.h state.json Documentation/reviews/2026-04-30-stage4-slab-kzalloc-api.md"
+      "git show -- include/linux/slab.h state.json Documentation/reviews/2026-04-30-stage4-slab-kmem-cache-zalloc-api.md"
     ]
   },
   "next_patch": {
