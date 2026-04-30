@@ -23,7 +23,7 @@ uint32_t task_dump_tasks(char *buf, uint32_t len)
         else if (task->state == 3)
             state = "ZOMBIE";
         const char *name = task->comm[0] ? task->comm : "-";
-        proc_buf_append_u32(buf, &off, len, task->pid);
+        proc_buf_append_u32(buf, &off, len, task_pid_nr(task));
         proc_buf_append(buf, &off, len, "    ");
         proc_buf_append(buf, &off, len, state);
         proc_buf_append(buf, &off, len, "  ");

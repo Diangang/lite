@@ -145,17 +145,17 @@
     }
   ],
   "current_patch": {
-    "id": "stage5-sys-kill-uses-is-idle-task",
+    "id": "stage5-proc-task-dump-uses-task-pid-nr",
     "status": "review_clean",
-    "summary": "Use Linux is_idle_task helper in sys_kill target validation.",
+    "summary": "Use Linux task_pid_nr helper in proc task dump PID output.",
     "files": [
-      "kernel/signal.c",
-      "Documentation/reviews/2026-04-30-stage5-sys-kill-uses-is-idle-task.md",
+      "fs/proc/array.c",
+      "Documentation/reviews/2026-04-30-stage5-proc-task-dump-uses-task-pid-nr.md",
       "state.json"
     ],
     "linux_reference": [
       "linux2.6/include/linux/sched.h",
-      "linux2.6/kernel/signal.c"
+      "linux2.6/fs/proc/array.c"
     ]
   },
   "validation": {
@@ -172,17 +172,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "331053d17eb48ca9c950ab66b649a51b4c4e77a5",
+    "pre_review_hash": "dfbb91ca402a40fec705c774b5315b119bc87885",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage5-sys-kill-uses-is-idle-task.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-proc-task-dump-uses-task-pid-nr.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- kernel/signal.c state.json Documentation/reviews/2026-04-30-stage5-sys-kill-uses-is-idle-task.md"
+      "git show -- fs/proc/array.c state.json Documentation/reviews/2026-04-30-stage5-proc-task-dump-uses-task-pid-nr.md"
     ]
   },
   "next_patch": {
