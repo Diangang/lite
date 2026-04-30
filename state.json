@@ -122,15 +122,17 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-radix-tree-path-count-constants",
+    "id": "stage4-idr-alloc-enospc",
     "status": "review_clean",
-    "summary": "Add Linux radix-tree height and count bit constants.",
+    "summary": "Return Linux's ENOSPC from idr_alloc when the requested ID range is exhausted.",
     "files": [
-      "include/linux/radix-tree.h",
+      "lib/idr.c",
+      "include/linux/errno.h",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/radix-tree.h"
+      "linux2.6/lib/idr.c",
+      "linux2.6/include/uapi/asm-generic/errno-base.h"
     ]
   },
   "validation": {
@@ -147,17 +149,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "50a9567b187a6160a9e619325e28e223c2a438c8",
+    "pre_review_hash": "24076c503a1007b0a170fdff23e9bd5c57e99bf9",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-radix-tree-path-count-constants.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-idr-alloc-enospc.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/radix-tree.h state.json Documentation/reviews/2026-04-30-stage4-radix-tree-path-count-constants.md"
+      "git show -- lib/idr.c include/linux/errno.h state.json Documentation/reviews/2026-04-30-stage4-idr-alloc-enospc.md"
     ]
   },
   "next_patch": {

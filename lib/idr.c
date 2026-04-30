@@ -40,7 +40,7 @@ int idr_alloc(struct idr *idp, void *ptr, int start, int end, gfp_t gfp_mask)
         }
     }
 
-    return -ENOMEM;
+    return -ENOSPC;
 }
 
 int idr_get_new_above(struct idr *idp, void *ptr, int starting_id, int *id)
