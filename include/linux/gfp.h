@@ -13,6 +13,10 @@ typedef unsigned int gfp_t;
 struct page *__alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
                                     struct zonelist *zonelist, void *nodemask);
 void __free_pages(struct page *page, unsigned int order);
+static inline void __free_page(struct page *page)
+{
+    __free_pages(page, 0);
+}
 
 void *alloc_pages(gfp_t gfp, unsigned int order);
 static inline void *alloc_page(gfp_t gfp)
