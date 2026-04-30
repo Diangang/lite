@@ -134,12 +134,12 @@
     }
   ],
   "current_patch": {
-    "id": "stage5-proc-status-pid-uses-task-pid-nr",
+    "id": "stage5-proc-stat-pid-uses-task-pid-nr",
     "status": "review_clean",
-    "summary": "Use Linux task_pid_nr helper in proc status.",
+    "summary": "Use Linux task_pid_nr helper in proc stat.",
     "files": [
       "fs/proc/array.c",
-      "Documentation/reviews/2026-04-30-stage5-proc-status-pid-uses-task-pid-nr.md",
+      "Documentation/reviews/2026-04-30-stage5-proc-stat-pid-uses-task-pid-nr.md",
       "state.json"
     ],
     "linux_reference": [
@@ -161,17 +161,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "19ca33f3f6289b5e803692c5c07495c22d699a69",
+    "pre_review_hash": "78de182563027623600f8dcbcb40538e62fdc9c8",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage5-proc-status-pid-uses-task-pid-nr.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-proc-stat-pid-uses-task-pid-nr.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- fs/proc/array.c state.json Documentation/reviews/2026-04-30-stage5-proc-status-pid-uses-task-pid-nr.md"
+      "git show -- fs/proc/array.c state.json Documentation/reviews/2026-04-30-stage5-proc-stat-pid-uses-task-pid-nr.md"
     ]
   },
   "next_patch": {

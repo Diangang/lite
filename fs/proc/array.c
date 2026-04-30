@@ -66,7 +66,7 @@ uint32_t task_dump_stat_pid(uint32_t pid, char *buf, uint32_t len)
         st = "D";
     else if (t->state == 3)
         st = "Z";
-    proc_buf_append_u32(buf, &off, len, t->pid);
+    proc_buf_append_u32(buf, &off, len, task_pid_nr(t));
     proc_buf_append(buf, &off, len, " (");
     proc_buf_append(buf, &off, len, name);
     proc_buf_append(buf, &off, len, ") ");
