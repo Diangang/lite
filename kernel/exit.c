@@ -105,7 +105,7 @@ void exit_notify(struct task_struct *task, int code, int reason, uint32_t info0,
 
     if (!task)
         return;
-    if (task->pid == 0)
+    if (is_idle_task(task))
         return;
     if (task->state == TASK_ZOMBIE)
         return;
