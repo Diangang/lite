@@ -89,10 +89,12 @@ int radix_tree_insert(struct radix_tree_root *root, unsigned long index, void *i
     return 0;
 }
 
-void *radix_tree_lookup(struct radix_tree_root *root, unsigned long index)
+void *__radix_tree_lookup(struct radix_tree_root *root, unsigned long index,
+                          struct radix_tree_node **nodep, void ***slotp)
 {
     struct radix_tree_node *node;
     unsigned int height;
+    void **slot;
 
     if (!root || !root->rnode || index > radix_tree_maxindex(root->height))
         return NULL;
@@ -108,31 +110,29 @@ void *radix_tree_lookup(struct radix_tree_root *root, unsigned long index)
         height--;
     }
 
-    return node->slots[index & RADIX_TREE_MAP_MASK];
+    slot = &node->slots[index & RADIX_TREE_MAP_MASK];
+    if (!*slot)
+        return NULL;
+
+    if (nodep)
+        *nodep = node;
+    if (slotp)
+        *slotp = slot;
+    return *slot;
+}
+
+void *radix_tree_lookup(struct radix_tree_root *root, unsigned long index)
+{
+    return __radix_tree_lookup(root, index, NULL, NULL);
 }
 
 void **radix_tree_lookup_slot(struct radix_tree_root *root, unsigned long index)
 {
-    struct radix_tree_node *node;
-    unsigned int height;
+    void **slot;
 
-    if (!root || !root->rnode || index > radix_tree_maxindex(root->height))
+    if (!__radix_tree_lookup(root, index, NULL, &slot))
         return NULL;
-
-    node = root->rnode;
-    height = root->height;
-    while (height > 1) {
-        unsigned int shift = (height - 1) * RADIX_TREE_MAP_SHIFT;
-        unsigned int offset = (index >> shift) & RADIX_TREE_MAP_MASK;
-        node = node->slots[offset];
-        if (!node)
-            return NULL;
-        height--;
-    }
-
-    if (!node->slots[index & RADIX_TREE_MAP_MASK])
-        return NULL;
-    return &node->slots[index & RADIX_TREE_MAP_MASK];
+    return slot;
 }
 
 void *radix_tree_delete_item(struct radix_tree_root *root, unsigned long index, void *item)

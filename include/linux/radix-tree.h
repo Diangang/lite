@@ -53,6 +53,8 @@ static inline void radix_tree_replace_slot(void **pslot, void *item)
 }
 
 int radix_tree_insert(struct radix_tree_root *root, unsigned long index, void *item);
+void *__radix_tree_lookup(struct radix_tree_root *root, unsigned long index,
+                          struct radix_tree_node **nodep, void ***slotp);
 void *radix_tree_lookup(struct radix_tree_root *root, unsigned long index);
 void **radix_tree_lookup_slot(struct radix_tree_root *root, unsigned long index);
 void *radix_tree_delete_item(struct radix_tree_root *root, unsigned long index, void *item);

@@ -122,9 +122,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-radix-tree-preload-api",
+    "id": "stage4-radix-tree-internal-lookup-api",
     "status": "review_clean",
-    "summary": "Add Linux's radix_tree_preload and radix_tree_maybe_preload API surface.",
+    "summary": "Add Linux's __radix_tree_lookup helper and route lookup APIs through it.",
     "files": [
       "include/linux/radix-tree.h",
       "lib/radix-tree.c",
@@ -149,17 +149,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "fa675b1982ec499447000a3a76c495d366ecef2c",
+    "pre_review_hash": "afc3dc7ec739660f1cf014492def0f870167a109",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-radix-tree-preload-api.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-radix-tree-internal-lookup-api.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/radix-tree.h lib/radix-tree.c state.json Documentation/reviews/2026-04-30-stage4-radix-tree-preload-api.md"
+      "git show -- include/linux/radix-tree.h lib/radix-tree.c state.json Documentation/reviews/2026-04-30-stage4-radix-tree-internal-lookup-api.md"
     ]
   },
   "next_patch": {
