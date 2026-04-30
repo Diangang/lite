@@ -73,6 +73,11 @@ enum {
     TASK_ZOMBIE = 3
 };
 
+static inline int is_idle_task(const struct task_struct *task)
+{
+    return task->pid == 0;
+}
+
 /*
  * Linux-shaped lifetime invariant for task release paths:
  * a task_struct must not be freed while still reachable from tasklist,
@@ -82,7 +87,7 @@ static inline int task_release_invariant_holds(struct task_struct *task)
 {
     if (!task)
         return 0;
-    if (task->pid == 0)
+    if (is_idle_task(task))
         return 0;
     if (task->state != TASK_ZOMBIE)
         return 0;
@@ -126,11 +131,6 @@ static inline uint32_t task_tgid_nr(struct task_struct *task)
 static inline int is_global_init(struct task_struct *task)
 {
     return task_tgid_nr(task) == 1;
-}
-
-static inline int is_idle_task(const struct task_struct *task)
-{
-    return task->pid == 0;
 }
 
 extern struct list_head task_list_head;
