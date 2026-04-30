@@ -111,6 +111,30 @@ void *radix_tree_lookup(struct radix_tree_root *root, unsigned long index)
     return node->slots[index & RADIX_TREE_MAP_MASK];
 }
 
+void **radix_tree_lookup_slot(struct radix_tree_root *root, unsigned long index)
+{
+    struct radix_tree_node *node;
+    unsigned int height;
+
+    if (!root || !root->rnode || index > radix_tree_maxindex(root->height))
+        return NULL;
+
+    node = root->rnode;
+    height = root->height;
+    while (height > 1) {
+        unsigned int shift = (height - 1) * RADIX_TREE_MAP_SHIFT;
+        unsigned int offset = (index >> shift) & RADIX_TREE_MAP_MASK;
+        node = node->slots[offset];
+        if (!node)
+            return NULL;
+        height--;
+    }
+
+    if (!node->slots[index & RADIX_TREE_MAP_MASK])
+        return NULL;
+    return &node->slots[index & RADIX_TREE_MAP_MASK];
+}
+
 void *radix_tree_delete(struct radix_tree_root *root, unsigned long index)
 {
     struct radix_tree_node *path[8];

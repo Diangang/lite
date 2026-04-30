@@ -122,17 +122,17 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-radix-tree-insert-eexist",
+    "id": "stage4-radix-tree-lookup-slot-api",
     "status": "review_clean",
-    "summary": "Return Linux's EEXIST from radix_tree_insert when the index is already occupied.",
+    "summary": "Add Linux's radix_tree_lookup_slot API for Lite's existing radix-tree subset.",
     "files": [
       "lib/radix-tree.c",
-      "include/linux/errno.h",
+      "include/linux/radix-tree.h",
       "state.json"
     ],
     "linux_reference": [
       "linux2.6/lib/radix-tree.c",
-      "linux2.6/include/uapi/asm-generic/errno-base.h"
+      "linux2.6/include/linux/radix-tree.h"
     ]
   },
   "validation": {
@@ -149,17 +149,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "79240d70a3abfeb4992597040107e37567364207",
+    "pre_review_hash": "0d1594051244dcb9d4a9c12fcdae601beb18bc2d",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-radix-tree-insert-eexist.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-radix-tree-lookup-slot-api.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- lib/radix-tree.c include/linux/errno.h state.json Documentation/reviews/2026-04-30-stage4-radix-tree-insert-eexist.md"
+      "git show -- lib/radix-tree.c include/linux/radix-tree.h state.json Documentation/reviews/2026-04-30-stage4-radix-tree-lookup-slot-api.md"
     ]
   },
   "next_patch": {
