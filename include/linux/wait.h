@@ -58,6 +58,9 @@ typedef int wait_bit_action_f(struct wait_bit_key *, int mode);
 #define __WAIT_BIT_KEY_INITIALIZER(word, bit) \
     { .flags = word, .bit_nr = bit }
 
+#define __WAIT_ATOMIC_T_KEY_INITIALIZER(p) \
+    { .flags = p, .bit_nr = WAIT_ATOMIC_T_BIT_NR }
+
 void __init_waitqueue_head(wait_queue_head_t *q);
 void init_waitqueue_entry(wait_queue_entry_t *entry, struct task_struct *task);
 int default_wake_function(wait_queue_t *wait, unsigned mode, int flags, void *key);
