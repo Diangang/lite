@@ -122,17 +122,15 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-idr-get-next-api",
+    "id": "stage4-idr-for-each-entry-macro",
     "status": "review_clean",
-    "summary": "Add Linux's idr_get_next API over Lite's radix-tree-backed IDR.",
+    "summary": "Add Linux's idr_for_each_entry macro using idr_get_next.",
     "files": [
       "include/linux/idr.h",
-      "lib/idr.c",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/idr.h",
-      "linux2.6/lib/idr.c"
+      "linux2.6/include/linux/idr.h"
     ]
   },
   "validation": {
@@ -149,17 +147,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "8b9b84e53b70a03a458a9d488257f9d62368e547",
+    "pre_review_hash": "c25e121789e188095726fdf41ab3c6a496cde844",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-idr-get-next-api.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-idr-for-each-entry-macro.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/idr.h lib/idr.c state.json Documentation/reviews/2026-04-30-stage4-idr-get-next-api.md"
+      "git show -- include/linux/idr.h state.json Documentation/reviews/2026-04-30-stage4-idr-for-each-entry-macro.md"
     ]
   },
   "next_patch": {

@@ -30,4 +30,7 @@ void idr_remove(struct idr *idp, int id);
 void idr_destroy(struct idr *idp);
 bool idr_is_empty(struct idr *idp);
 
+#define idr_for_each_entry(idp, entry, id) \
+    for (id = 0; ((entry) = idr_get_next(idp, &(id))) != NULL; ++id)
+
 #endif
