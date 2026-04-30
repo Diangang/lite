@@ -6,6 +6,7 @@
 void *vmalloc(unsigned long size);
 void *vzalloc(unsigned long size);
 void vfree(const void *addr);
+void vmalloc_sync_all(void);
 void *ioremap(uint32_t phys, uint32_t size);
 void iounmap(void *addr);
 void *kmap(uint32_t pfn);

@@ -178,6 +178,10 @@ void vfree(const void *addr)
     kfree(cur);
 }
 
+void vmalloc_sync_all(void)
+{
+}
+
 /* ioremap: Implement ioremap. */
 void *ioremap(uint32_t phys, uint32_t size)
 {
