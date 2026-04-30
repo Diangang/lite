@@ -101,6 +101,13 @@ static inline int task_release_invariant_holds(struct task_struct *task)
     return 1;
 }
 
+static inline uint32_t task_ppid_nr(const struct task_struct *task)
+{
+    if (!task || !task->real_parent)
+        return 0;
+    return task->real_parent->pid;
+}
+
 extern struct list_head task_list_head;
 /*
  * Linux mapping: Lite still exports `current` and `need_resched` as

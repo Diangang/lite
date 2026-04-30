@@ -124,20 +124,15 @@
     }
   ],
   "current_patch": {
-    "id": "stage5-task-real-parent-field",
+    "id": "stage5-task-ppid-nr-helper",
     "status": "review_clean",
-    "summary": "Add Linux task_struct real_parent tracking.",
+    "summary": "Add Linux task_ppid_nr helper.",
     "files": [
       "include/linux/sched.h",
-      "kernel/fork.c",
-      "kernel/exit.c",
-      "kernel/sched/core.c",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/sched.h",
-      "linux2.6/kernel/fork.c",
-      "linux2.6/kernel/exit.c"
+      "linux2.6/include/linux/sched.h"
     ]
   },
   "validation": {
@@ -154,17 +149,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "566cc33de6f08ac4ed3ad4a003654041783c8299",
+    "pre_review_hash": "31233d98d8380cc49798e782cd4910495f311284",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage5-task-real-parent-field.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-task-ppid-nr-helper.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/sched.h kernel/fork.c kernel/exit.c kernel/sched/core.c state.json Documentation/reviews/2026-04-30-stage5-task-real-parent-field.md"
+      "git show -- include/linux/sched.h state.json Documentation/reviews/2026-04-30-stage5-task-ppid-nr-helper.md"
     ]
   },
   "next_patch": {
