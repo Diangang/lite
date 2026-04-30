@@ -2,6 +2,7 @@
 #define LINUX_ERRNO_H
 
 #define ENOMEM 12
+#define ENOENT 2
 #define EINVAL 22
 #define EBUSY 16
 #define EEXIST 17

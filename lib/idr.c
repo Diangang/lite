@@ -1,4 +1,5 @@
 #include "linux/errno.h"
+#include "linux/err.h"
 #include "linux/idr.h"
 #include "linux/radix-tree.h"
 #include "linux/slab.h"
@@ -171,6 +172,23 @@ int idr_for_each(struct idr *idp, int (*fn)(int id, void *p, void *data), void *
     }
 
     return 0;
+}
+
+void *idr_replace(struct idr *idp, void *ptr, int id)
+{
+    void **slot;
+    void *old;
+
+    if (!idp || id < 0)
+        return ERR_PTR(-EINVAL);
+
+    slot = radix_tree_lookup_slot(&idp->root, (unsigned long)id);
+    if (!slot)
+        return ERR_PTR(-ENOENT);
+
+    old = *slot;
+    *slot = ptr;
+    return old;
 }
 
 void idr_remove(struct idr *idp, int id)
