@@ -122,17 +122,17 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-idr-alloc-enospc",
+    "id": "stage4-idr-alloc-cyclic-api",
     "status": "review_clean",
-    "summary": "Return Linux's ENOSPC from idr_alloc when the requested ID range is exhausted.",
+    "summary": "Add Linux's idr_alloc_cyclic API using Lite's existing IDR allocation subset.",
     "files": [
       "lib/idr.c",
-      "include/linux/errno.h",
+      "include/linux/idr.h",
       "state.json"
     ],
     "linux_reference": [
       "linux2.6/lib/idr.c",
-      "linux2.6/include/uapi/asm-generic/errno-base.h"
+      "linux2.6/include/linux/idr.h"
     ]
   },
   "validation": {
@@ -149,17 +149,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "24076c503a1007b0a170fdff23e9bd5c57e99bf9",
+    "pre_review_hash": "6aad9a5cd8e0485f5a540fe4acf3b34e773ed9e6",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-idr-alloc-enospc.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-idr-alloc-cyclic-api.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- lib/idr.c include/linux/errno.h state.json Documentation/reviews/2026-04-30-stage4-idr-alloc-enospc.md"
+      "git show -- lib/idr.c include/linux/idr.h state.json Documentation/reviews/2026-04-30-stage4-idr-alloc-cyclic-api.md"
     ]
   },
   "next_patch": {

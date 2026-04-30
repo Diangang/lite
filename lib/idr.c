@@ -43,6 +43,24 @@ int idr_alloc(struct idr *idp, void *ptr, int start, int end, gfp_t gfp_mask)
     return -ENOSPC;
 }
 
+int idr_alloc_cyclic(struct idr *idp, void *ptr, int start, int end, gfp_t gfp_mask)
+{
+    int id;
+    int next;
+
+    if (!idp)
+        return -EINVAL;
+
+    next = idp->cur > start ? idp->cur : start;
+    id = idr_alloc(idp, ptr, next, end, gfp_mask);
+    if (id == -ENOSPC)
+        id = idr_alloc(idp, ptr, start, end, gfp_mask);
+
+    if (id >= 0)
+        idp->cur = id + 1;
+    return id;
+}
+
 int idr_get_new_above(struct idr *idp, void *ptr, int starting_id, int *id)
 {
     int ret;
