@@ -163,7 +163,9 @@
     ]
   },
   "next_patch": {
-    "status": "ready",
-    "candidate": "After review_clean, continue Stage 4 by auditing the next narrow MM/lib primitive difference against linux2.6 radix-tree, idr, page_alloc, slab, vmalloc, or rmap references."
+    "status": "blocked_scope_expansion",
+    "candidate": "Next adjacent Stage 4 candidates require scope expansion: vmalloc_user/vmalloc_32_user need VM_USERMAP/remap semantics, radix-tree tag/iterator APIs need tag storage and iterator structure expansion, IDA needs a new ID allocator surface, and full vmap/vm_struct APIs need vmap area lifetime structures.",
+    "stop_condition": "scope_expansion",
+    "stop_reason": "No further audited narrow Stage 4 MM/lib primitive candidate is available without introducing broader Linux structures or policy beyond the current single-patch boundary."
   }
 }
