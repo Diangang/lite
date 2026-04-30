@@ -42,6 +42,11 @@ struct radix_tree_root {
         (root)->rnode = NULL;            \
     } while (0)
 
+static inline void *radix_tree_deref_slot(void **pslot)
+{
+    return *pslot;
+}
+
 int radix_tree_insert(struct radix_tree_root *root, unsigned long index, void *item);
 void *radix_tree_lookup(struct radix_tree_root *root, unsigned long index);
 void **radix_tree_lookup_slot(struct radix_tree_root *root, unsigned long index);

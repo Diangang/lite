@@ -122,16 +122,14 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-radix-tree-lookup-slot-api",
+    "id": "stage4-radix-tree-deref-slot-helper",
     "status": "review_clean",
-    "summary": "Add Linux's radix_tree_lookup_slot API for Lite's existing radix-tree subset.",
+    "summary": "Add Linux's radix_tree_deref_slot helper for Lite's non-RCU radix-tree subset.",
     "files": [
-      "lib/radix-tree.c",
       "include/linux/radix-tree.h",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/lib/radix-tree.c",
       "linux2.6/include/linux/radix-tree.h"
     ]
   },
@@ -149,17 +147,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "0d1594051244dcb9d4a9c12fcdae601beb18bc2d",
+    "pre_review_hash": "d53098c4d28be2bb6b773a845c98544ce044a694",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-radix-tree-lookup-slot-api.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-radix-tree-deref-slot-helper.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- lib/radix-tree.c include/linux/radix-tree.h state.json Documentation/reviews/2026-04-30-stage4-radix-tree-lookup-slot-api.md"
+      "git show -- include/linux/radix-tree.h state.json Documentation/reviews/2026-04-30-stage4-radix-tree-deref-slot-helper.md"
     ]
   },
   "next_patch": {
