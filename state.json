@@ -122,9 +122,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-slab-kfree-const",
+    "id": "stage4-slab-ksize-api",
     "status": "review_clean",
-    "summary": "Align kfree parameter with Linux's const void pointer prototype.",
+    "summary": "Add Linux's ksize API for actual slab allocation size.",
     "files": [
       "include/linux/slab.h",
       "mm/slab.c",
@@ -148,17 +148,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "593173934b8bd231a2fe7ed34406430aebebbb9f",
+    "pre_review_hash": "0a5c50dce18cec5f0c70054f9685f4fb4b60ada2",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-slab-kfree-const.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-slab-ksize-api.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/slab.h mm/slab.c state.json Documentation/reviews/2026-04-30-stage4-slab-kfree-const.md"
+      "git show -- include/linux/slab.h mm/slab.c state.json Documentation/reviews/2026-04-30-stage4-slab-ksize-api.md"
     ]
   },
   "next_patch": {

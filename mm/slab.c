@@ -226,6 +226,27 @@ void kfree(const void *ptr)
     free_pages(hdr->phys, hdr->order);
 }
 
+size_t ksize(const void *ptr)
+{
+    void *addr;
+    struct slab *s;
+    struct large_hdr *hdr;
+
+    if (!ptr)
+        return 0;
+
+    addr = (void *)ptr;
+    s = slab_from_ptr(addr);
+    if (s && s->cache)
+        return s->cache->size;
+
+    hdr = (struct large_hdr *)((uint32_t)addr - sizeof(struct large_hdr));
+    if (hdr->magic != LARGE_MAGIC)
+        return 0;
+
+    return (PAGE_SIZE << hdr->order) - sizeof(*hdr);
+}
+
 /* kheap_print_stats: Implement kheap print stats. */
 void kheap_print_stats(void)
 {
