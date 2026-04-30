@@ -49,9 +49,8 @@
 
 #ifndef atomic_cmpxchg_relaxed
 #define atomic_cmpxchg_relaxed atomic_cmpxchg
+#define atomic_cmpxchg_acquire atomic_cmpxchg
+#define atomic_cmpxchg_release atomic_cmpxchg
 #endif
-
-#define atomic_cmpxchg_acquire(v, o, n) atomic_cmpxchg((v), (o), (n))
-#define atomic_cmpxchg_release(v, o, n) atomic_cmpxchg((v), (o), (n))
 
 #endif

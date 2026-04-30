@@ -83,9 +83,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-atomic-xchg-fallback-group",
+    "id": "stage3-atomic-cmpxchg-fallback-group",
     "status": "review_clean",
-    "summary": "Align atomic_xchg fallback acquire/release group with Linux.",
+    "summary": "Align atomic_cmpxchg fallback acquire/release group with Linux.",
     "files": [
       "include/linux/atomic.h",
       "state.json"
@@ -108,17 +108,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "5a71a2e1b74156851e7c76380fd640c9b0aef044",
+    "pre_review_hash": "d46fe8b11e50049d33e4fe61ecb4191e9a46a5d2",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage3-atomic-xchg-fallback-group.md",
+    "record": "Documentation/reviews/2026-04-30-stage3-atomic-cmpxchg-fallback-group.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/atomic.h state.json Documentation/reviews/2026-04-30-stage3-atomic-xchg-fallback-group.md"
+      "git show -- include/linux/atomic.h state.json Documentation/reviews/2026-04-30-stage3-atomic-cmpxchg-fallback-group.md"
     ]
   },
   "next_patch": {
