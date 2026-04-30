@@ -176,7 +176,7 @@ int do_waitpid(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0,
                 if (out_reason) *out_reason = t->exit_state;
                 if (out_info0) *out_info0 = t->exit_info0;
                 if (out_info1) *out_info1 = t->exit_info1;
-                int waited = (int)t->pid;
+                int waited = (int)task_pid_nr(t);
                 release_task(t);
                 put_task_struct(t);
                 return waited;
