@@ -128,6 +128,11 @@ static inline int is_global_init(struct task_struct *task)
     return task_tgid_nr(task) == 1;
 }
 
+static inline int is_idle_task(const struct task_struct *task)
+{
+    return task->pid == 0;
+}
+
 extern struct list_head task_list_head;
 /*
  * Linux mapping: Lite still exports `current` and `need_resched` as

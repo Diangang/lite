@@ -134,16 +134,15 @@
     }
   ],
   "current_patch": {
-    "id": "stage5-wait-self-check-uses-task-pid-nr",
+    "id": "stage5-add-is-idle-task-helper",
     "status": "review_clean",
-    "summary": "Use Linux task pid helper for waitpid self-id guard.",
+    "summary": "Add Linux is_idle_task helper for idle task checks.",
     "files": [
-      "kernel/sched/wait.c",
-      "Documentation/reviews/2026-04-30-stage5-wait-self-check-uses-task-pid-nr.md",
+      "include/linux/sched.h",
+      "Documentation/reviews/2026-04-30-stage5-add-is-idle-task-helper.md",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/kernel/exit.c",
       "linux2.6/include/linux/sched.h"
     ]
   },
@@ -161,17 +160,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "62ab319af7ee145902376c65ac47294e92b6a94e",
+    "pre_review_hash": "a376c916d1b2653a053f14a4b38a18d0d45e9df5",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage5-wait-self-check-uses-task-pid-nr.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-add-is-idle-task-helper.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- kernel/sched/wait.c state.json Documentation/reviews/2026-04-30-stage5-wait-self-check-uses-task-pid-nr.md"
+      "git show -- include/linux/sched.h state.json Documentation/reviews/2026-04-30-stage5-add-is-idle-task-helper.md"
     ]
   },
   "next_patch": {
