@@ -281,7 +281,6 @@ static const syscall_dispatch_t sys_call_table[NR_syscalls] = {
 /* syscall_handler: Handle syscall. */
 static struct pt_regs *syscall_handler(struct pt_regs *regs)
 {
-    uint32_t irq_flags = irq_save();
     int from_user = (regs->cs & 0x3) == 0x3;
 
     uint32_t nr = regs->eax;
@@ -289,7 +288,6 @@ static struct pt_regs *syscall_handler(struct pt_regs *regs)
         regs = sys_call_table[nr](regs, from_user);
     else
         regs = sys_ni_syscall(regs, from_user);
-    irq_restore(irq_flags);
 
     if (task_should_resched())
         regs = task_schedule(regs);

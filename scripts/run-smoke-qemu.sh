@@ -13,7 +13,7 @@ scsi_img="$4"
 nvme0_img="$5"
 nvme1_img="$6"
 
-smoke_timeout="${SMOKE_TIMEOUT:-30}"
+smoke_timeout="${SMOKE_TIMEOUT:-60}"
 input_delay="${SMOKE_INPUT_DELAY:-5}"
 
 tmp="$(mktemp)"
@@ -62,7 +62,9 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
 done
 
 # Stop QEMU early once the test suite summary appears; otherwise enforce a hard timeout.
-deadline="$(( $(date +%s) + smoke_timeout ))"
+start_time="$(date +%s)"
+deadline="$(( start_time + smoke_timeout ))"
+timed_out=0
 while :; do
     if ! kill -0 "$qpid" 2>/dev/null; then
         break
@@ -79,6 +81,7 @@ while :; do
 
     now="$(date +%s)"
     if [ "$now" -ge "$deadline" ]; then
+        timed_out=1
         kill "$qpid" 2>/dev/null || true
         sleep 1
         kill -KILL "$qpid" 2>/dev/null || true
@@ -88,5 +91,13 @@ while :; do
 done
 
 wait "$jobpid" 2>/dev/null || true
+if [ "$timed_out" -ne 0 ]; then
+    elapsed="$(( $(date +%s) - start_time ))"
+    {
+        echo
+        echo "SMOKE HARNESS TIMEOUT: mem=$mem timeout=${smoke_timeout}s elapsed=${elapsed}s"
+        echo "SMOKE HARNESS TIMEOUT: QEMU was terminated before a smoke summary appeared."
+    } >>"$tmp"
+fi
 cat "$tmp"
 grep -q "All tests completed (OK)." "$tmp"

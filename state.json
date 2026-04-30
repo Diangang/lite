@@ -145,17 +145,19 @@
     }
   ],
   "current_patch": {
-    "id": "stage5-do-exit-reason-uses-is-idle-task",
+    "id": "stage5-syscall-int80-keeps-irqs-on",
     "status": "review_clean",
-    "summary": "Use Linux is_idle_task helper in do_exit_reason guard.",
+    "summary": "Keep 32-bit int80 syscall dispatch aligned with Linux IRQ-on trap-gate semantics and make smoke timeout diagnostics explicit.",
     "files": [
-      "kernel/exit.c",
-      "Documentation/reviews/2026-04-30-stage5-do-exit-reason-uses-is-idle-task.md",
+      "arch/x86/entry/syscall_32.c",
+      "Makefile",
+      "scripts/run-smoke-qemu.sh",
+      "Documentation/reviews/2026-04-30-stage5-syscall-int80-keeps-irqs-on.md",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/kernel/exit.c",
-      "linux2.6/include/linux/sched.h"
+      "linux2.6/arch/x86/entry/entry_32.S",
+      "linux2.6/arch/x86/entry/common.c"
     ]
   },
   "validation": {
@@ -166,23 +168,24 @@
     "commands": [
       "make -j4",
       "make smoke-128",
+      "make smoke-512",
       "make smoke-512"
     ]
   },
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "10758fe58d982bf660bb3895ef6e69d661f981c2",
+    "pre_review_hash": null,
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage5-do-exit-reason-uses-is-idle-task.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-syscall-int80-keeps-irqs-on.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- kernel/exit.c state.json Documentation/reviews/2026-04-30-stage5-do-exit-reason-uses-is-idle-task.md"
+      "git show -- arch/x86/entry/syscall_32.c Makefile scripts/run-smoke-qemu.sh state.json Documentation/reviews/2026-04-30-stage5-syscall-int80-keeps-irqs-on.md"
     ]
   },
   "next_patch": {

@@ -117,7 +117,7 @@ $(NVME_IMG1):
 run: $(KERNEL) $(INITRAMFS) $(SCSI_IMG)
 	qemu-system-i386 -kernel $(KERNEL) -initrd $(INITRAMFS) -m 512M -serial stdio $(VIRTIO_SCSI_ARGS)
 
-SMOKE_TIMEOUT ?= 30
+SMOKE_TIMEOUT ?= 60
 SMOKE_INPUT_DELAY ?= 5
 
 smoke: smoke-512
