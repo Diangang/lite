@@ -134,17 +134,17 @@
     }
   ],
   "current_patch": {
-    "id": "stage5-proc-stat-uses-get-task-comm",
+    "id": "stage5-proc-status-add-ppid",
     "status": "review_clean",
-    "summary": "Use Linux get_task_comm helper in proc stat.",
+    "summary": "Add Linux PPid field to proc status.",
     "files": [
       "fs/proc/array.c",
-      "Documentation/reviews/2026-04-30-stage5-proc-stat-uses-get-task-comm.md",
+      "Documentation/reviews/2026-04-30-stage5-proc-status-add-ppid.md",
       "state.json"
     ],
     "linux_reference": [
       "linux2.6/fs/proc/array.c",
-      "linux2.6/fs/exec.c"
+      "linux2.6/include/linux/sched.h"
     ]
   },
   "validation": {
@@ -161,17 +161,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "297b1e67f47768cc89fa640172b4f719e5f7205f",
+    "pre_review_hash": "ce1e93fc7540b3819947e88059ba7ac002555e92",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage5-proc-stat-uses-get-task-comm.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-proc-status-add-ppid.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- fs/proc/array.c state.json Documentation/reviews/2026-04-30-stage5-proc-stat-uses-get-task-comm.md"
+      "git show -- fs/proc/array.c state.json Documentation/reviews/2026-04-30-stage5-proc-status-add-ppid.md"
     ]
   },
   "next_patch": {
