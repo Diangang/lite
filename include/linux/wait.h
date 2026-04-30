@@ -55,6 +55,9 @@ typedef int wait_bit_action_f(struct wait_bit_key *, int mode);
 #define DECLARE_WAIT_QUEUE_HEAD(name) \
     wait_queue_head_t name = __WAIT_QUEUE_HEAD_INITIALIZER(name)
 
+#define __WAIT_BIT_KEY_INITIALIZER(word, bit) \
+    { .flags = word, .bit_nr = bit }
+
 void __init_waitqueue_head(wait_queue_head_t *q);
 void init_waitqueue_entry(wait_queue_entry_t *entry, struct task_struct *task);
 int default_wake_function(wait_queue_t *wait, unsigned mode, int flags, void *key);

@@ -83,22 +83,22 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-atomic-cmpxchg-relaxed-alias",
+    "id": "stage3-wait-bit-key-initializer",
     "status": "review_clean",
-    "summary": "Add Linux atomic_cmpxchg_relaxed alias.",
+    "summary": "Add Linux wait-bit key initializer macro.",
     "files": [
-      "include/linux/atomic.h",
+      "include/linux/wait.h",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/atomic.h"
+      "linux2.6/include/linux/wait.h"
     ]
   },
   "validation": {
     "make_j4": "passed",
     "smoke_128": "passed",
     "smoke_512": "passed",
-    "last_run": "2026-04-29",
+    "last_run": "2026-04-30",
     "commands": [
       "make -j4",
       "make smoke-128",
@@ -108,17 +108,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "4b4b1ead340041280ea8a4eb1ae6ab81193438c3",
+    "pre_review_hash": "054c44735f21920ba07faca6e66b6d10d763622b",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-29-stage3-atomic-cmpxchg-relaxed-alias.md",
+    "record": "Documentation/reviews/2026-04-30-stage3-wait-bit-key-initializer.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/wait.h state.json"
+      "git show -- include/linux/wait.h state.json Documentation/reviews/2026-04-30-stage3-wait-bit-key-initializer.md"
     ]
   },
   "next_patch": {
