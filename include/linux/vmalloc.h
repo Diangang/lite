@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-void *vmalloc(uint32_t size);
+void *vmalloc(unsigned long size);
 void vfree(void *addr);
 void *ioremap(uint32_t phys, uint32_t size);
 void iounmap(void *addr);

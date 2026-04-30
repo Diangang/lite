@@ -122,15 +122,17 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-gfp-free-page-helper",
+    "id": "stage4-vmalloc-size-type",
     "status": "review_clean",
-    "summary": "Add Linux's __free_page helper as a wrapper over __free_pages.",
+    "summary": "Align vmalloc size parameter type with Linux's unsigned long prototype.",
     "files": [
-      "include/linux/gfp.h",
+      "include/linux/vmalloc.h",
+      "mm/vmalloc.c",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/gfp.h"
+      "linux2.6/include/linux/vmalloc.h",
+      "linux2.6/mm/vmalloc.c"
     ]
   },
   "validation": {
@@ -147,17 +149,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "a63a993b418728d80359787d2d9aeeba9a26b53e",
+    "pre_review_hash": "35915a575d7c42fb61cd19614aa367d1d20c37a2",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-gfp-free-page-helper.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-vmalloc-size-type.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/gfp.h state.json Documentation/reviews/2026-04-30-stage4-gfp-free-page-helper.md"
+      "git show -- include/linux/vmalloc.h mm/vmalloc.c state.json Documentation/reviews/2026-04-30-stage4-vmalloc-size-type.md"
     ]
   },
   "next_patch": {

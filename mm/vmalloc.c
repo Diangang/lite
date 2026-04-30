@@ -116,7 +116,7 @@ static struct vmalloc_block *vmalloc_alloc_block(uint32_t size, uint32_t flags, 
 }
 
 /* vmalloc: Implement vmalloc. */
-void *vmalloc(uint32_t size)
+void *vmalloc(unsigned long size)
 {
     if (size == 0)
         return 0;
