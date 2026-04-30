@@ -83,15 +83,15 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-waitqueue-head-onstack",
+    "id": "stage3-spinlock-before-barrier",
     "status": "review_clean",
-    "summary": "Add Linux on-stack waitqueue head declaration macro.",
+    "summary": "Add Linux smp_mb__before_spinlock helper.",
     "files": [
-      "include/linux/wait.h",
+      "include/linux/spinlock.h",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/wait.h"
+      "linux2.6/include/linux/spinlock.h"
     ]
   },
   "validation": {
@@ -108,17 +108,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "2de1a134f1a73aef3ad58c311a15a71ce7577632",
+    "pre_review_hash": "c147d111f6146a30aadb5fffd8cb31b4ba2dc94c",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage3-waitqueue-head-onstack.md",
+    "record": "Documentation/reviews/2026-04-30-stage3-spinlock-before-barrier.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/wait.h state.json Documentation/reviews/2026-04-30-stage3-waitqueue-head-onstack.md"
+      "git show -- include/linux/spinlock.h state.json Documentation/reviews/2026-04-30-stage3-spinlock-before-barrier.md"
     ]
   },
   "next_patch": {

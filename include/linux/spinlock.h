@@ -20,6 +20,10 @@ typedef struct spinlock {
 #define DEFINE_SPINLOCK(name) spinlock_t name = __SPIN_LOCK_UNLOCKED(name)
 #define DEFINE_RAW_SPINLOCK(name) raw_spinlock_t name = __RAW_SPIN_LOCK_UNLOCKED(name)
 
+#ifndef smp_mb__before_spinlock
+#define smp_mb__before_spinlock() smp_wmb()
+#endif
+
 static inline void raw_spin_lock_init(raw_spinlock_t *lock)
 {
     if (!lock)
