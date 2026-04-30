@@ -135,6 +135,17 @@ void **radix_tree_lookup_slot(struct radix_tree_root *root, unsigned long index)
     return &node->slots[index & RADIX_TREE_MAP_MASK];
 }
 
+void *radix_tree_delete_item(struct radix_tree_root *root, unsigned long index, void *item)
+{
+    void *entry = radix_tree_lookup(root, index);
+
+    if (!entry)
+        return NULL;
+    if (item && entry != item)
+        return NULL;
+    return radix_tree_delete(root, index);
+}
+
 void *radix_tree_delete(struct radix_tree_root *root, unsigned long index)
 {
     struct radix_tree_node *path[8];

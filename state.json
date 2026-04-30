@@ -122,20 +122,17 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-mm-kstrdup-signature-placement",
+    "id": "stage4-radix-tree-delete-item-api",
     "status": "review_clean",
-    "summary": "Align kstrdup with Linux's gfp_t signature and mm/util.c placement.",
+    "summary": "Add Linux's radix_tree_delete_item API with expected-item matching.",
     "files": [
-      "fs/dcache.c",
-      "fs/namespace.c",
-      "include/linux/string.h",
-      "lib/string.c",
-      "mm/util.c",
+      "include/linux/radix-tree.h",
+      "lib/radix-tree.c",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/mm/util.c",
-      "linux2.6/include/linux/string.h"
+      "linux2.6/lib/radix-tree.c",
+      "linux2.6/include/linux/radix-tree.h"
     ]
   },
   "validation": {
@@ -152,17 +149,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "7165a4f2fd24e5b44cf6179ec718438f7ee6888b",
+    "pre_review_hash": "0201206575886e2a9c8e11fca699709ccf75f486",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-mm-kstrdup-signature-placement.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-radix-tree-delete-item-api.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- fs/dcache.c fs/namespace.c include/linux/string.h lib/string.c mm/util.c state.json Documentation/reviews/2026-04-30-stage4-mm-kstrdup-signature-placement.md"
+      "git show -- include/linux/radix-tree.h lib/radix-tree.c state.json Documentation/reviews/2026-04-30-stage4-radix-tree-delete-item-api.md"
     ]
   },
   "next_patch": {
