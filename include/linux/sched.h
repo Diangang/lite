@@ -157,7 +157,7 @@ void task_tick(void);
 void task_sleep(uint32_t ticks);
 void task_yield(void);
 void task_list(void);
-void wake_up_process(struct task_struct *task);
+int wake_up_process(struct task_struct *task);
 void signal_wake_up_state(struct task_struct *task, unsigned int state);
 /*
  * Linux mapping: core code should treat these helpers as the supported current

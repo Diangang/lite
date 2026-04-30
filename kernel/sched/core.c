@@ -209,21 +209,22 @@ void task_yield(void)
 }
 
 /* wake_up_process: Linux-like wakeup helper for sleeping/blocked tasks. */
-void wake_up_process(struct task_struct *task)
+int wake_up_process(struct task_struct *task)
 {
     if (!task)
-        return;
+        return 0;
     if (task->state == TASK_SLEEPING) {
         task->wake_jiffies = 0;
         task->state = TASK_RUNNABLE;
     } else if (task->state == TASK_BLOCKED) {
         task->state = TASK_RUNNABLE;
     } else {
-        return;
+        return 0;
     }
     if (task->time_slice <= 0)
         task->time_slice = TASK_TIMESLICE_TICKS;
     task_set_need_resched();
+    return 1;
 }
 
 /* task_should_resched: Implement task should resched. */

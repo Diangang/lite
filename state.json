@@ -18,7 +18,7 @@
     "last_exit": null,
     "last_round": 1,
     "last_log": "logs/agent-runs/round-20260430-191245-1.log",
-    "heartbeat": "2026-04-30T11:15:39Z",
+    "heartbeat": "2026-04-30T11:19:44Z",
     "budgets": {
       "max_rounds": 0,
       "max_failures": 3,
@@ -187,18 +187,18 @@
     }
   ],
   "current_patch": {
-    "id": "stage5-signal-wake-up-helper-api",
+    "id": "stage5-wake-up-process-return-int",
     "status": "review_clean",
-    "summary": "Align Lite signal wake helper API with Linux signal_wake_up_state/signal_wake_up naming.",
+    "summary": "Align Lite wake_up_process API return type with Linux int success reporting.",
     "files": [
-      "kernel/signal.c",
       "include/linux/sched.h",
-      "Documentation/reviews/2026-04-30-stage5-signal-wake-up-helper-api.md",
+      "kernel/sched/core.c",
+      "Documentation/reviews/2026-04-30-stage5-wake-up-process-return-int.md",
       "state.json"
     ],
     "linux_reference": [
       "linux2.6/include/linux/sched.h",
-      "linux2.6/kernel/signal.c"
+      "linux2.6/kernel/sched/core.c"
     ]
   },
   "validation": {
@@ -215,17 +215,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "4735e69daef654e7a8e998a2bab17d9cee571948",
+    "pre_review_hash": "e9c48c5da20b2b4d9ac40d05aaa2acc322f9b442",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage5-signal-wake-up-helper-api.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-wake-up-process-return-int.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- kernel/signal.c include/linux/sched.h state.json Documentation/reviews/2026-04-30-stage5-signal-wake-up-helper-api.md"
+      "git show -- include/linux/sched.h kernel/sched/core.c state.json Documentation/reviews/2026-04-30-stage5-wake-up-process-return-int.md"
     ]
   },
   "next_patch": {
