@@ -49,4 +49,11 @@ uint32_t sys_brk(uint32_t new_end);
 
 int vma_allows(struct mm_struct *mm, uint32_t addr, int is_write, int is_exec);
 
+static inline int is_vmalloc_addr(const void *x)
+{
+    uint32_t addr = (uint32_t)x;
+
+    return addr >= memlayout_vmalloc_start() && addr < memlayout_vmalloc_end();
+}
+
 #endif
