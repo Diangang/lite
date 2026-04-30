@@ -43,13 +43,7 @@ int default_wake_function(wait_queue_t *wait, unsigned mode, int flags, void *ke
     if (!task)
         return 0;
     task->waitq = NULL;
-    if (task->state == TASK_BLOCKED) {
-        task->state = TASK_RUNNABLE;
-        if (task->time_slice <= 0)
-            task->time_slice = TASK_TIMESLICE_TICKS;
-        return 1;
-    }
-    return 0;
+    return wake_up_process(task);
 }
 
 void add_wait_queue(wait_queue_head_t *q, wait_queue_t *wait)

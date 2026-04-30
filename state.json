@@ -18,7 +18,7 @@
     "last_exit": null,
     "last_round": 1,
     "last_log": "logs/agent-runs/round-20260430-191245-1.log",
-    "heartbeat": "2026-04-30T11:19:44Z",
+    "heartbeat": "2026-04-30T11:23:08Z",
     "budgets": {
       "max_rounds": 0,
       "max_failures": 3,
@@ -187,17 +187,15 @@
     }
   ],
   "current_patch": {
-    "id": "stage5-wake-up-process-return-int",
+    "id": "stage5-default-wake-function-uses-wake-up-process",
     "status": "review_clean",
-    "summary": "Align Lite wake_up_process API return type with Linux int success reporting.",
+    "summary": "Align Lite default_wake_function with Linux scheduler wake delegation.",
     "files": [
-      "include/linux/sched.h",
-      "kernel/sched/core.c",
-      "Documentation/reviews/2026-04-30-stage5-wake-up-process-return-int.md",
+      "kernel/sched/wait.c",
+      "Documentation/reviews/2026-04-30-stage5-default-wake-function-uses-wake-up-process.md",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/sched.h",
       "linux2.6/kernel/sched/core.c"
     ]
   },
@@ -215,17 +213,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "e9c48c5da20b2b4d9ac40d05aaa2acc322f9b442",
+    "pre_review_hash": "70e1b8d2a412e0e2abb6ff9f3f1afc87e799e443",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage5-wake-up-process-return-int.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-default-wake-function-uses-wake-up-process.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/sched.h kernel/sched/core.c state.json Documentation/reviews/2026-04-30-stage5-wake-up-process-return-int.md"
+      "git show -- kernel/sched/wait.c state.json Documentation/reviews/2026-04-30-stage5-default-wake-function-uses-wake-up-process.md"
     ]
   },
   "next_patch": {
