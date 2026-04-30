@@ -122,17 +122,15 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-gfp-zero-free-pages",
+    "id": "stage4-gfp-get-free-page-helper",
     "status": "review_clean",
-    "summary": "Make Linux's __GFP_ZERO flag drive __get_free_pages zeroing.",
+    "summary": "Add Linux's __get_free_page helper as a wrapper over __get_free_pages.",
     "files": [
       "include/linux/gfp.h",
-      "mm/page_alloc.c",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/gfp.h",
-      "linux2.6/mm/page_alloc.c"
+      "linux2.6/include/linux/gfp.h"
     ]
   },
   "validation": {
@@ -149,17 +147,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "523c7b226eb4be22b060f16f3edb855267c07831",
+    "pre_review_hash": "b1395870c2d966b964bfc2eb72bfe0a5ba7ef466",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-gfp-zero-free-pages.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-gfp-get-free-page-helper.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/gfp.h mm/page_alloc.c state.json Documentation/reviews/2026-04-30-stage4-gfp-zero-free-pages.md"
+      "git show -- include/linux/gfp.h state.json Documentation/reviews/2026-04-30-stage4-gfp-get-free-page-helper.md"
     ]
   },
   "next_patch": {

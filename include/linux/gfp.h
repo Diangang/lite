@@ -20,6 +20,11 @@ static inline void *alloc_page(gfp_t gfp)
     return alloc_pages(gfp, 0);
 }
 unsigned long __get_free_pages(gfp_t gfp, unsigned int order);
+static inline unsigned long __get_free_page(gfp_t gfp)
+{
+    return __get_free_pages(gfp, 0);
+}
+
 unsigned long get_zeroed_page(gfp_t gfp);
 
 void free_pages(unsigned long addr, unsigned int order);
