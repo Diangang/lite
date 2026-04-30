@@ -162,7 +162,7 @@ void do_exit(int code)
     struct task_struct *task = task_current();
     if (!task)
         return;
-    if (task->pid == 0)
+    if (is_idle_task(task))
         return;
     do_exit_reason(code, TASK_EXIT_NORMAL, 0, 0);
 }
