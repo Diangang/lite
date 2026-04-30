@@ -25,6 +25,7 @@ int idr_alloc_cyclic(struct idr *idp, void *ptr, int start, int end, gfp_t gfp_m
 int idr_get_new(struct idr *idp, void *ptr, int *id);
 int idr_get_new_above(struct idr *idp, void *ptr, int starting_id, int *id);
 void *idr_find(struct idr *idp, int id);
+void *idr_get_next(struct idr *idp, int *nextidp);
 void idr_remove(struct idr *idp, int id);
 void idr_destroy(struct idr *idp);
 bool idr_is_empty(struct idr *idp);

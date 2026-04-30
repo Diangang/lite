@@ -122,17 +122,17 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-vfree-const-addr",
+    "id": "stage4-idr-get-next-api",
     "status": "review_clean",
-    "summary": "Align vfree address parameter with Linux's const void pointer prototype.",
+    "summary": "Add Linux's idr_get_next API over Lite's radix-tree-backed IDR.",
     "files": [
-      "include/linux/vmalloc.h",
-      "mm/vmalloc.c",
+      "include/linux/idr.h",
+      "lib/idr.c",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/vmalloc.h",
-      "linux2.6/mm/vmalloc.c"
+      "linux2.6/include/linux/idr.h",
+      "linux2.6/lib/idr.c"
     ]
   },
   "validation": {
@@ -149,17 +149,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "6669c7979d6238cdca7d7f8e9e7bf41efb377301",
+    "pre_review_hash": "8b9b84e53b70a03a458a9d488257f9d62368e547",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-vfree-const-addr.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-idr-get-next-api.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/vmalloc.h mm/vmalloc.c state.json Documentation/reviews/2026-04-30-stage4-vfree-const-addr.md"
+      "git show -- include/linux/idr.h lib/idr.c state.json Documentation/reviews/2026-04-30-stage4-idr-get-next-api.md"
     ]
   },
   "next_patch": {

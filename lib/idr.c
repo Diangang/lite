@@ -101,6 +101,58 @@ void *idr_find(struct idr *idp, int id)
     return radix_tree_lookup(&idp->root, (unsigned long)id);
 }
 
+static void *idr_get_next_node(struct radix_tree_node *node, unsigned int height,
+                               unsigned long base, unsigned long start,
+                               int *nextidp)
+{
+    unsigned int offset;
+
+    if (!node)
+        return NULL;
+
+    if (height == 1) {
+        unsigned int first = start > base ? (unsigned int)(start - base) : 0;
+        for (offset = first; offset < RADIX_TREE_MAP_SIZE; offset++) {
+            unsigned long id = base + offset;
+            if (id > INT_MAX)
+                return NULL;
+            if (node->slots[offset]) {
+                *nextidp = (int)id;
+                return node->slots[offset];
+            }
+        }
+        return NULL;
+    }
+
+    for (offset = 0; offset < RADIX_TREE_MAP_SIZE; offset++) {
+        unsigned long span = 1UL << ((height - 1) * RADIX_TREE_MAP_SHIFT);
+        unsigned long child_base = base + offset * span;
+
+        if (child_base + span - 1 < start)
+            continue;
+        if (child_base > INT_MAX)
+            return NULL;
+        if (node->slots[offset]) {
+            void *ptr = idr_get_next_node(node->slots[offset], height - 1,
+                                          child_base, start, nextidp);
+            if (ptr)
+                return ptr;
+        }
+    }
+
+    return NULL;
+}
+
+void *idr_get_next(struct idr *idp, int *nextidp)
+{
+    if (!idp || !nextidp)
+        return NULL;
+    if (*nextidp < 0)
+        return NULL;
+    return idr_get_next_node(idp->root.rnode, idp->root.height, 0,
+                             (unsigned long)*nextidp, nextidp);
+}
+
 void idr_remove(struct idr *idp, int id)
 {
     if (!idp || id < 0)
