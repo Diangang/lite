@@ -157,7 +157,7 @@ int sys_fork(struct pt_regs *regs)
     list_add_tail(&task->tasks, &task_list_head);
     tasklist_unlock(flags);
 
-    return (int)task->pid;
+    return (int)task_pid_nr(task);
 }
 
 /* task_create_internal: Implement task create internal. */
