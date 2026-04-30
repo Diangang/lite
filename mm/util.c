@@ -1,6 +1,22 @@
 #include "linux/slab.h"
 #include "linux/string.h"
 
+char *kstrdup(const char *s, gfp_t gfp)
+{
+    size_t len;
+    char *buf;
+
+    if (!s)
+        return NULL;
+
+    (void)gfp;
+    len = strlen(s) + 1;
+    buf = kmalloc(len);
+    if (buf)
+        memcpy(buf, s, len);
+    return buf;
+}
+
 char *kstrndup(const char *s, size_t max, gfp_t gfp)
 {
     size_t len = 0;

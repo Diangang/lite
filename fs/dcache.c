@@ -79,7 +79,7 @@ struct dentry *d_alloc(struct dentry *parent, const char *name)
     if (!d)
         return NULL;
     memset(d, 0, sizeof(*d));
-    d->name = name ? kstrdup(name) : NULL;
+    d->name = name ? kstrdup(name, GFP_KERNEL) : NULL;
     d->parent = parent;
     d->refcount = 1;
     d->d_flags = 0;

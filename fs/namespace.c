@@ -102,7 +102,7 @@ int vfs_mount(const char *path, struct super_block *sb)
     if (!m)
         panic("mount path failed for alloc.");
 
-    m->path = kstrdup(path);
+    m->path = kstrdup(path, GFP_KERNEL);
     m->sb = sb;
 
     m->root = mount_root;

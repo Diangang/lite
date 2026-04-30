@@ -140,20 +140,7 @@ void itoa(int num, int base, char *buf)
     }
 }
 
-char *kstrdup(const char *s)
-{
-    if (!s)
-        return NULL;
-    size_t len = strlen(s) + 1;
-    char *dup = (char *)kmalloc(len);
-    if (!dup)
-        return NULL;
-    memcpy(dup, s, len);
-    return dup;
-}
-
 char *strdup(const char *s)
 {
-    return kstrdup(s);
+    return kstrdup(s, GFP_KERNEL);
 }
-
