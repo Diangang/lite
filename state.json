@@ -14,7 +14,7 @@
       "Documentation/Linux26-Roadmap.md",
       "Documentation/reviews/"
     ],
-    "startup_instruction": "使用 linux-alignment skill。读取 state.json 和 Documentation/Linux26-Roadmap.md，按 state.json 从 current_patch.status=review_clean 继续长期 Linux2.6 alignment。严格遵守 boundaries.stop_policy：一直循环执行 next_patch，跨 stage 也继续；每轮选择一个窄差异点，先读 Linux2.6 参考和 Lite 当前实现，写 Linux Alignment Report/mapping ledger，修改代码，运行 make -j4、make smoke-128、make smoke-512，更新 state.json 和 review 文档，commit，review，amend 到 review_clean，然后继续。只要没有编译、测试、review、roadmap 路由、Linux 对齐或破坏性操作错误，就继续跑；不要因为 stage transition、clean review checkpoint、successful validation、当前 stage 的窄项耗尽或需要进入下一 roadmap stage 而停止。只有 boundaries.stop_policy.allowed_stop_conditions 中的真实错误条件命中时才停止；如果停止，输出命中的具体停止条件。",
+    "startup_instruction": "使用 linux-alignment skill。读取 state.json 和 Documentation/Linux26-Roadmap.md，按 state.json 从 current_patch.status=review_clean 继续长期 Linux2.6 alignment。严格遵守 boundaries.stop_policy 和 execution_loop：一直循环执行 next_patch，跨 stage 也继续；每轮选择一个窄差异点，先读 Linux2.6 参考和 Lite 当前实现，写 Linux Alignment Report/mapping ledger，修改代码，运行 make -j4、make smoke-128、make smoke-512，更新 state.json 和 review 文档，commit，review，amend 到 review_clean，然后必须立即启动下一轮 patch 选择。只要没有编译、测试、review、roadmap 路由、Linux 对齐或破坏性操作错误，就继续跑；不要因为 stage transition、clean review checkpoint、successful validation、当前 stage 的窄项耗尽、需要进入下一 roadmap stage、final answer pressure 或模型回合边界而停止。只有 boundaries.stop_policy.allowed_stop_conditions 中的真实错误条件命中时才停止；如果停止，输出命中的具体停止条件。若没有命中 allowed_stop_conditions，却准备发送 final answer 或停止工作，这是 state violation，必须改为继续执行下一轮。",
     "update_required_when": [
       "active_stage changes",
       "current_patch changes",
@@ -36,11 +36,14 @@
       "do_not_stop_for": [
         "stage_transition",
         "turn_boundary",
+        "model_final_answer",
         "clean_review_checkpoint",
         "successful_validation",
         "lack_of_summary_need",
         "current_stage_exhausted",
-        "roadmap_stage_scope_change"
+        "roadmap_stage_scope_change",
+        "completed_commit",
+        "clean_worktree"
       ],
       "allowed_stop_conditions": [
         "route_change_outside_roadmap",
@@ -51,6 +54,13 @@
         "destructive_operation"
       ],
       "on_stop": "State the exact allowed stop condition that was hit. If no allowed stop condition was hit and the latest build, smoke tests, and review are clean, continue the loop instead of stopping."
+    },
+    "execution_loop": {
+      "type": "mandatory_continuation",
+      "after_review_clean": "Do not summarize and stop. Immediately select the next narrow roadmap patch and begin Linux-reference-first analysis.",
+      "before_final_answer_gate": "Before sending any final answer, check boundaries.stop_policy.allowed_stop_conditions. If none was hit, do not send final; continue the next patch loop.",
+      "clean_checkpoint_action": "A clean commit, clean review, successful validation, and clean worktree are only checkpoints for recovery; they are not completion conditions.",
+      "violation_note": "Stopping after a clean checkpoint without an allowed stop condition is a process error and violates this state file."
     },
     "requires_linux_reference_first": true,
     "single_patch_scope": true,
