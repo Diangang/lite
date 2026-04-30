@@ -56,7 +56,6 @@
     "single_patch_scope": true,
     "ask_before": [
       "route_change_outside_roadmap",
-      "scope_expansion",
       "skipping_required_tests",
       "new_non_linux_abstraction",
       "destructive_operation"
