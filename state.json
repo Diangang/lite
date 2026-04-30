@@ -122,9 +122,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-vmalloc-size-type",
+    "id": "stage4-vfree-const-addr",
     "status": "review_clean",
-    "summary": "Align vmalloc size parameter type with Linux's unsigned long prototype.",
+    "summary": "Align vfree address parameter with Linux's const void pointer prototype.",
     "files": [
       "include/linux/vmalloc.h",
       "mm/vmalloc.c",
@@ -149,17 +149,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "35915a575d7c42fb61cd19614aa367d1d20c37a2",
+    "pre_review_hash": "6669c7979d6238cdca7d7f8e9e7bf41efb377301",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-vmalloc-size-type.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-vfree-const-addr.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/vmalloc.h mm/vmalloc.c state.json Documentation/reviews/2026-04-30-stage4-vmalloc-size-type.md"
+      "git show -- include/linux/vmalloc.h mm/vmalloc.c state.json Documentation/reviews/2026-04-30-stage4-vfree-const-addr.md"
     ]
   },
   "next_patch": {

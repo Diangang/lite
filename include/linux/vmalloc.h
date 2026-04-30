@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 void *vmalloc(unsigned long size);
-void vfree(void *addr);
+void vfree(const void *addr);
 void *ioremap(uint32_t phys, uint32_t size);
 void iounmap(void *addr);
 void *kmap(uint32_t pfn);

@@ -153,7 +153,7 @@ void *vmalloc(unsigned long size)
 }
 
 /* vfree: Implement vfree. */
-void vfree(void *addr)
+void vfree(const void *addr)
 {
     if (!addr)
         return;
