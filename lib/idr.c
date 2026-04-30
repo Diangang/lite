@@ -153,6 +153,26 @@ void *idr_get_next(struct idr *idp, int *nextidp)
                              (unsigned long)*nextidp, nextidp);
 }
 
+int idr_for_each(struct idr *idp, int (*fn)(int id, void *p, void *data), void *data)
+{
+    int id = 0;
+    void *ptr;
+
+    if (!idp || !fn)
+        return 0;
+
+    while ((ptr = idr_get_next(idp, &id)) != NULL) {
+        int ret = fn(id, ptr, data);
+        if (ret)
+            return ret;
+        if (id == INT_MAX)
+            break;
+        id++;
+    }
+
+    return 0;
+}
+
 void idr_remove(struct idr *idp, int id)
 {
     if (!idp || id < 0)
