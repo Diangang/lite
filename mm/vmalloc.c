@@ -152,6 +152,14 @@ void *vmalloc(unsigned long size)
     return (void*)vaddr;
 }
 
+void *vzalloc(unsigned long size)
+{
+    void *addr = vmalloc(size);
+    if (addr)
+        memset(addr, 0, size);
+    return addr;
+}
+
 /* vfree: Implement vfree. */
 void vfree(const void *addr)
 {
