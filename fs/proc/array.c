@@ -55,7 +55,10 @@ uint32_t task_dump_stat_pid(uint32_t pid, char *buf, uint32_t len)
         return 0;
 
     uint32_t off = 0;
-    const char *name = t->comm[0] ? t->comm : "-";
+    char name_buf[sizeof(t->comm)];
+    const char *name = get_task_comm(name_buf, t);
+    if (!name[0])
+        name = "-";
     const char *st = "R";
     if (t->state == 1)
         st = "S";

@@ -134,12 +134,12 @@
     }
   ],
   "current_patch": {
-    "id": "stage5-proc-status-uses-get-task-comm",
+    "id": "stage5-proc-stat-uses-get-task-comm",
     "status": "review_clean",
-    "summary": "Use Linux get_task_comm helper in proc status.",
+    "summary": "Use Linux get_task_comm helper in proc stat.",
     "files": [
       "fs/proc/array.c",
-      "Documentation/reviews/2026-04-30-stage5-proc-status-uses-get-task-comm.md",
+      "Documentation/reviews/2026-04-30-stage5-proc-stat-uses-get-task-comm.md",
       "state.json"
     ],
     "linux_reference": [
@@ -161,17 +161,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "9b463c8261d61c26889376c7428dfcc83b17f6b5",
+    "pre_review_hash": "297b1e67f47768cc89fa640172b4f719e5f7205f",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage5-proc-status-uses-get-task-comm.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-proc-stat-uses-get-task-comm.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- fs/proc/array.c state.json Documentation/reviews/2026-04-30-stage5-proc-status-uses-get-task-comm.md"
+      "git show -- fs/proc/array.c state.json Documentation/reviews/2026-04-30-stage5-proc-stat-uses-get-task-comm.md"
     ]
   },
   "next_patch": {
