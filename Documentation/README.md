@@ -20,6 +20,11 @@ update the documentation before using it as a planning base.
   - Current forward plan for Linux 2.6 alignment.
   - Use this to decide the next implementation stage and scope boundaries.
 
+- `Codex-Supervisor.md`
+  - Long-running Codex supervisor design and operating instructions.
+  - Use this when running Codex as restartable worker rounds instead of a
+    single long-lived session.
+
 - `Directory-Structure.md`
   - Current source tree map.
   - Use this to find subsystem ownership and key files.

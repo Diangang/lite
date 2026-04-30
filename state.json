@@ -3,8 +3,50 @@
   "task": "linux26-alignment-long-run",
   "mode": "recoverable-long-task",
   "supervisor": {
-    "enabled": false,
-    "note": "No external supervisor is running in this session; state.json is the recovery boundary."
+    "enabled": true,
+    "script": "scripts/codex-supervisor.sh",
+    "prompt": "Documentation/codex-supervisor-prompt.md",
+    "log_dir": "logs/agent-runs",
+    "note": "External supervisor can restart Codex rounds; state.json and git commits are the recovery boundary."
+  },
+  "run_control": {
+    "status": "running",
+    "phase": "ready_for_next_round",
+    "active_step": "supervisor ready",
+    "stop_condition": null,
+    "last_error": null,
+    "last_exit": null,
+    "last_round": 0,
+    "last_log": null,
+    "heartbeat": null,
+    "budgets": {
+      "max_rounds": 0,
+      "max_failures": 3,
+      "failures": 0
+    },
+    "allowed_stop_conditions": [
+      "validation_failure",
+      "review_findings",
+      "route_change_outside_roadmap",
+      "skipping_required_tests",
+      "new_non_linux_abstraction",
+      "destructive_operation",
+      "dirty_worktree_conflict",
+      "no_safe_next_patch",
+      "needs_human_decision",
+      "budget_exhausted",
+      "codex_process_failed"
+    ],
+    "non_stop_checkpoints": [
+      "clean_commit",
+      "successful_validation",
+      "clean_review",
+      "stage_transition",
+      "clean_worktree",
+      "codex_final_response",
+      "context_compaction",
+      "turn_boundary"
+    ]
   },
   "resume": {
     "status": "ready",
