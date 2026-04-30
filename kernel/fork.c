@@ -93,6 +93,7 @@ int sys_fork(struct pt_regs *regs)
 
     atomic_set(&task->usage, 1);
     task->pid = ++last_pid;
+    task->real_parent = parent;
     task->parent = parent;
     task->thread.regs = copy_thread(stack, NULL, regs);
     if (!task->thread.regs) {
@@ -154,6 +155,7 @@ static int task_create_internal(void (*entry)(void), const char *program)
 
     atomic_set(&task->usage, 1);
     task->pid = ++last_pid;
+    task->real_parent = parent;
     task->parent = parent;
     task->thread.regs = copy_thread(stack, entry, NULL);
     task->thread.sp0 = (uint32_t*)((uint32_t)stack + THREAD_SIZE);

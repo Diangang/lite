@@ -124,17 +124,20 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-mm-vmalloc-to-page-api",
+    "id": "stage5-task-real-parent-field",
     "status": "review_clean",
-    "summary": "Add Linux's vmalloc_to_page and vmalloc_to_pfn helpers.",
+    "summary": "Add Linux task_struct real_parent tracking.",
     "files": [
-      "include/linux/mm.h",
-      "mm/vmalloc.c",
+      "include/linux/sched.h",
+      "kernel/fork.c",
+      "kernel/exit.c",
+      "kernel/sched/core.c",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/mm.h",
-      "linux2.6/mm/vmalloc.c"
+      "linux2.6/include/linux/sched.h",
+      "linux2.6/kernel/fork.c",
+      "linux2.6/kernel/exit.c"
     ]
   },
   "validation": {
@@ -151,21 +154,21 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "fe2f64e31e2d778c9bb9e7d4487b38bb72dead46",
+    "pre_review_hash": "566cc33de6f08ac4ed3ad4a003654041783c8299",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-mm-vmalloc-to-page-api.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-task-real-parent-field.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/mm.h mm/vmalloc.c state.json Documentation/reviews/2026-04-30-stage4-mm-vmalloc-to-page-api.md"
+      "git show -- include/linux/sched.h kernel/fork.c kernel/exit.c kernel/sched/core.c state.json Documentation/reviews/2026-04-30-stage5-task-real-parent-field.md"
     ]
   },
   "next_patch": {
     "status": "ready",
-    "candidate": "Continue automatically in Stage 5 by auditing the next narrow kernel core difference against linux2.6 kernel/sched.c, kernel/fork.c, kernel/exit.c, or kernel/signal.c references. Do not stop solely because Stage 4 narrow MM/lib candidates are exhausted."
+    "candidate": "Continue Stage 5 by auditing the next narrow task lifetime, wait, or signal difference against linux2.6 kernel/sched.c, kernel/fork.c, kernel/exit.c, or kernel/signal.c references."
   }
 }

@@ -53,6 +53,7 @@ static int reparent_children(struct task_struct *parent, struct task_struct *rea
     struct task_struct *n;
     list_for_each_entry_safe(t, n, &parent->children, sibling) {
         list_del(&t->sibling);
+        t->real_parent = reaper;
         t->parent = reaper;
         list_add_tail(&t->sibling, &reaper->children);
         if (t->state == TASK_ZOMBIE)
@@ -148,6 +149,7 @@ void release_task(struct task_struct *task)
         list_del_init(&task->sibling);
     if (!list_empty(&task->tasks))
         list_del_init(&task->tasks);
+    task->real_parent = NULL;
     task->parent = NULL;
     tasklist_unlock(flags);
 

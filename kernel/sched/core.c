@@ -306,6 +306,7 @@ static void init_task(void)
 
     atomic_set(&task->usage, 1);
     task->pid = 0;
+    task->real_parent = NULL;
     task->parent = NULL;
     task->thread.regs = copy_thread(stack, task_idle, NULL);
     task->thread.sp0 = (uint32_t*)((uint32_t)stack + THREAD_SIZE);

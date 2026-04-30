@@ -35,6 +35,8 @@ void sys_exit(int code);
 struct task_struct {
     atomic_t usage;
     uint32_t pid;
+    /* Linux mapping: natural parent process; parent is SIGCHLD/wait recipient. */
+    struct task_struct *real_parent;
     struct task_struct *parent;
     struct thread_struct thread;
     struct list_head tasks;
@@ -83,6 +85,8 @@ static inline int task_release_invariant_holds(struct task_struct *task)
     if (task->pid == 0)
         return 0;
     if (task->state != TASK_ZOMBIE)
+        return 0;
+    if (task->real_parent)
         return 0;
     if (task->parent)
         return 0;
