@@ -124,12 +124,12 @@
     }
   ],
   "current_patch": {
-    "id": "stage5-task-tgid-nr-helper",
+    "id": "stage5-task-pid-nr-helper",
     "status": "review_clean",
-    "summary": "Add Linux task_tgid_nr helper.",
+    "summary": "Add Linux task_pid_nr helper.",
     "files": [
       "include/linux/sched.h",
-      "Documentation/reviews/2026-04-30-stage5-task-tgid-nr-helper.md",
+      "Documentation/reviews/2026-04-30-stage5-task-pid-nr-helper.md",
       "state.json"
     ],
     "linux_reference": [
@@ -150,17 +150,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "f58989e8731ef4dc27beb2d97d9a75dd7753aaf4",
+    "pre_review_hash": "c20aa9a3d79326b2b1aa03b5c02dc016ec93c2f6",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage5-task-tgid-nr-helper.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-task-pid-nr-helper.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/sched.h state.json Documentation/reviews/2026-04-30-stage5-task-tgid-nr-helper.md"
+      "git show -- include/linux/sched.h state.json Documentation/reviews/2026-04-30-stage5-task-pid-nr-helper.md"
     ]
   },
   "next_patch": {

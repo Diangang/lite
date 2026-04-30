@@ -113,9 +113,14 @@ static inline uint32_t task_ppid_nr(const struct task_struct *task)
     return task->real_parent->pid;
 }
 
-static inline uint32_t task_tgid_nr(struct task_struct *task)
+static inline uint32_t task_pid_nr(struct task_struct *task)
 {
     return task ? task->pid : 0;
+}
+
+static inline uint32_t task_tgid_nr(struct task_struct *task)
+{
+    return task_pid_nr(task);
 }
 
 static inline int is_global_init(struct task_struct *task)
