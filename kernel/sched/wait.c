@@ -150,7 +150,7 @@ int do_waitpid(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0,
         return -1;
     if (!task)
         return -1;
-    if (!want_any && task->pid == id)
+    if (!want_any && task_pid_nr(task) == id)
         return -1;
 
     for (;;) {
