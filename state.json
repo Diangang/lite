@@ -124,15 +124,16 @@
     }
   ],
   "current_patch": {
-    "id": "stage5-pid-alive-helper",
+    "id": "stage5-signal-use-is-global-init",
     "status": "review_clean",
-    "summary": "Add Linux pid_alive helper.",
+    "summary": "Use Linux is_global_init helper in signal kill guard.",
     "files": [
-      "include/linux/sched.h",
+      "kernel/signal.c",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/sched.h"
+      "linux2.6/include/linux/sched.h",
+      "linux2.6/kernel/signal.c"
     ]
   },
   "validation": {
@@ -149,17 +150,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "ca4534a3f0bd0b5513a6d18fa00245255ee9eeed",
+    "pre_review_hash": "aa77a0730762434f191dd569ffa2626ff7d3818f",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage5-pid-alive-helper.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-signal-use-is-global-init.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/sched.h state.json Documentation/reviews/2026-04-30-stage5-pid-alive-helper.md"
+      "git show -- kernel/signal.c state.json Documentation/reviews/2026-04-30-stage5-signal-use-is-global-init.md"
     ]
   },
   "next_patch": {

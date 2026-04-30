@@ -77,7 +77,7 @@ int sys_kill(uint32_t id, int sig)
         do_exit_reason(128 + sig, TASK_EXIT_SIGNAL, (uint32_t)sig, 0);
         return 0;
     }
-    if (t->pid == 1) {
+    if (is_global_init(t)) {
         tasklist_unlock(flags);
         return -1;
     }
