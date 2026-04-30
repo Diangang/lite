@@ -1,0 +1,64 @@
+# Stage 4 Review: radix_tree_insert duplicate return
+
+Patch: `stage4-radix-tree-insert-eexist`
+
+## Linux Alignment Report
+
+Change scope:
+- Files: `lib/radix-tree.c`, `include/linux/errno.h`
+- Directories: `lib`, `include/linux`
+- Public surface: `radix_tree_insert()` duplicate-index return code; `EEXIST`
+
+Reference-first evidence:
+- Linux file: `linux2.6/lib/radix-tree.c`
+- Linux symbol: `radix_tree_insert`
+- Linux errno reference: `linux2.6/include/uapi/asm-generic/errno-base.h`
+- Lite files: `lib/radix-tree.c`, `include/linux/errno.h`
+- This step only changes: duplicate radix-tree insert returns `-EEXIST` instead of `-EBUSY`.
+
+Mapping ledger:
+- Functions:
+  - `radix_tree_insert`: `linux2.6/lib/radix-tree.c::radix_tree_insert`, lite=`lib/radix-tree.c`, placement=OK
+- Structs:
+  - `struct radix_tree_root`: `linux2.6/include/linux/radix-tree.h::struct radix_tree_root`, lite=`include/linux/radix-tree.h`, placement=OK
+  - `struct radix_tree_node`: `linux2.6/include/linux/radix-tree.h::struct radix_tree_node`, lite=`include/linux/radix-tree.h`, placement=OK for Lite subset
+- Globals/statics: none
+- Files:
+  - `linux2.6/lib/radix-tree.c`, lite=`lib/radix-tree.c`, placement=OK
+  - `linux2.6/include/uapi/asm-generic/errno-base.h`, lite=`include/linux/errno.h`, placement=DIFF for Lite's collapsed errno subset
+- Directories:
+  - `linux2.6/lib`, lite=`lib`, placement=OK
+  - `linux2.6/include`, lite=`include`, placement=OK for Lite's collapsed headers
+- NO_DIRECT_LINUX_MATCH: none
+
+Consistency:
+- Naming: OK, `EEXIST` and `radix_tree_insert` match Linux.
+- Placement: OK for `radix_tree_insert`; errno placement follows Lite's existing collapsed `include/linux/errno.h`.
+- Semantics: OK, duplicate insertion now returns Linux's `-EEXIST`.
+- Flow/Lifetime: OK, no radix-tree allocation or deletion flow changes.
+
+If DIFF:
+- Why: Lite keeps errno constants in a minimal collapsed header instead of the Linux UAPI errno split.
+- Impact: This patch adds only Linux's `EEXIST` numeric value needed by `radix_tree_insert`.
+- Plan: Keep broader errno header placement out of this patch.
+
+## Validation
+
+Commands:
+- `make -j4`
+- `make smoke-128`
+- `make smoke-512`
+
+Result:
+- `make -j4`: passed
+- `make smoke-128`: passed
+- `make smoke-512`: passed
+
+## Review
+
+Commands:
+- `git show --stat --oneline --decorate HEAD`
+- `git show --check --oneline HEAD`
+- `git show -- lib/radix-tree.c include/linux/errno.h state.json Documentation/reviews/2026-04-30-stage4-radix-tree-insert-eexist.md`
+
+Findings: none.

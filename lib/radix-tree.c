@@ -82,7 +82,7 @@ int radix_tree_insert(struct radix_tree_root *root, unsigned long index, void *i
     }
 
     if (node->slots[index & RADIX_TREE_MAP_MASK])
-        return -EBUSY;
+        return -EEXIST;
 
     node->slots[index & RADIX_TREE_MAP_MASK] = item;
     node->count++;
