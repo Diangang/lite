@@ -4,3 +4,4 @@
 /isodir/
 /rootfs/
 /.codex
+/logs/agent-runs/*.log

@@ -13,6 +13,7 @@ max_rounds="${CODEX_MAX_ROUNDS:-0}"
 round_timeout="${CODEX_ROUND_TIMEOUT:-0}"
 sleep_after_round="${CODEX_SLEEP_AFTER_ROUND:-1}"
 dry_run="${CODEX_DRY_RUN:-0}"
+stream_log="${CODEX_STREAM_LOG:-1}"
 
 if ! command -v jq >/dev/null 2>&1; then
     echo "codex-supervisor: jq is required" >&2
@@ -70,6 +71,10 @@ while :; do
     log_file="$log_dir/round-${stamp}-${round}.log"
     heartbeat="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
+    echo "codex-supervisor: starting round $round" >&2
+    echo "codex-supervisor: log: $log_file" >&2
+    echo "codex-supervisor: command: $codex_bin $codex_args <prompt>" >&2
+
     state_update --arg round "$round" --arg log "$log_file" --arg heartbeat "$heartbeat" '
         .run_control.status = "running" |
         .run_control.active_step = "codex round running" |
@@ -80,13 +85,36 @@ while :; do
 
     prompt="$(cat "$prompt_file")"
     exit_code=0
-    if [ "$round_timeout" -gt 0 ] && command -v timeout >/dev/null 2>&1; then
-        # shellcheck disable=SC2086
-        timeout "$round_timeout" "$codex_bin" $codex_args "$prompt" >"$log_file" 2>&1 || exit_code="$?"
+    status_file="$(mktemp)"
+    if [ "$stream_log" = "1" ]; then
+        (
+            set +e
+            if [ "$round_timeout" -gt 0 ] && command -v timeout >/dev/null 2>&1; then
+                # shellcheck disable=SC2086
+                timeout "$round_timeout" "$codex_bin" $codex_args "$prompt"
+            else
+                # shellcheck disable=SC2086
+                "$codex_bin" $codex_args "$prompt"
+            fi
+            printf '%s\n' "$?" >"$status_file"
+        ) 2>&1 | tee "$log_file"
+        if [ -s "$status_file" ]; then
+            exit_code="$(cat "$status_file")"
+        else
+            exit_code=1
+        fi
     else
-        # shellcheck disable=SC2086
-        "$codex_bin" $codex_args "$prompt" >"$log_file" 2>&1 || exit_code="$?"
+        if [ "$round_timeout" -gt 0 ] && command -v timeout >/dev/null 2>&1; then
+            # shellcheck disable=SC2086
+            timeout "$round_timeout" "$codex_bin" $codex_args "$prompt" >"$log_file" 2>&1 || exit_code="$?"
+        else
+            # shellcheck disable=SC2086
+            "$codex_bin" $codex_args "$prompt" >"$log_file" 2>&1 || exit_code="$?"
+        fi
     fi
+    rm -f "$status_file"
+
+    echo "codex-supervisor: round $round exited with code $exit_code" >&2
 
     if [ "$exit_code" -eq 124 ]; then
         heartbeat="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -113,6 +141,7 @@ while :; do
 
     status="$(state_get '.run_control.status // "running"')"
     stop_condition="$(state_get '.run_control.stop_condition // ""')"
+    echo "codex-supervisor: state after round $round: status=$status stop_condition=$stop_condition" >&2
     if [ "$status" = "done" ] || [ "$status" = "needs_user" ] || [ -n "$stop_condition" ]; then
         echo "codex-supervisor: stopping after round $round: status=$status stop_condition=$stop_condition" >&2
         exit 0

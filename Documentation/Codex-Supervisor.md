@@ -43,6 +43,7 @@ CODEX_LOG_DIR=logs/agent-runs
 CODEX_MAX_ROUNDS=0
 CODEX_ROUND_TIMEOUT=0
 CODEX_SLEEP_AFTER_ROUND=1
+CODEX_STREAM_LOG=1
 ```
 
 Examples:
@@ -55,6 +56,8 @@ CODEX_MAX_ROUNDS=10 CODEX_ROUND_TIMEOUT=3600 scripts/codex-supervisor.sh
 the external timeout. If `timeout(1)` is unavailable, the script runs without a
 timeout even when `CODEX_ROUND_TIMEOUT` is set. `CODEX_ARGS=exec` runs Codex in
 non-interactive mode so supervisor logging can redirect stdout/stderr.
+`CODEX_STREAM_LOG=1` mirrors Codex output to the terminal while also writing the
+round log file. Set `CODEX_STREAM_LOG=0` for file-only logging.
 
 ## Stop Contract
 
