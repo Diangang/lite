@@ -48,6 +48,8 @@ static inline int raw_spin_is_locked(raw_spinlock_t *lock)
     return lock ? (int)lock->locked : 0;
 }
 
+#define raw_spin_is_contended(lock) (((void)(lock), 0))
+
 static inline void raw_spin_unlock_wait(raw_spinlock_t *lock)
 {
     while (raw_spin_is_locked(lock))
