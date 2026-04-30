@@ -124,9 +124,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage5-is-global-init-helper",
+    "id": "stage5-pid-alive-helper",
     "status": "review_clean",
-    "summary": "Add Linux is_global_init helper.",
+    "summary": "Add Linux pid_alive helper.",
     "files": [
       "include/linux/sched.h",
       "state.json"
@@ -149,17 +149,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "f13bafbc53321af54298ce94336170bc09b472bf",
+    "pre_review_hash": "ca4534a3f0bd0b5513a6d18fa00245255ee9eeed",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage5-is-global-init-helper.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-pid-alive-helper.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/sched.h state.json Documentation/reviews/2026-04-30-stage5-is-global-init-helper.md"
+      "git show -- include/linux/sched.h state.json Documentation/reviews/2026-04-30-stage5-pid-alive-helper.md"
     ]
   },
   "next_patch": {

@@ -101,9 +101,14 @@ static inline int task_release_invariant_holds(struct task_struct *task)
     return 1;
 }
 
+static inline int pid_alive(const struct task_struct *task)
+{
+    return task && !list_empty(&task->tasks);
+}
+
 static inline uint32_t task_ppid_nr(const struct task_struct *task)
 {
-    if (!task || !task->real_parent)
+    if (!pid_alive(task) || !task->real_parent)
         return 0;
     return task->real_parent->pid;
 }
