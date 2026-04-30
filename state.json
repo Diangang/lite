@@ -8,7 +8,7 @@
   },
   "boundaries": {
     "roadmap": "Documentation/Linux26-Roadmap.md",
-    "active_stage": "Stage 3: Core Synchronization Foundations",
+    "active_stage": "Stage 4: MM Second Pass",
     "stage_transition": "When the active stage has no remaining narrow in-scope patch, update active_stage to the next roadmap stage and continue automatically. Do not stop just because the next patch crosses a stage boundary.",
     "requires_linux_reference_first": true,
     "single_patch_scope": true,
@@ -39,12 +39,12 @@
     {
       "stage": 3,
       "name": "Core Synchronization Foundations",
-      "status": "active"
+      "status": "done"
     },
     {
       "stage": 4,
       "name": "MM Second Pass",
-      "status": "pending"
+      "status": "active"
     },
     {
       "stage": 5,
@@ -83,15 +83,15 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-raw-spin-is-contended",
+    "id": "stage4-radix-tree-max-path-constants",
     "status": "review_clean",
-    "summary": "Add Linux raw_spin_is_contended fallback.",
+    "summary": "Add Linux radix-tree index and max path constants.",
     "files": [
-      "include/linux/spinlock.h",
+      "include/linux/radix-tree.h",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/spinlock.h"
+      "linux2.6/include/linux/radix-tree.h"
     ]
   },
   "validation": {
@@ -108,17 +108,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "3d598be2630fd703579e563f4e6005b0b68e4aa2",
+    "pre_review_hash": "5725982c676a493c6480b2075f492e7abea48835",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage3-raw-spin-is-contended.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-radix-tree-max-path-constants.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/spinlock.h state.json Documentation/reviews/2026-04-30-stage3-raw-spin-is-contended.md"
+      "git show -- include/linux/radix-tree.h state.json Documentation/reviews/2026-04-30-stage4-radix-tree-max-path-constants.md"
     ]
   },
   "next_patch": {

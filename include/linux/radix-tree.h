@@ -12,6 +12,9 @@
 #define RADIX_TREE_MAP_SHIFT 6
 #define RADIX_TREE_MAP_SIZE (1UL << RADIX_TREE_MAP_SHIFT)
 #define RADIX_TREE_MAP_MASK (RADIX_TREE_MAP_SIZE - 1)
+#define RADIX_TREE_INDEX_BITS (8 * sizeof(unsigned long))
+#define RADIX_TREE_MAX_PATH \
+    ((RADIX_TREE_INDEX_BITS + RADIX_TREE_MAP_SHIFT - 1) / RADIX_TREE_MAP_SHIFT)
 
 struct radix_tree_node {
     unsigned int height;
