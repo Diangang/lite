@@ -13,6 +13,7 @@ int strcmp(const char *s1, const char *s2);
 int strncmp(const char *s1, const char *s2, size_t n);
 char *strcat(char *dest, const char *src);
 char *kstrdup(const char *s);
+char *kstrndup(const char *s, size_t max, gfp_t gfp);
 void *kmemdup(const void *src, size_t len, gfp_t gfp);
 char *strdup(const char *s);
 void itoa(int num, int base, char *buf);

@@ -122,11 +122,10 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-mm-kmemdup-api",
+    "id": "stage4-mm-kstrndup-api",
     "status": "review_clean",
-    "summary": "Add Linux's kmemdup API in mm/util.c with the public declaration in string.h.",
+    "summary": "Add Linux's kstrndup API in mm/util.c with the public declaration in string.h.",
     "files": [
-      "Makefile",
       "include/linux/string.h",
       "mm/util.c",
       "state.json"
@@ -150,17 +149,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "2ac680c3f4e44c60f5dc51d519d1c3c31841a98c",
+    "pre_review_hash": "9d7c1bd06de71ada92ae0fab8092c525926e387a",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-mm-kmemdup-api.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-mm-kstrndup-api.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- Makefile include/linux/string.h mm/util.c state.json Documentation/reviews/2026-04-30-stage4-mm-kmemdup-api.md"
+      "git show -- include/linux/string.h mm/util.c state.json Documentation/reviews/2026-04-30-stage4-mm-kstrndup-api.md"
     ]
   },
   "next_patch": {
