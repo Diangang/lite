@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include "asm/pgtable.h"
 
+struct page;
+
 struct vm_area_struct {
     uint32_t vm_start;
     uint32_t vm_end;
@@ -48,6 +50,9 @@ uint32_t do_brk(struct mm_struct *mm, uint32_t new_end);
 uint32_t sys_brk(uint32_t new_end);
 
 int vma_allows(struct mm_struct *mm, uint32_t addr, int is_write, int is_exec);
+
+struct page *vmalloc_to_page(const void *addr);
+unsigned long vmalloc_to_pfn(const void *addr);
 
 static inline int is_vmalloc_addr(const void *x)
 {

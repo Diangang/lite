@@ -122,9 +122,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-mm-is-vmalloc-or-module-addr-api",
+    "id": "stage4-mm-vmalloc-to-page-api",
     "status": "review_clean",
-    "summary": "Add Linux's is_vmalloc_or_module_addr helper over Lite's vmalloc range.",
+    "summary": "Add Linux's vmalloc_to_page and vmalloc_to_pfn helpers.",
     "files": [
       "include/linux/mm.h",
       "mm/vmalloc.c",
@@ -149,17 +149,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "03162efe0a43ce6220bb76c3946bd775953445da",
+    "pre_review_hash": "fe2f64e31e2d778c9bb9e7d4487b38bb72dead46",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-mm-is-vmalloc-or-module-addr-api.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-mm-vmalloc-to-page-api.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/mm.h mm/vmalloc.c state.json Documentation/reviews/2026-04-30-stage4-mm-is-vmalloc-or-module-addr-api.md"
+      "git show -- include/linux/mm.h mm/vmalloc.c state.json Documentation/reviews/2026-04-30-stage4-mm-vmalloc-to-page-api.md"
     ]
   },
   "next_patch": {

@@ -1,6 +1,7 @@
 #include "linux/vmalloc.h"
 #include "linux/gfp.h"
 #include "linux/mm.h"
+#include "linux/mmzone.h"
 #include "linux/slab.h"
 #include "asm/pgtable.h"
 #include "asm/page.h"
@@ -174,6 +175,24 @@ void *vmalloc_32(unsigned long size)
 int is_vmalloc_or_module_addr(const void *x)
 {
     return is_vmalloc_addr(x);
+}
+
+struct page *vmalloc_to_page(const void *vmalloc_addr)
+{
+    uint32_t phys;
+
+    if (!is_vmalloc_or_module_addr(vmalloc_addr))
+        return NULL;
+
+    phys = virt_to_phys((void *)vmalloc_addr);
+    if (phys == 0xFFFFFFFF)
+        return NULL;
+    return pfn_to_page(phys >> PAGE_SHIFT);
+}
+
+unsigned long vmalloc_to_pfn(const void *vmalloc_addr)
+{
+    return page_to_pfn(vmalloc_to_page(vmalloc_addr));
 }
 
 /* vfree: Implement vfree. */
