@@ -56,4 +56,6 @@ static inline int is_vmalloc_addr(const void *x)
     return addr >= memlayout_vmalloc_start() && addr < memlayout_vmalloc_end();
 }
 
+int is_vmalloc_or_module_addr(const void *x);
+
 #endif

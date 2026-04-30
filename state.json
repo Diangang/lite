@@ -122,15 +122,17 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-mm-is-vmalloc-addr-api",
+    "id": "stage4-mm-is-vmalloc-or-module-addr-api",
     "status": "review_clean",
-    "summary": "Add Linux's is_vmalloc_addr helper in include/linux/mm.h.",
+    "summary": "Add Linux's is_vmalloc_or_module_addr helper over Lite's vmalloc range.",
     "files": [
       "include/linux/mm.h",
+      "mm/vmalloc.c",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/mm.h"
+      "linux2.6/include/linux/mm.h",
+      "linux2.6/mm/vmalloc.c"
     ]
   },
   "validation": {
@@ -147,17 +149,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "744b8f939786333fcb073e84e987ca14783ae0a2",
+    "pre_review_hash": "03162efe0a43ce6220bb76c3946bd775953445da",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-mm-is-vmalloc-addr-api.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-mm-is-vmalloc-or-module-addr-api.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/mm.h state.json Documentation/reviews/2026-04-30-stage4-mm-is-vmalloc-addr-api.md"
+      "git show -- include/linux/mm.h mm/vmalloc.c state.json Documentation/reviews/2026-04-30-stage4-mm-is-vmalloc-or-module-addr-api.md"
     ]
   },
   "next_patch": {

@@ -1,5 +1,6 @@
 #include "linux/vmalloc.h"
 #include "linux/gfp.h"
+#include "linux/mm.h"
 #include "linux/slab.h"
 #include "asm/pgtable.h"
 #include "asm/page.h"
@@ -168,6 +169,11 @@ void *vmalloc_exec(unsigned long size)
 void *vmalloc_32(unsigned long size)
 {
     return vmalloc(size);
+}
+
+int is_vmalloc_or_module_addr(const void *x)
+{
+    return is_vmalloc_addr(x);
 }
 
 /* vfree: Implement vfree. */
