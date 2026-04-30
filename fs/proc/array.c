@@ -111,7 +111,10 @@ uint32_t task_dump_status_pid(uint32_t pid, char *buf, uint32_t len)
     if (!t)
         return 0;
 
-    const char *name = t->comm[0] ? t->comm : "-";
+    char name_buf[sizeof(t->comm)];
+    const char *name = get_task_comm(name_buf, t);
+    if (!name[0])
+        name = "-";
     const char *state = "RUNNABLE";
     if (t->state == 1)
         state = "SLEEPING";
