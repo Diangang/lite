@@ -124,16 +124,16 @@
     }
   ],
   "current_patch": {
-    "id": "stage5-signal-use-is-global-init",
+    "id": "stage5-task-tgid-nr-helper",
     "status": "review_clean",
-    "summary": "Use Linux is_global_init helper in signal kill guard.",
+    "summary": "Add Linux task_tgid_nr helper.",
     "files": [
-      "kernel/signal.c",
+      "include/linux/sched.h",
+      "Documentation/reviews/2026-04-30-stage5-task-tgid-nr-helper.md",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/sched.h",
-      "linux2.6/kernel/signal.c"
+      "linux2.6/include/linux/sched.h"
     ]
   },
   "validation": {
@@ -150,17 +150,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "aa77a0730762434f191dd569ffa2626ff7d3818f",
+    "pre_review_hash": "f58989e8731ef4dc27beb2d97d9a75dd7753aaf4",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage5-signal-use-is-global-init.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-task-tgid-nr-helper.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- kernel/signal.c state.json Documentation/reviews/2026-04-30-stage5-signal-use-is-global-init.md"
+      "git show -- include/linux/sched.h state.json Documentation/reviews/2026-04-30-stage5-task-tgid-nr-helper.md"
     ]
   },
   "next_patch": {
