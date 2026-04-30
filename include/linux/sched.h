@@ -111,16 +111,16 @@ static inline int pid_alive(const struct task_struct *task)
     return task && !list_empty(&task->tasks);
 }
 
+static inline uint32_t task_pid_nr(struct task_struct *task)
+{
+    return task ? task->pid : 0;
+}
+
 static inline uint32_t task_ppid_nr(const struct task_struct *task)
 {
     if (!pid_alive(task) || !task->real_parent)
         return 0;
-    return task->real_parent->pid;
-}
-
-static inline uint32_t task_pid_nr(struct task_struct *task)
-{
-    return task ? task->pid : 0;
+    return task_pid_nr(task->real_parent);
 }
 
 static inline uint32_t task_tgid_nr(struct task_struct *task)

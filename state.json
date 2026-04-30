@@ -12,13 +12,13 @@
   "run_control": {
     "status": "running",
     "phase": "review_clean",
-    "active_step": "stage5-preempt-count-protects-nvme-poll",
+    "active_step": "stage5-task-ppid-nr-uses-task-pid-nr",
     "stop_condition": null,
     "last_error": null,
     "last_exit": "clean_process_exit",
     "last_round": 1,
     "last_log": "logs/agent-runs/round-20260430-191245-1.log",
-    "heartbeat": "2026-04-30T11:45:00Z",
+    "heartbeat": "2026-04-30T11:50:00Z",
     "budgets": {
       "max_rounds": 0,
       "max_failures": 3,
@@ -187,20 +187,16 @@
     }
   ],
   "current_patch": {
-    "id": "stage5-preempt-count-protects-nvme-poll",
+    "id": "stage5-task-ppid-nr-uses-task-pid-nr",
     "status": "review_clean",
-    "summary": "Defer timer IRQ scheduling while NVMe synchronous poll is preempt-disabled.",
+    "summary": "Align Lite task_ppid_nr to derive the parent id through task_pid_nr.",
     "files": [
-      "arch/x86/kernel/irq.c",
       "include/linux/sched.h",
-      "kernel/sched/core.c",
-      "drivers/nvme/host/pci.c",
-      "Documentation/reviews/2026-04-30-stage5-preempt-count-protects-nvme-poll.md",
+      "Documentation/reviews/2026-04-30-stage5-task-ppid-nr-uses-task-pid-nr.md",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/arch/x86/entry/entry_32.S",
-      "linux2.6/kernel/sched/core.c"
+      "linux2.6/include/linux/sched.h"
     ]
   },
   "validation": {
@@ -217,17 +213,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "af618d9e7a628a9ef2b6e08d1745d8d0b11506db",
+    "pre_review_hash": "b3781ef966f174ff40fa8a859e2507fee1695ea5",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage5-preempt-count-protects-nvme-poll.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-task-ppid-nr-uses-task-pid-nr.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- arch/x86/kernel/irq.c include/linux/sched.h kernel/sched/core.c drivers/nvme/host/pci.c state.json Documentation/reviews/2026-04-30-stage5-preempt-count-protects-nvme-poll.md"
+      "git show -- include/linux/sched.h state.json Documentation/reviews/2026-04-30-stage5-task-ppid-nr-uses-task-pid-nr.md"
     ]
   },
   "next_patch": {
