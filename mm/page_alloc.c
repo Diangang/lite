@@ -258,16 +258,15 @@ void *alloc_pages(gfp_t gfp, unsigned int order)
 unsigned long __get_free_pages(gfp_t gfp, unsigned int order)
 {
     void *p = alloc_pages(gfp, order);
+    if (p && (gfp & __GFP_ZERO))
+        memset(memlayout_directmap_phys_to_virt((uint32_t)p), 0, PAGE_SIZE << order);
     return (unsigned long)p;
 }
 
 /* get_zeroed_page: Get zeroed page. */
 unsigned long get_zeroed_page(gfp_t gfp)
 {
-    unsigned long p = __get_free_pages(gfp, 0);
-    if (p)
-        memset(memlayout_directmap_phys_to_virt((uint32_t)p), 0, PAGE_SIZE);
-    return p;
+    return __get_free_pages(gfp | __GFP_ZERO, 0);
 }
 
 /* __free_pages: Free pages. */

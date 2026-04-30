@@ -8,6 +8,7 @@ typedef unsigned int gfp_t;
 
 #define GFP_KERNEL 0
 #define GFP_DMA 0x1
+#define __GFP_ZERO 0x8000u
 
 struct page *__alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
                                     struct zonelist *zonelist, void *nodemask);
