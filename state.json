@@ -122,9 +122,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-vmalloc-sync-all-api",
+    "id": "stage4-vmalloc-exec-api",
     "status": "review_clean",
-    "summary": "Add Linux's vmalloc_sync_all API as the default no-op vmalloc stub.",
+    "summary": "Add Linux's vmalloc_exec API over Lite's executable kernel mappings.",
     "files": [
       "include/linux/vmalloc.h",
       "mm/vmalloc.c",
@@ -149,17 +149,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "36af17d8432f6f964b7346bac1a320c63a40ae0b",
+    "pre_review_hash": "39258e02d5011b5f8d6ea69d64114881ae5ef12f",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-vmalloc-sync-all-api.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-vmalloc-exec-api.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/vmalloc.h mm/vmalloc.c state.json Documentation/reviews/2026-04-30-stage4-vmalloc-sync-all-api.md"
+      "git show -- include/linux/vmalloc.h mm/vmalloc.c state.json Documentation/reviews/2026-04-30-stage4-vmalloc-exec-api.md"
     ]
   },
   "next_patch": {

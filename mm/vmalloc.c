@@ -160,6 +160,11 @@ void *vzalloc(unsigned long size)
     return addr;
 }
 
+void *vmalloc_exec(unsigned long size)
+{
+    return vmalloc(size);
+}
+
 /* vfree: Implement vfree. */
 void vfree(const void *addr)
 {
