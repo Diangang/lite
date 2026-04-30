@@ -60,7 +60,18 @@
       "after_review_clean": "Do not summarize and stop. Immediately select the next narrow roadmap patch and begin Linux-reference-first analysis.",
       "before_final_answer_gate": "Before sending any final answer, check boundaries.stop_policy.allowed_stop_conditions. If none was hit, do not send final; continue the next patch loop.",
       "clean_checkpoint_action": "A clean commit, clean review, successful validation, and clean worktree are only checkpoints for recovery; they are not completion conditions.",
-      "violation_note": "Stopping after a clean checkpoint without an allowed stop condition is a process error and violates this state file."
+      "violation_note": "Stopping after a clean checkpoint without an allowed stop condition is a process error and violates this state file.",
+      "hard_final_gate": {
+        "final_answer_allowed_only_if": "One of boundaries.stop_policy.allowed_stop_conditions is actually hit, or the user explicitly instructs to pause/stop/report-only in the latest message.",
+        "if_no_allowed_stop_condition": "Do not send final. Continue by selecting or finishing the next patch step.",
+        "self_check_required_before_final": [
+          "Read current_patch.status.",
+          "Check validation/review for real failures.",
+          "Check whether latest user message explicitly requested pause/stop/report-only.",
+          "If all checks are clean and no explicit pause/stop/report-only request exists, continue the execution_loop."
+        ],
+        "last_violation": "2026-04-30: assistant sent final after review_clean without an allowed stop condition; corrected rule requires continuing instead."
+      }
     },
     "requires_linux_reference_first": true,
     "single_patch_scope": true,
@@ -134,12 +145,12 @@
     }
   ],
   "current_patch": {
-    "id": "stage5-do-exit-uses-is-idle-task",
+    "id": "stage5-do-exit-reason-uses-is-idle-task",
     "status": "review_clean",
-    "summary": "Use Linux is_idle_task helper in do_exit guard.",
+    "summary": "Use Linux is_idle_task helper in do_exit_reason guard.",
     "files": [
       "kernel/exit.c",
-      "Documentation/reviews/2026-04-30-stage5-do-exit-uses-is-idle-task.md",
+      "Documentation/reviews/2026-04-30-stage5-do-exit-reason-uses-is-idle-task.md",
       "state.json"
     ],
     "linux_reference": [
@@ -161,17 +172,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "ca30d3d62248271f173f3ba73ab882ba72063d63",
+    "pre_review_hash": "10758fe58d982bf660bb3895ef6e69d661f981c2",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage5-do-exit-uses-is-idle-task.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-do-exit-reason-uses-is-idle-task.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- kernel/exit.c state.json Documentation/reviews/2026-04-30-stage5-do-exit-uses-is-idle-task.md"
+      "git show -- kernel/exit.c state.json Documentation/reviews/2026-04-30-stage5-do-exit-reason-uses-is-idle-task.md"
     ]
   },
   "next_patch": {

@@ -173,7 +173,7 @@ void do_exit_reason(int code, int reason, uint32_t info0, uint32_t info1)
     struct task_struct *task = task_current();
     if (!task)
         return;
-    if (task->pid == 0)
+    if (is_idle_task(task))
         return;
     exit_notify(task, code, reason, info0, info1);
 }
