@@ -21,6 +21,15 @@ static inline void *kmalloc_array(size_t n, size_t size, gfp_t flags)
         return NULL;
     return kmalloc(n * size);
 }
+static inline void *kcalloc(size_t n, size_t size, gfp_t flags)
+{
+    void *ptr;
+
+    ptr = kmalloc_array(n, size, flags);
+    if (ptr)
+        memset(ptr, 0, n * size);
+    return ptr;
+}
 void kfree(const void *ptr);
 size_t ksize(const void *ptr);
 static inline void *kmem_cache_zalloc(struct kmem_cache *cache, gfp_t flags)

@@ -122,9 +122,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-slab-kmalloc-array-api",
+    "id": "stage4-slab-kcalloc-api",
     "status": "review_clean",
-    "summary": "Add Linux's kmalloc_array API with overflow-checked element allocation.",
+    "summary": "Add Linux's kcalloc API as an overflow-checked zeroed array allocation helper.",
     "files": [
       "include/linux/slab.h",
       "state.json"
@@ -147,17 +147,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "e5e32621d96fa5e399aec0452862743a350822e1",
+    "pre_review_hash": "297f6ff7ec2eb6d66dc6d4c60f8f857baa7f083a",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-slab-kmalloc-array-api.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-slab-kcalloc-api.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/slab.h state.json Documentation/reviews/2026-04-30-stage4-slab-kmalloc-array-api.md"
+      "git show -- include/linux/slab.h state.json Documentation/reviews/2026-04-30-stage4-slab-kcalloc-api.md"
     ]
   },
   "next_patch": {
