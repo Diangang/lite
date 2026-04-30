@@ -134,12 +134,12 @@
     }
   ],
   "current_patch": {
-    "id": "stage5-exit-notify-uses-is-idle-task",
+    "id": "stage5-release-task-uses-is-idle-task",
     "status": "review_clean",
-    "summary": "Use Linux is_idle_task helper in exit_notify guard.",
+    "summary": "Use Linux is_idle_task helper in release_task guard.",
     "files": [
       "kernel/exit.c",
-      "Documentation/reviews/2026-04-30-stage5-exit-notify-uses-is-idle-task.md",
+      "Documentation/reviews/2026-04-30-stage5-release-task-uses-is-idle-task.md",
       "state.json"
     ],
     "linux_reference": [
@@ -161,17 +161,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "3f9d1ee19430cd2141e4ae6e0829ad5ad7acb64f",
+    "pre_review_hash": "751289a6a66976c81471c257a596a18e2b5abf9f",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage5-exit-notify-uses-is-idle-task.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-release-task-uses-is-idle-task.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- kernel/exit.c state.json Documentation/reviews/2026-04-30-stage5-exit-notify-uses-is-idle-task.md"
+      "git show -- kernel/exit.c state.json Documentation/reviews/2026-04-30-stage5-release-task-uses-is-idle-task.md"
     ]
   },
   "next_patch": {

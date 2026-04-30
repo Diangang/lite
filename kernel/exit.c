@@ -141,7 +141,7 @@ void release_task(struct task_struct *task)
 {
     if (!task)
         return;
-    if (task->pid == 0)
+    if (is_idle_task(task))
         return;
 
     uint32_t flags = tasklist_lock();
