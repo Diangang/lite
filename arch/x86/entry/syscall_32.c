@@ -76,6 +76,13 @@ static struct pt_regs *sys_getpid_dispatch(struct pt_regs *regs, int from_user)
     return regs;
 }
 
+static struct pt_regs *sys_getppid_dispatch(struct pt_regs *regs, int from_user)
+{
+    (void)from_user;
+    regs->eax = task_ppid_nr(task_current());
+    return regs;
+}
+
 static struct pt_regs *sys_open_dispatch(struct pt_regs *regs, int from_user)
 {
     regs->eax = (uint32_t)sys_open((const char *)regs->ebx, regs->ecx, from_user);
@@ -246,6 +253,7 @@ static const syscall_dispatch_t sys_call_table[NR_syscalls] = {
     [SYS_EXIT] = sys_exit_dispatch,
     [SYS_READ] = sys_read_dispatch,
     [SYS_GETPID] = sys_getpid_dispatch,
+    [SYS_GETPPID] = sys_getppid_dispatch,
     [SYS_OPEN] = sys_open_dispatch,
     [SYS_CLOSE] = sys_close_dispatch,
     [SYS_BRK] = sys_brk_dispatch,

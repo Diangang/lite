@@ -29,7 +29,8 @@ enum {
     SYS_CHMOD = 25,
     SYS_GETUID = 26,
     SYS_GETGID = 27,
-    SYS_RMDIR = 28
+    SYS_RMDIR = 28,
+    SYS_GETPPID = 29
 };
 
 /* Linux mapping: NR_syscalls is used for syscall table sizing/bounds. */
