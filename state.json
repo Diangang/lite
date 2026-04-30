@@ -134,17 +134,18 @@
     }
   ],
   "current_patch": {
-    "id": "stage5-current-id-uses-task-tgid-nr",
+    "id": "stage5-add-get-task-comm-helper",
     "status": "review_clean",
-    "summary": "Use Linux TGID accessor for current task id.",
+    "summary": "Add Linux get_task_comm helper.",
     "files": [
-      "kernel/sched/core.c",
-      "Documentation/reviews/2026-04-30-stage5-current-id-uses-task-tgid-nr.md",
+      "include/linux/sched.h",
+      "kernel/fork.c",
+      "Documentation/reviews/2026-04-30-stage5-add-get-task-comm-helper.md",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/kernel/sys.c",
-      "linux2.6/include/linux/sched.h"
+      "linux2.6/include/linux/sched.h",
+      "linux2.6/fs/exec.c"
     ]
   },
   "validation": {
@@ -161,17 +162,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "7e160db0a538755aaddf87064fc898f9710662fb",
+    "pre_review_hash": "be5aa50af74fa709070cdfd45dc31d0aafc866d3",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage5-current-id-uses-task-tgid-nr.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-add-get-task-comm-helper.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- kernel/sched/core.c state.json Documentation/reviews/2026-04-30-stage5-current-id-uses-task-tgid-nr.md"
+      "git show -- include/linux/sched.h kernel/fork.c state.json Documentation/reviews/2026-04-30-stage5-add-get-task-comm-helper.md"
     ]
   },
   "next_patch": {

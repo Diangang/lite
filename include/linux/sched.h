@@ -144,6 +144,7 @@ uint32_t tasklist_lock(void);
 void tasklist_unlock(uint32_t flags);
 
 void set_task_comm(struct task_struct *task, const char *program);
+char *get_task_comm(char *buf, struct task_struct *task);
 
 void sched_init(void);
 struct pt_regs *task_schedule(struct pt_regs *regs);

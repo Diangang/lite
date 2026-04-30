@@ -57,6 +57,25 @@ void set_task_comm(struct task_struct *task, const char *program)
     task->comm[i] = 0;
 }
 
+char *get_task_comm(char *buf, struct task_struct *task)
+{
+    uint32_t i = 0;
+
+    if (!buf)
+        return NULL;
+    if (!task) {
+        buf[0] = 0;
+        return buf;
+    }
+
+    while (i + 1 < sizeof(task->comm) && task->comm[i]) {
+        buf[i] = task->comm[i];
+        i++;
+    }
+    buf[i] = 0;
+    return buf;
+}
+
 void __put_task_struct(struct task_struct *task)
 {
     if (!task)
