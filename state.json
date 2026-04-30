@@ -122,9 +122,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-vmalloc-exec-api",
+    "id": "stage4-vmalloc-32-api",
     "status": "review_clean",
-    "summary": "Add Linux's vmalloc_exec API over Lite's executable kernel mappings.",
+    "summary": "Add Linux's vmalloc_32 API over Lite's 32-bit vmalloc allocator.",
     "files": [
       "include/linux/vmalloc.h",
       "mm/vmalloc.c",
@@ -149,17 +149,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "39258e02d5011b5f8d6ea69d64114881ae5ef12f",
+    "pre_review_hash": "52b932e900d156e65179f623cec93b83919d6bc5",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-vmalloc-exec-api.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-vmalloc-32-api.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/vmalloc.h mm/vmalloc.c state.json Documentation/reviews/2026-04-30-stage4-vmalloc-exec-api.md"
+      "git show -- include/linux/vmalloc.h mm/vmalloc.c state.json Documentation/reviews/2026-04-30-stage4-vmalloc-32-api.md"
     ]
   },
   "next_patch": {
