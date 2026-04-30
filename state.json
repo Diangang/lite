@@ -83,9 +83,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-radix-tree-max-path-constants",
+    "id": "stage4-radix-tree-path-count-constants",
     "status": "review_clean",
-    "summary": "Add Linux radix-tree index and max path constants.",
+    "summary": "Add Linux radix-tree height and count bit constants.",
     "files": [
       "include/linux/radix-tree.h",
       "state.json"
@@ -108,21 +108,21 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "5725982c676a493c6480b2075f492e7abea48835",
+    "pre_review_hash": "50a9567b187a6160a9e619325e28e223c2a438c8",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-radix-tree-max-path-constants.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-radix-tree-path-count-constants.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/radix-tree.h state.json Documentation/reviews/2026-04-30-stage4-radix-tree-max-path-constants.md"
+      "git show -- include/linux/radix-tree.h state.json Documentation/reviews/2026-04-30-stage4-radix-tree-path-count-constants.md"
     ]
   },
   "next_patch": {
     "status": "ready",
-    "candidate": "After review_clean, continue Stage 3 by auditing the next narrow synchronization primitive difference against linux2.6 include/linux spinlock, atomic, wait, or completion references."
+    "candidate": "After review_clean, continue Stage 4 by auditing the next narrow MM/lib primitive difference against linux2.6 radix-tree, idr, page_alloc, slab, vmalloc, or rmap references."
   }
 }
