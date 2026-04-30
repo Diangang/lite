@@ -10,6 +10,24 @@
     "roadmap": "Documentation/Linux26-Roadmap.md",
     "active_stage": "Stage 4: MM Second Pass",
     "stage_transition": "When the active stage has no remaining narrow in-scope patch, update active_stage to the next roadmap stage and continue automatically. Do not stop just because the next patch crosses a stage boundary.",
+    "stop_policy": {
+      "continue_until_stop_condition": true,
+      "do_not_stop_for": [
+        "stage_transition",
+        "turn_boundary",
+        "clean_review_checkpoint",
+        "successful_validation",
+        "lack_of_summary_need"
+      ],
+      "allowed_stop_conditions": [
+        "route_change_outside_roadmap",
+        "scope_expansion",
+        "skipping_required_tests",
+        "new_non_linux_abstraction",
+        "destructive_operation"
+      ],
+      "on_stop": "State the exact allowed stop condition that was hit. If no allowed stop condition was hit, continue the loop instead of stopping."
+    },
     "requires_linux_reference_first": true,
     "single_patch_scope": true,
     "ask_before": [
