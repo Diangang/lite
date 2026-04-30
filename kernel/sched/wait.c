@@ -160,7 +160,7 @@ int do_waitpid(uint32_t id, int *out_code, int *out_reason, uint32_t *out_info0,
         struct task_struct *t;
         struct task_struct *n;
         list_for_each_entry_safe(t, n, &task->children, sibling) {
-            if (!(want_any || t->pid == id))
+            if (!(want_any || task_pid_nr(t) == id))
                 continue;
             has_target = 1;
             if (t->state == TASK_ZOMBIE) {

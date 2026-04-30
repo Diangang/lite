@@ -134,12 +134,12 @@
     }
   ],
   "current_patch": {
-    "id": "stage5-wait-return-uses-task-pid-nr",
+    "id": "stage5-wait-child-match-uses-task-pid-nr",
     "status": "review_clean",
-    "summary": "Use Linux task pid helper for waitpid return value.",
+    "summary": "Use Linux task pid helper for waitpid child target matching.",
     "files": [
       "kernel/sched/wait.c",
-      "Documentation/reviews/2026-04-30-stage5-wait-return-uses-task-pid-nr.md",
+      "Documentation/reviews/2026-04-30-stage5-wait-child-match-uses-task-pid-nr.md",
       "state.json"
     ],
     "linux_reference": [
@@ -161,17 +161,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "959faa30fb7f7cbfbbc16b9dd2957a7dd5e71e9a",
+    "pre_review_hash": "72d783fe6e53ce15724385f7ad0614464a819ae1",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage5-wait-return-uses-task-pid-nr.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-wait-child-match-uses-task-pid-nr.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- kernel/sched/wait.c state.json Documentation/reviews/2026-04-30-stage5-wait-return-uses-task-pid-nr.md"
+      "git show -- kernel/sched/wait.c state.json Documentation/reviews/2026-04-30-stage5-wait-child-match-uses-task-pid-nr.md"
     ]
   },
   "next_patch": {
