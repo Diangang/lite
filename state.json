@@ -24,6 +24,19 @@
       "max_failures": 3,
       "failures": 0
     },
+    "bugfix": {
+      "enabled": true,
+      "status": "idle",
+      "attempts": 0,
+      "max_attempts": 3,
+      "trigger_condition": null,
+      "last_log": null,
+      "bugfixable_stop_conditions": [
+        "validation_failure",
+        "review_findings",
+        "codex_process_failed"
+      ]
+    },
     "allowed_stop_conditions": [
       "validation_failure",
       "review_findings",

@@ -6,10 +6,12 @@ cd "$repo_root"
 
 state_file="${CODEX_STATE_FILE:-state.json}"
 prompt_file="${CODEX_PROMPT_FILE:-Documentation/codex-supervisor-prompt.md}"
+bugfix_prompt_file="${CODEX_BUGFIX_PROMPT_FILE:-Documentation/codex-bugfix-prompt.md}"
 codex_bin="${CODEX_BIN:-codex}"
 codex_args="${CODEX_ARGS:-exec}"
 log_dir="${CODEX_LOG_DIR:-logs/agent-runs}"
 max_rounds="${CODEX_MAX_ROUNDS:-0}"
+bugfix_max_attempts="${CODEX_BUGFIX_MAX_ATTEMPTS:-3}"
 round_timeout="${CODEX_ROUND_TIMEOUT:-0}"
 sleep_after_round="${CODEX_SLEEP_AFTER_ROUND:-1}"
 dry_run="${CODEX_DRY_RUN:-0}"
@@ -30,6 +32,11 @@ if [ ! -f "$prompt_file" ]; then
     exit 2
 fi
 
+if [ ! -f "$bugfix_prompt_file" ]; then
+    echo "codex-supervisor: missing bugfix prompt file: $bugfix_prompt_file" >&2
+    exit 2
+fi
+
 mkdir -p "$log_dir"
 
 state_get() {
@@ -42,10 +49,21 @@ state_update() {
     mv "$tmp" "$state_file"
 }
 
+is_bugfix_condition() {
+    case "$1" in
+        validation_failure|review_findings|codex_process_failed)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 if [ "$dry_run" = "1" ]; then
     status="$(jq -r '.run_control.status // "running"' "$state_file")"
     stop_condition="$(jq -r '.run_control.stop_condition // ""' "$state_file")"
-    echo "codex-supervisor: dry run ok: status=$status stop_condition=$stop_condition prompt=$prompt_file"
+    echo "codex-supervisor: dry run ok: status=$status stop_condition=$stop_condition prompt=$prompt_file bugfix_prompt=$bugfix_prompt_file"
     exit 0
 fi
 
@@ -62,28 +80,65 @@ while :; do
 
     status="$(state_get '.run_control.status // "running"')"
     stop_condition="$(state_get '.run_control.stop_condition // ""')"
-    if [ "$status" = "done" ] || [ "$status" = "needs_user" ] || [ -n "$stop_condition" ]; then
+    round_mode="normal"
+    round_prompt_file="$prompt_file"
+
+    if [ "$status" = "done" ]; then
+        echo "codex-supervisor: stopping before round $round: status=$status stop_condition=$stop_condition" >&2
+        exit 0
+    fi
+    if [ -n "$stop_condition" ]; then
+        bugfix_attempts="$(state_get '.run_control.bugfix.attempts // 0')"
+        bugfix_trigger="$(state_get '.run_control.bugfix.trigger_condition // ""')"
+        if [ "$bugfix_trigger" != "$stop_condition" ]; then
+            bugfix_attempts=0
+        fi
+        if is_bugfix_condition "$stop_condition" && [ "$bugfix_attempts" -lt "$bugfix_max_attempts" ]; then
+            round_mode="bugfix"
+            round_prompt_file="$bugfix_prompt_file"
+        else
+            echo "codex-supervisor: stopping before round $round: status=$status stop_condition=$stop_condition bugfix_attempts=$bugfix_attempts" >&2
+            exit 0
+        fi
+    elif [ "$status" = "needs_user" ]; then
         echo "codex-supervisor: stopping before round $round: status=$status stop_condition=$stop_condition" >&2
         exit 0
     fi
 
     stamp="$(date +%Y%m%d-%H%M%S)"
-    log_file="$log_dir/round-${stamp}-${round}.log"
+    log_file="$log_dir/${round_mode}-round-${stamp}-${round}.log"
     heartbeat="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-    echo "codex-supervisor: starting round $round" >&2
+    echo "codex-supervisor: starting $round_mode round $round" >&2
     echo "codex-supervisor: log: $log_file" >&2
     echo "codex-supervisor: command: $codex_bin $codex_args <prompt>" >&2
 
-    state_update --arg round "$round" --arg log "$log_file" --arg heartbeat "$heartbeat" '
+    if [ "$round_mode" = "bugfix" ]; then
+        state_update --arg round "$round" --arg log "$log_file" --arg heartbeat "$heartbeat" --arg trigger "$stop_condition" '
+            .run_control.status = "bugfixing" |
+            .run_control.phase = "bugfix" |
+            .run_control.active_step = ("bugfix for " + $trigger) |
+            .run_control.last_round = ($round | tonumber) |
+            .run_control.last_log = $log |
+            .run_control.heartbeat = $heartbeat |
+            .run_control.last_exit = null |
+            .run_control.bugfix.enabled = true |
+            .run_control.bugfix.status = "running" |
+            .run_control.bugfix.attempts = (if .run_control.bugfix.trigger_condition == $trigger then ((.run_control.bugfix.attempts // 0) + 1) else 1 end) |
+            .run_control.bugfix.max_attempts = (.run_control.bugfix.max_attempts // 3) |
+            .run_control.bugfix.trigger_condition = $trigger |
+            .run_control.bugfix.last_log = $log'
+    else
+        state_update --arg round "$round" --arg log "$log_file" --arg heartbeat "$heartbeat" '
         .run_control.status = "running" |
         .run_control.active_step = "codex round running" |
         .run_control.last_round = ($round | tonumber) |
         .run_control.last_log = $log |
         .run_control.heartbeat = $heartbeat |
         .run_control.last_exit = null'
+    fi
 
-    prompt="$(cat "$prompt_file")"
+    prompt="$(cat "$round_prompt_file")"
     exit_code=0
     status_file="$(mktemp)"
     if [ "$stream_log" = "1" ]; then
@@ -114,35 +169,50 @@ while :; do
     fi
     rm -f "$status_file"
 
-    echo "codex-supervisor: round $round exited with code $exit_code" >&2
+    echo "codex-supervisor: $round_mode round $round exited with code $exit_code" >&2
 
     if [ "$exit_code" -eq 124 ]; then
         heartbeat="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        state_update --arg log "$log_file" --arg heartbeat "$heartbeat" '
+        state_update --arg log "$log_file" --arg heartbeat "$heartbeat" --arg mode "$round_mode" '
             .run_control.status = "running" |
             .run_control.last_exit = "timeout" |
             .run_control.last_log = $log |
-            .run_control.heartbeat = $heartbeat'
+            .run_control.heartbeat = $heartbeat |
+            if $mode == "bugfix" then .run_control.bugfix.status = "timeout" else . end'
     elif [ "$exit_code" -ne 0 ]; then
         heartbeat="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        state_update --arg code "$exit_code" --arg log "$log_file" --arg heartbeat "$heartbeat" '
+        state_update --arg code "$exit_code" --arg log "$log_file" --arg heartbeat "$heartbeat" --arg mode "$round_mode" '
             .run_control.status = "needs_user" |
             .run_control.stop_condition = "codex_process_failed" |
             .run_control.last_exit = ("exit_" + $code) |
             .run_control.last_log = $log |
-            .run_control.heartbeat = $heartbeat'
+            .run_control.heartbeat = $heartbeat |
+            if $mode == "bugfix" then .run_control.bugfix.status = "failed" else . end'
     else
         heartbeat="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        state_update --arg log "$log_file" --arg heartbeat "$heartbeat" '
+        state_update --arg log "$log_file" --arg heartbeat "$heartbeat" --arg mode "$round_mode" '
             .run_control.last_exit = "clean_process_exit" |
             .run_control.last_log = $log |
-            .run_control.heartbeat = $heartbeat'
+            .run_control.heartbeat = $heartbeat |
+            if $mode == "bugfix" then .run_control.bugfix.status = "completed_process" else . end'
     fi
 
     status="$(state_get '.run_control.status // "running"')"
     stop_condition="$(state_get '.run_control.stop_condition // ""')"
-    echo "codex-supervisor: state after round $round: status=$status stop_condition=$stop_condition" >&2
-    if [ "$status" = "done" ] || [ "$status" = "needs_user" ] || [ -n "$stop_condition" ]; then
+    bugfix_attempts="$(state_get '.run_control.bugfix.attempts // 0')"
+    echo "codex-supervisor: state after $round_mode round $round: status=$status stop_condition=$stop_condition bugfix_attempts=$bugfix_attempts" >&2
+    if [ "$status" = "done" ]; then
+        echo "codex-supervisor: stopping after round $round: status=$status stop_condition=$stop_condition" >&2
+        exit 0
+    fi
+    if [ -n "$stop_condition" ]; then
+        if is_bugfix_condition "$stop_condition" && [ "$bugfix_attempts" -lt "$bugfix_max_attempts" ]; then
+            echo "codex-supervisor: continuing into bugfix for stop_condition=$stop_condition" >&2
+        else
+            echo "codex-supervisor: stopping after round $round: status=$status stop_condition=$stop_condition bugfix_attempts=$bugfix_attempts" >&2
+            exit 0
+        fi
+    elif [ "$status" = "needs_user" ]; then
         echo "codex-supervisor: stopping after round $round: status=$status stop_condition=$stop_condition" >&2
         exit 0
     fi

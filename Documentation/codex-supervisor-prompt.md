@@ -6,8 +6,10 @@ Read `state.json` first, then continue the task described by `state.json` and
 Required behavior for each supervisor round:
 
 - Treat `state.json` and git status as the recovery boundary.
-- If `run_control.stop_condition` is non-empty, report that condition and do
-  not continue.
+- If `run_control.stop_condition` is non-empty, the supervisor should normally
+  invoke `Documentation/codex-bugfix-prompt.md` instead of this prompt. If this
+  prompt is invoked with a stop condition still set, report that mismatch and do
+  not continue normal roadmap work.
 - If there are dirty files, inspect them first and either finish the in-progress
   patch or set a machine-readable stop condition.
 - If the worktree is clean and no stop condition exists, select the next narrow
@@ -49,3 +51,6 @@ When stopping, write:
 ```
 
 If no allowed stop condition is present, keep working.
+
+For recoverable failures, prefer setting a precise stop condition over asking
+the user directly; the supervisor can then launch a bugfix round.

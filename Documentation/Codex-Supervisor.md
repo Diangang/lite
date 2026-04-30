@@ -7,8 +7,8 @@ restartable worker, not as an always-live process.
 
 `scripts/codex-supervisor.sh` is the long-running process. Each loop starts one
 Codex round with `Documentation/codex-supervisor-prompt.md`, waits for Codex to
-return or time out, checks `state.json`, then either starts another round or
-stops on a machine-readable condition.
+return or time out, checks `state.json`, then starts another normal round, starts
+a bugfix round, or stops on a hard machine-readable condition.
 
 This means a Codex final response, context compaction, terminal disconnect, or
 tool timeout does not automatically stop the overall task. The supervisor keeps
@@ -17,8 +17,10 @@ running unless `state.json` says it should stop.
 ## Files
 
 - `scripts/codex-supervisor.sh`: external loop.
-- `Documentation/codex-supervisor-prompt.md`: fixed prompt passed to each Codex
-  round.
+- `Documentation/codex-supervisor-prompt.md`: fixed prompt passed to normal
+  Codex rounds.
+- `Documentation/codex-bugfix-prompt.md`: fixed prompt passed to bugfix rounds
+  after recoverable stop conditions.
 - `state.json`: durable task state and stop policy.
 - `logs/agent-runs/`: per-round Codex stdout/stderr logs.
 - `Documentation/reviews/`: per-patch review and Linux alignment records.
@@ -39,8 +41,10 @@ CODEX_BIN=codex
 CODEX_ARGS=exec
 CODEX_STATE_FILE=state.json
 CODEX_PROMPT_FILE=Documentation/codex-supervisor-prompt.md
+CODEX_BUGFIX_PROMPT_FILE=Documentation/codex-bugfix-prompt.md
 CODEX_LOG_DIR=logs/agent-runs
 CODEX_MAX_ROUNDS=0
+CODEX_BUGFIX_MAX_ATTEMPTS=3
 CODEX_ROUND_TIMEOUT=0
 CODEX_SLEEP_AFTER_ROUND=1
 CODEX_STREAM_LOG=1
@@ -58,19 +62,34 @@ timeout even when `CODEX_ROUND_TIMEOUT` is set. `CODEX_ARGS=exec` runs Codex in
 non-interactive mode so supervisor logging can redirect stdout/stderr.
 `CODEX_STREAM_LOG=1` mirrors Codex output to the terminal while also writing the
 round log file. Set `CODEX_STREAM_LOG=0` for file-only logging.
+`CODEX_BUGFIX_MAX_ATTEMPTS` limits automatic repair attempts for a single
+recoverable stop condition.
 
 ## Stop Contract
 
 The supervisor stops only when:
 
 - `.run_control.status` is `done` or `needs_user`;
-- `.run_control.stop_condition` is non-empty;
+- `.run_control.stop_condition` is non-empty and is not bugfixable;
+- `.run_control.stop_condition` is bugfixable but the bugfix attempt budget is
+  exhausted;
 - the supervisor itself reaches `CODEX_MAX_ROUNDS`;
 - Codex exits with a non-timeout process error.
 
 Timeout exit code `124` is treated as recoverable: the supervisor records
 `last_exit=timeout` and starts the next round unless Codex also wrote a stop
 condition.
+
+Bugfixable stop conditions are:
+
+- `validation_failure`
+- `review_findings`
+- `codex_process_failed`
+
+When one of these appears, the next supervisor loop uses
+`Documentation/codex-bugfix-prompt.md`. A successful bugfix must clear
+`.run_control.stop_condition` and set `.run_control.status` back to `running`;
+then normal roadmap work resumes automatically.
 
 Allowed task stop conditions are:
 
