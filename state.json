@@ -83,9 +83,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-wait-atomic-t-key-initializer",
+    "id": "stage3-waitqueue-head-onstack",
     "status": "review_clean",
-    "summary": "Add Linux atomic wait-bit key initializer macro.",
+    "summary": "Add Linux on-stack waitqueue head declaration macro.",
     "files": [
       "include/linux/wait.h",
       "state.json"
@@ -108,17 +108,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "d61da6d3268f7d11ae15865d0b2d082db88f182f",
+    "pre_review_hash": "2de1a134f1a73aef3ad58c311a15a71ce7577632",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage3-wait-atomic-t-key-initializer.md",
+    "record": "Documentation/reviews/2026-04-30-stage3-waitqueue-head-onstack.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/wait.h state.json Documentation/reviews/2026-04-30-stage3-wait-atomic-t-key-initializer.md"
+      "git show -- include/linux/wait.h state.json Documentation/reviews/2026-04-30-stage3-waitqueue-head-onstack.md"
     ]
   },
   "next_patch": {

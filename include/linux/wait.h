@@ -105,6 +105,15 @@ static inline void init_waitqueue_head(wait_queue_head_t *q)
     __init_waitqueue_head(q);
 }
 
+#ifdef CONFIG_LOCKDEP
+#define __WAIT_QUEUE_HEAD_INIT_ONSTACK(name) \
+    ({ init_waitqueue_head(&name); name; })
+#define DECLARE_WAIT_QUEUE_HEAD_ONSTACK(name) \
+    wait_queue_head_t name = __WAIT_QUEUE_HEAD_INIT_ONSTACK(name)
+#else
+#define DECLARE_WAIT_QUEUE_HEAD_ONSTACK(name) DECLARE_WAIT_QUEUE_HEAD(name)
+#endif
+
 static inline void wake_up_all(wait_queue_head_t *q)
 {
     __wake_up(q, 0, 0, (void *)0);
