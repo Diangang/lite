@@ -196,6 +196,65 @@ unsigned int radix_tree_gang_lookup(struct radix_tree_root *root, void **results
                                        first_index, results, max_items, 0);
 }
 
+static unsigned int radix_tree_gang_lookup_slot_node(struct radix_tree_node *node,
+                                                     unsigned int height,
+                                                     unsigned long base,
+                                                     unsigned long first_index,
+                                                     void ***results,
+                                                     unsigned long *indices,
+                                                     unsigned int max_items,
+                                                     unsigned int found)
+{
+    unsigned int i;
+
+    if (!node || found == max_items)
+        return found;
+
+    if (height == 1) {
+        for (i = 0; i < RADIX_TREE_MAP_SIZE && found < max_items; i++) {
+            unsigned long index = base + i;
+
+            if (index < first_index)
+                continue;
+            if (node->slots[i]) {
+                results[found] = &node->slots[i];
+                if (indices)
+                    indices[found] = index;
+                found++;
+            }
+        }
+        return found;
+    }
+
+    for (i = 0; i < RADIX_TREE_MAP_SIZE && found < max_items; i++) {
+        unsigned int shift = (height - 1) * RADIX_TREE_MAP_SHIFT;
+        unsigned long child_base = base + ((unsigned long)i << shift);
+        unsigned long child_last = child_base + radix_tree_maxindex(height - 1);
+
+        if (child_last < child_base)
+            child_last = ~0UL;
+        if (child_last < first_index)
+            continue;
+        found = radix_tree_gang_lookup_slot_node(node->slots[i], height - 1,
+                                                 child_base, first_index,
+                                                 results, indices,
+                                                 max_items, found);
+    }
+    return found;
+}
+
+unsigned int radix_tree_gang_lookup_slot(struct radix_tree_root *root, void ***results,
+                                         unsigned long *indices,
+                                         unsigned long first_index,
+                                         unsigned int max_items)
+{
+    if (!root || !root->rnode || !max_items)
+        return 0;
+    return radix_tree_gang_lookup_slot_node(root->rnode, root->height, 0,
+                                            first_index, results, indices,
+                                            max_items, 0);
+}
+
 void *radix_tree_delete(struct radix_tree_root *root, unsigned long index)
 {
     struct radix_tree_node *path[8];

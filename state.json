@@ -122,9 +122,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-radix-tree-gang-lookup-api",
+    "id": "stage4-radix-tree-gang-lookup-slot-api",
     "status": "review_clean",
-    "summary": "Add Linux's radix_tree_gang_lookup API for ascending multi-item lookup.",
+    "summary": "Add Linux's radix_tree_gang_lookup_slot API for ascending multi-slot lookup.",
     "files": [
       "include/linux/radix-tree.h",
       "lib/radix-tree.c",
@@ -149,17 +149,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "c0f018f50117b61dd2c8a54154e63eeb9b9d53ac",
+    "pre_review_hash": "e9386ffc4d912040273045d58caee0de49455557",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-radix-tree-gang-lookup-api.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-radix-tree-gang-lookup-slot-api.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/radix-tree.h lib/radix-tree.c state.json Documentation/reviews/2026-04-30-stage4-radix-tree-gang-lookup-api.md"
+      "git show -- include/linux/radix-tree.h lib/radix-tree.c state.json Documentation/reviews/2026-04-30-stage4-radix-tree-gang-lookup-slot-api.md"
     ]
   },
   "next_patch": {
