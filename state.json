@@ -134,12 +134,12 @@
     }
   ],
   "current_patch": {
-    "id": "stage5-proc-status-add-ppid",
+    "id": "stage5-proc-status-add-tgid",
     "status": "review_clean",
-    "summary": "Add Linux PPid field to proc status.",
+    "summary": "Add Linux Tgid field to proc status.",
     "files": [
       "fs/proc/array.c",
-      "Documentation/reviews/2026-04-30-stage5-proc-status-add-ppid.md",
+      "Documentation/reviews/2026-04-30-stage5-proc-status-add-tgid.md",
       "state.json"
     ],
     "linux_reference": [
@@ -161,17 +161,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "ce1e93fc7540b3819947e88059ba7ac002555e92",
+    "pre_review_hash": "87b4945aafcb659d3f98c586abeaf2e397676cce",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage5-proc-status-add-ppid.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-proc-status-add-tgid.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- fs/proc/array.c state.json Documentation/reviews/2026-04-30-stage5-proc-status-add-ppid.md"
+      "git show -- fs/proc/array.c state.json Documentation/reviews/2026-04-30-stage5-proc-status-add-tgid.md"
     ]
   },
   "next_patch": {

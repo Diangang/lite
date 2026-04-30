@@ -131,6 +131,8 @@ uint32_t task_dump_status_pid(uint32_t pid, char *buf, uint32_t len)
     proc_buf_append(buf, &off, len, name);
     proc_buf_append(buf, &off, len, "\nState:\t");
     proc_buf_append(buf, &off, len, state);
+    proc_buf_append(buf, &off, len, "\nTgid:\t");
+    proc_buf_append_u32(buf, &off, len, task_tgid_nr(t));
     proc_buf_append(buf, &off, len, "\nPid:\t");
     proc_buf_append_u32(buf, &off, len, t->pid);
     proc_buf_append(buf, &off, len, "\nPPid:\t");
