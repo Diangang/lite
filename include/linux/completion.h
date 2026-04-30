@@ -8,7 +8,7 @@
 #include "linux/irqflags.h"
 
 struct completion {
-    uint32_t done;
+    unsigned int done;
     wait_queue_head_t wait;
 };
 
