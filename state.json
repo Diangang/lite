@@ -83,15 +83,15 @@
     }
   ],
   "current_patch": {
-    "id": "stage3-completion-done-type",
+    "id": "stage3-atomic-xchg-fallback-group",
     "status": "review_clean",
-    "summary": "Align completion done member type with Linux.",
+    "summary": "Align atomic_xchg fallback acquire/release group with Linux.",
     "files": [
-      "include/linux/completion.h",
+      "include/linux/atomic.h",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/completion.h"
+      "linux2.6/include/linux/atomic.h"
     ]
   },
   "validation": {
@@ -108,17 +108,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "fecf9830f35d4dd77b49da33a0c32f4fbc0ae2f6",
+    "pre_review_hash": "5a71a2e1b74156851e7c76380fd640c9b0aef044",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage3-completion-done-type.md",
+    "record": "Documentation/reviews/2026-04-30-stage3-atomic-xchg-fallback-group.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/completion.h state.json Documentation/reviews/2026-04-30-stage3-completion-done-type.md"
+      "git show -- include/linux/atomic.h state.json Documentation/reviews/2026-04-30-stage3-atomic-xchg-fallback-group.md"
     ]
   },
   "next_patch": {
