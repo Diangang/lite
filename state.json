@@ -122,9 +122,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-radix-tree-internal-lookup-api",
+    "id": "stage4-radix-tree-locate-item-api",
     "status": "review_clean",
-    "summary": "Add Linux's __radix_tree_lookup helper and route lookup APIs through it.",
+    "summary": "Add Linux's radix_tree_locate_item API for item-to-index lookup.",
     "files": [
       "include/linux/radix-tree.h",
       "lib/radix-tree.c",
@@ -149,17 +149,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "afc3dc7ec739660f1cf014492def0f870167a109",
+    "pre_review_hash": "5b18de7f43f6ae369cf86ecdb14eeb757b25894f",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-radix-tree-internal-lookup-api.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-radix-tree-locate-item-api.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/radix-tree.h lib/radix-tree.c state.json Documentation/reviews/2026-04-30-stage4-radix-tree-internal-lookup-api.md"
+      "git show -- include/linux/radix-tree.h lib/radix-tree.c state.json Documentation/reviews/2026-04-30-stage4-radix-tree-locate-item-api.md"
     ]
   },
   "next_patch": {

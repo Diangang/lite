@@ -68,6 +68,7 @@ unsigned int radix_tree_gang_lookup_slot(struct radix_tree_root *root, void ***r
 int radix_tree_preload(gfp_t gfp_mask);
 int radix_tree_maybe_preload(gfp_t gfp_mask);
 void radix_tree_destroy(struct radix_tree_root *root);
+unsigned long radix_tree_locate_item(struct radix_tree_root *root, void *item);
 
 static inline void radix_tree_preload_end(void)
 {

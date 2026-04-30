@@ -267,6 +267,45 @@ int radix_tree_maybe_preload(gfp_t gfp_mask)
     return 0;
 }
 
+static unsigned long radix_tree_locate_item_node(struct radix_tree_node *node,
+                                                 unsigned int height,
+                                                 unsigned long base,
+                                                 void *item)
+{
+    unsigned int i;
+
+    if (!node)
+        return (unsigned long)-1;
+
+    if (height == 1) {
+        for (i = 0; i < RADIX_TREE_MAP_SIZE; i++) {
+            if (node->slots[i] == item)
+                return base + i;
+        }
+        return (unsigned long)-1;
+    }
+
+    for (i = 0; i < RADIX_TREE_MAP_SIZE; i++) {
+        unsigned int shift = (height - 1) * RADIX_TREE_MAP_SHIFT;
+        unsigned long child_base = base + ((unsigned long)i << shift);
+        unsigned long found;
+
+        found = radix_tree_locate_item_node(node->slots[i], height - 1,
+                                            child_base, item);
+        if (found != (unsigned long)-1)
+            return found;
+    }
+
+    return (unsigned long)-1;
+}
+
+unsigned long radix_tree_locate_item(struct radix_tree_root *root, void *item)
+{
+    if (!root || !root->rnode)
+        return (unsigned long)-1;
+    return radix_tree_locate_item_node(root->rnode, root->height, 0, item);
+}
+
 void *radix_tree_delete(struct radix_tree_root *root, unsigned long index)
 {
     struct radix_tree_node *path[8];
