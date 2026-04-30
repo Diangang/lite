@@ -25,6 +25,11 @@ static inline unsigned long __get_free_page(gfp_t gfp)
     return __get_free_pages(gfp, 0);
 }
 
+static inline unsigned long __get_dma_pages(gfp_t gfp, unsigned int order)
+{
+    return __get_free_pages(gfp | GFP_DMA, order);
+}
+
 unsigned long get_zeroed_page(gfp_t gfp);
 
 void free_pages(unsigned long addr, unsigned int order);

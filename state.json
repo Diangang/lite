@@ -122,9 +122,9 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-gfp-get-free-page-helper",
+    "id": "stage4-gfp-get-dma-pages-helper",
     "status": "review_clean",
-    "summary": "Add Linux's __get_free_page helper as a wrapper over __get_free_pages.",
+    "summary": "Add Linux's __get_dma_pages helper as a GFP_DMA wrapper over __get_free_pages.",
     "files": [
       "include/linux/gfp.h",
       "state.json"
@@ -147,17 +147,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "b1395870c2d966b964bfc2eb72bfe0a5ba7ef466",
+    "pre_review_hash": "d1c98448a69c94ac31ee9218d0873ea176625342",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-gfp-get-free-page-helper.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-gfp-get-dma-pages-helper.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/gfp.h state.json Documentation/reviews/2026-04-30-stage4-gfp-get-free-page-helper.md"
+      "git show -- include/linux/gfp.h state.json Documentation/reviews/2026-04-30-stage4-gfp-get-dma-pages-helper.md"
     ]
   },
   "next_patch": {
