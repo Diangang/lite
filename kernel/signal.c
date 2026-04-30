@@ -47,7 +47,7 @@ int sys_kill(uint32_t id, int sig)
         return -1;
     uint32_t flags = tasklist_lock();
     struct task_struct *t = find_task_by_vpid(id);
-    if (!t || t->pid == 0) {
+    if (!t || is_idle_task(t)) {
         tasklist_unlock(flags);
         return -1;
     }
