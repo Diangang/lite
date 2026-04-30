@@ -14,7 +14,7 @@
       "Documentation/Linux26-Roadmap.md",
       "Documentation/reviews/"
     ],
-    "startup_instruction": "使用 linux-alignment skill。读取 state.json 和 Documentation/Linux26-Roadmap.md，按 state.json 从 current_patch.status=review_clean 继续长期 Linux2.6 alignment。严格遵守 boundaries.stop_policy：一直循环执行 next_patch，跨 stage 也继续；每轮选择一个窄差异点，先读 Linux2.6 参考和 Lite 当前实现，写 Linux Alignment Report/mapping ledger，修改代码，运行 make -j4、make smoke-128、make smoke-512，更新 state.json 和 review 文档，commit，review，amend 到 review_clean，然后继续。只有 boundaries.stop_policy.allowed_stop_conditions 中的条件命中时才停止；如果停止，输出命中的具体停止条件。",
+    "startup_instruction": "使用 linux-alignment skill。读取 state.json 和 Documentation/Linux26-Roadmap.md，按 state.json 从 current_patch.status=review_clean 继续长期 Linux2.6 alignment。严格遵守 boundaries.stop_policy：一直循环执行 next_patch，跨 stage 也继续；每轮选择一个窄差异点，先读 Linux2.6 参考和 Lite 当前实现，写 Linux Alignment Report/mapping ledger，修改代码，运行 make -j4、make smoke-128、make smoke-512，更新 state.json 和 review 文档，commit，review，amend 到 review_clean，然后继续。只要没有编译、测试、review、roadmap 路由、Linux 对齐或破坏性操作错误，就继续跑；不要因为 stage transition、clean review checkpoint、successful validation、当前 stage 的窄项耗尽或需要进入下一 roadmap stage 而停止。只有 boundaries.stop_policy.allowed_stop_conditions 中的真实错误条件命中时才停止；如果停止，输出命中的具体停止条件。",
     "update_required_when": [
       "active_stage changes",
       "current_patch changes",
@@ -29,7 +29,7 @@
   },
   "boundaries": {
     "roadmap": "Documentation/Linux26-Roadmap.md",
-    "active_stage": "Stage 4: MM Second Pass",
+    "active_stage": "Stage 5: Kernel Core Remaining Gaps",
     "stage_transition": "When the active stage has no remaining narrow in-scope patch, update active_stage to the next roadmap stage and continue automatically. Do not stop just because the next patch crosses a stage boundary.",
     "stop_policy": {
       "continue_until_stop_condition": true,
@@ -38,16 +38,19 @@
         "turn_boundary",
         "clean_review_checkpoint",
         "successful_validation",
-        "lack_of_summary_need"
+        "lack_of_summary_need",
+        "current_stage_exhausted",
+        "roadmap_stage_scope_change"
       ],
       "allowed_stop_conditions": [
         "route_change_outside_roadmap",
-        "scope_expansion",
+        "validation_failure",
+        "review_findings",
         "skipping_required_tests",
         "new_non_linux_abstraction",
         "destructive_operation"
       ],
-      "on_stop": "State the exact allowed stop condition that was hit. If no allowed stop condition was hit, continue the loop instead of stopping."
+      "on_stop": "State the exact allowed stop condition that was hit. If no allowed stop condition was hit and the latest build, smoke tests, and review are clean, continue the loop instead of stopping."
     },
     "requires_linux_reference_first": true,
     "single_patch_scope": true,
@@ -83,12 +86,12 @@
     {
       "stage": 4,
       "name": "MM Second Pass",
-      "status": "active"
+      "status": "done"
     },
     {
       "stage": 5,
       "name": "Kernel Core Remaining Gaps",
-      "status": "pending"
+      "status": "active"
     },
     {
       "stage": 6,
@@ -163,9 +166,7 @@
     ]
   },
   "next_patch": {
-    "status": "blocked_scope_expansion",
-    "candidate": "Next adjacent Stage 4 candidates require scope expansion: vmalloc_user/vmalloc_32_user need VM_USERMAP/remap semantics, radix-tree tag/iterator APIs need tag storage and iterator structure expansion, IDA needs a new ID allocator surface, and full vmap/vm_struct APIs need vmap area lifetime structures.",
-    "stop_condition": "scope_expansion",
-    "stop_reason": "No further audited narrow Stage 4 MM/lib primitive candidate is available without introducing broader Linux structures or policy beyond the current single-patch boundary."
+    "status": "ready",
+    "candidate": "Continue automatically in Stage 5 by auditing the next narrow kernel core difference against linux2.6 kernel/sched.c, kernel/fork.c, kernel/exit.c, or kernel/signal.c references. Do not stop solely because Stage 4 narrow MM/lib candidates are exhausted."
   }
 }
