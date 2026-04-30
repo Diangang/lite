@@ -168,6 +168,9 @@ struct task_struct *task_current(void);
 void task_set_need_resched(void);
 void task_clear_need_resched(void);
 int task_need_resched(void);
+void preempt_disable(void);
+void preempt_enable(void);
+int preempt_count(void);
 
 uint32_t task_get_switch_count(void);
 const char *task_get_current_comm(void);

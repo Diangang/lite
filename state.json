@@ -11,14 +11,14 @@
   },
   "run_control": {
     "status": "running",
-    "phase": "ready_for_next_patch",
-    "active_step": "select next Stage 5 roadmap patch",
+    "phase": "review_clean",
+    "active_step": "stage5-preempt-count-protects-nvme-poll",
     "stop_condition": null,
     "last_error": null,
-    "last_exit": null,
+    "last_exit": "clean_process_exit",
     "last_round": 1,
     "last_log": "logs/agent-runs/round-20260430-191245-1.log",
-    "heartbeat": "2026-04-30T11:23:08Z",
+    "heartbeat": "2026-04-30T11:45:00Z",
     "budgets": {
       "max_rounds": 0,
       "max_failures": 3,
@@ -187,15 +187,19 @@
     }
   ],
   "current_patch": {
-    "id": "stage5-default-wake-function-uses-wake-up-process",
+    "id": "stage5-preempt-count-protects-nvme-poll",
     "status": "review_clean",
-    "summary": "Align Lite default_wake_function with Linux scheduler wake delegation.",
+    "summary": "Defer timer IRQ scheduling while NVMe synchronous poll is preempt-disabled.",
     "files": [
-      "kernel/sched/wait.c",
-      "Documentation/reviews/2026-04-30-stage5-default-wake-function-uses-wake-up-process.md",
+      "arch/x86/kernel/irq.c",
+      "include/linux/sched.h",
+      "kernel/sched/core.c",
+      "drivers/nvme/host/pci.c",
+      "Documentation/reviews/2026-04-30-stage5-preempt-count-protects-nvme-poll.md",
       "state.json"
     ],
     "linux_reference": [
+      "linux2.6/arch/x86/entry/entry_32.S",
       "linux2.6/kernel/sched/core.c"
     ]
   },
@@ -213,17 +217,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "70e1b8d2a412e0e2abb6ff9f3f1afc87e799e443",
+    "pre_review_hash": "af618d9e7a628a9ef2b6e08d1745d8d0b11506db",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage5-default-wake-function-uses-wake-up-process.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-preempt-count-protects-nvme-poll.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- kernel/sched/wait.c state.json Documentation/reviews/2026-04-30-stage5-default-wake-function-uses-wake-up-process.md"
+      "git show -- arch/x86/kernel/irq.c include/linux/sched.h kernel/sched/core.c drivers/nvme/host/pci.c state.json Documentation/reviews/2026-04-30-stage5-preempt-count-protects-nvme-poll.md"
     ]
   },
   "next_patch": {

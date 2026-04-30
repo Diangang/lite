@@ -149,7 +149,7 @@ struct pt_regs *irq_handler(struct pt_regs *regs)
 
     if (desc->irq == IRQ_TIMER) {
         task_tick();
-        if (task_should_resched())
+        if (preempt_count() == 0 && task_should_resched())
             regs = task_schedule(regs);
     }
 

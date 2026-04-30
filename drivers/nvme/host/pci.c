@@ -12,6 +12,7 @@
 #include "linux/blkdev.h"
 #include "linux/bio.h"
 #include "linux/errno.h"
+#include "linux/sched.h"
 #include "linux/time.h"
 #include "linux/gfp.h"
 #include "asm/pgtable.h"
@@ -253,9 +254,11 @@ static int nvme_cq_poll_cid(struct nvme_queue *q, uint16_t cid, struct nvme_comp
     if (!q || cid == 0)
         return -EINVAL;
     volatile struct nvme_completion *cq = (volatile struct nvme_completion *)q->cq;
+    int ret;
 
     /* Poll completion queue. */
     uint32_t deadline = time_get_jiffies() + timeout_ticks;
+    preempt_disable();
     while (1) {
         struct nvme_completion cpl = cq[q->cq_head];
         uint16_t phase = cpl.status & 1u;
@@ -278,15 +281,18 @@ static int nvme_cq_poll_cid(struct nvme_queue *q, uint16_t cid, struct nvme_comp
                 if (cpl_out)
                     *cpl_out = cpl;
                 /* Status code is bits 15:1 (0 means success). */
-                if ((cpl.status >> 1) != 0)
-                    return -EIO;
-                return 0;
+                ret = ((cpl.status >> 1) != 0) ? -EIO : 0;
+                break;
             }
             /* Unrelated completion: keep polling until our CID completes. */
         }
-        if (time_after_eq(time_get_jiffies(), deadline))
-            return -ETIMEDOUT;
+        if (time_after_eq(time_get_jiffies(), deadline)) {
+            ret = -ETIMEDOUT;
+            break;
+        }
     }
+    preempt_enable();
+    return ret;
 }
 
 static int __nvme_submit_sync_cmd(struct nvme_dev *dev, struct nvme_queue *q, struct nvme_command *cmd,

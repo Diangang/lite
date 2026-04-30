@@ -20,6 +20,7 @@ struct task_struct *current = NULL;
 uint32_t last_pid = 0;
 int need_resched = 0;
 uint32_t sched_switch_count = 0;
+static int kernel_preempt_count;
 
 uint32_t tasklist_lock(void)
 {
@@ -81,6 +82,22 @@ void task_clear_need_resched(void)
 int task_need_resched(void)
 {
     return sched_boot_cpu()->need_resched;
+}
+
+void preempt_disable(void)
+{
+    kernel_preempt_count++;
+}
+
+void preempt_enable(void)
+{
+    if (kernel_preempt_count > 0)
+        kernel_preempt_count--;
+}
+
+int preempt_count(void)
+{
+    return kernel_preempt_count;
 }
 
 static void runqueue_init(struct rq *rq, struct list_head *tasks)
@@ -348,4 +365,3 @@ void sched_init(void)
 {
     init_task();
 }
-
