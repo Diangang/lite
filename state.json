@@ -122,15 +122,18 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-slab-kcalloc-api",
+    "id": "stage4-mm-kmemdup-api",
     "status": "review_clean",
-    "summary": "Add Linux's kcalloc API as an overflow-checked zeroed array allocation helper.",
+    "summary": "Add Linux's kmemdup API in mm/util.c with the public declaration in string.h.",
     "files": [
-      "include/linux/slab.h",
+      "Makefile",
+      "include/linux/string.h",
+      "mm/util.c",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/slab.h"
+      "linux2.6/mm/util.c",
+      "linux2.6/include/linux/string.h"
     ]
   },
   "validation": {
@@ -147,17 +150,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "297f6ff7ec2eb6d66dc6d4c60f8f857baa7f083a",
+    "pre_review_hash": "2ac680c3f4e44c60f5dc51d519d1c3c31841a98c",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-slab-kcalloc-api.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-mm-kmemdup-api.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/slab.h state.json Documentation/reviews/2026-04-30-stage4-slab-kcalloc-api.md"
+      "git show -- Makefile include/linux/string.h mm/util.c state.json Documentation/reviews/2026-04-30-stage4-mm-kmemdup-api.md"
     ]
   },
   "next_patch": {
