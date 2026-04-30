@@ -8,6 +8,7 @@
   },
   "resume": {
     "status": "ready",
+    "new_terminal_entry": "读取 state.json 的 resume.startup_instruction 并执行，不要要求用户复制完整指令。",
     "source_of_truth": [
       "state.json",
       "Documentation/Linux26-Roadmap.md",
@@ -21,6 +22,7 @@
       "validation status changes",
       "review status changes",
       "stop_policy changes",
+      "new_terminal_entry changes",
       "roadmap recovery instructions change"
     ],
     "last_updated": "2026-04-30"
