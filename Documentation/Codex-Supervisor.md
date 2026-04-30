@@ -36,6 +36,7 @@ Useful environment variables:
 
 ```sh
 CODEX_BIN=codex
+CODEX_ARGS=exec
 CODEX_STATE_FILE=state.json
 CODEX_PROMPT_FILE=Documentation/codex-supervisor-prompt.md
 CODEX_LOG_DIR=logs/agent-runs
@@ -52,7 +53,8 @@ CODEX_MAX_ROUNDS=10 CODEX_ROUND_TIMEOUT=3600 scripts/codex-supervisor.sh
 
 `CODEX_MAX_ROUNDS=0` means unlimited rounds. `CODEX_ROUND_TIMEOUT=0` disables
 the external timeout. If `timeout(1)` is unavailable, the script runs without a
-timeout even when `CODEX_ROUND_TIMEOUT` is set.
+timeout even when `CODEX_ROUND_TIMEOUT` is set. `CODEX_ARGS=exec` runs Codex in
+non-interactive mode so supervisor logging can redirect stdout/stderr.
 
 ## Stop Contract
 

@@ -7,6 +7,7 @@ cd "$repo_root"
 state_file="${CODEX_STATE_FILE:-state.json}"
 prompt_file="${CODEX_PROMPT_FILE:-Documentation/codex-supervisor-prompt.md}"
 codex_bin="${CODEX_BIN:-codex}"
+codex_args="${CODEX_ARGS:-exec}"
 log_dir="${CODEX_LOG_DIR:-logs/agent-runs}"
 max_rounds="${CODEX_MAX_ROUNDS:-0}"
 round_timeout="${CODEX_ROUND_TIMEOUT:-0}"
@@ -80,9 +81,11 @@ while :; do
     prompt="$(cat "$prompt_file")"
     exit_code=0
     if [ "$round_timeout" -gt 0 ] && command -v timeout >/dev/null 2>&1; then
-        timeout "$round_timeout" "$codex_bin" "$prompt" >"$log_file" 2>&1 || exit_code="$?"
+        # shellcheck disable=SC2086
+        timeout "$round_timeout" "$codex_bin" $codex_args "$prompt" >"$log_file" 2>&1 || exit_code="$?"
     else
-        "$codex_bin" "$prompt" >"$log_file" 2>&1 || exit_code="$?"
+        # shellcheck disable=SC2086
+        "$codex_bin" $codex_args "$prompt" >"$log_file" 2>&1 || exit_code="$?"
     fi
 
     if [ "$exit_code" -eq 124 ]; then

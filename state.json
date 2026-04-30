@@ -16,9 +16,9 @@
     "stop_condition": null,
     "last_error": null,
     "last_exit": null,
-    "last_round": 0,
-    "last_log": null,
-    "heartbeat": null,
+    "last_round": 1,
+    "last_log": "logs/agent-runs/round-20260430-190702-1.log",
+    "heartbeat": "2026-04-30T11:07:02Z",
     "budgets": {
       "max_rounds": 0,
       "max_failures": 3,
