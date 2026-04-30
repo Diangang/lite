@@ -12,7 +12,7 @@ void *kmem_cache_alloc(struct kmem_cache *cache);
 void kmem_cache_free(struct kmem_cache *cache, void *ptr);
 
 void *kmalloc(size_t size);
-void kfree(void *ptr);
+void kfree(const void *ptr);
 void kheap_print_stats(void);
 
 /* Minimal slab reclaim hook (Linux mapping: shrinkers / cache reaping). */

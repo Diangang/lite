@@ -122,17 +122,16 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-vmalloc-vzalloc-api",
+    "id": "stage4-slab-kfree-const",
     "status": "review_clean",
-    "summary": "Add Linux's vzalloc API as a zero-fill vmalloc wrapper.",
+    "summary": "Align kfree parameter with Linux's const void pointer prototype.",
     "files": [
-      "include/linux/vmalloc.h",
-      "mm/vmalloc.c",
+      "include/linux/slab.h",
+      "mm/slab.c",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/vmalloc.h",
-      "linux2.6/mm/vmalloc.c"
+      "linux2.6/include/linux/slab.h"
     ]
   },
   "validation": {
@@ -149,17 +148,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "ce1941afd7f55945662d08f08ebc034a377b9be3",
+    "pre_review_hash": "593173934b8bd231a2fe7ed34406430aebebbb9f",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-vmalloc-vzalloc-api.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-slab-kfree-const.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/vmalloc.h mm/vmalloc.c state.json Documentation/reviews/2026-04-30-stage4-vmalloc-vzalloc-api.md"
+      "git show -- include/linux/slab.h mm/slab.c state.json Documentation/reviews/2026-04-30-stage4-slab-kfree-const.md"
     ]
   },
   "next_patch": {

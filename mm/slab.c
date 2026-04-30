@@ -210,16 +210,17 @@ void *kmalloc(size_t size)
 }
 
 /* kfree: Implement kfree. */
-void kfree(void *ptr)
+void kfree(const void *ptr)
 {
     if (!ptr)
         return;
-    struct slab *s = slab_from_ptr(ptr);
+    void *addr = (void *)ptr;
+    struct slab *s = slab_from_ptr(addr);
     if (s && s->cache) {
-        kmem_cache_free(s->cache, ptr);
+        kmem_cache_free(s->cache, addr);
         return;
     }
-    struct large_hdr *hdr = (struct large_hdr*)((uint32_t)ptr - sizeof(struct large_hdr));
+    struct large_hdr *hdr = (struct large_hdr*)((uint32_t)addr - sizeof(struct large_hdr));
     if (hdr->magic != LARGE_MAGIC)
         return;
     free_pages(hdr->phys, hdr->order);
