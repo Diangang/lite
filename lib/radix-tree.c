@@ -255,6 +255,18 @@ unsigned int radix_tree_gang_lookup_slot(struct radix_tree_root *root, void ***r
                                             max_items, 0);
 }
 
+int radix_tree_preload(gfp_t gfp_mask)
+{
+    (void)gfp_mask;
+    return 0;
+}
+
+int radix_tree_maybe_preload(gfp_t gfp_mask)
+{
+    (void)gfp_mask;
+    return 0;
+}
+
 void *radix_tree_delete(struct radix_tree_root *root, unsigned long index)
 {
     struct radix_tree_node *path[8];

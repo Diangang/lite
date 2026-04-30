@@ -122,21 +122,17 @@
     }
   ],
   "current_patch": {
-    "id": "stage4-idr-replace-api",
+    "id": "stage4-radix-tree-preload-api",
     "status": "review_clean",
-    "summary": "Add Linux's idr_replace API with ERR_PTR error returns.",
+    "summary": "Add Linux's radix_tree_preload and radix_tree_maybe_preload API surface.",
     "files": [
-      "include/linux/err.h",
-      "include/linux/errno.h",
-      "include/linux/idr.h",
-      "lib/idr.c",
+      "include/linux/radix-tree.h",
+      "lib/radix-tree.c",
       "state.json"
     ],
     "linux_reference": [
-      "linux2.6/include/linux/err.h",
-      "linux2.6/include/uapi/asm-generic/errno-base.h",
-      "linux2.6/include/linux/idr.h",
-      "linux2.6/lib/idr.c"
+      "linux2.6/include/linux/radix-tree.h",
+      "linux2.6/lib/radix-tree.c"
     ]
   },
   "validation": {
@@ -153,17 +149,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "e0b3ed52fbd43d7ff252f4859a5fa4ce923bbdc3",
+    "pre_review_hash": "fa675b1982ec499447000a3a76c495d366ecef2c",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage4-idr-replace-api.md",
+    "record": "Documentation/reviews/2026-04-30-stage4-radix-tree-preload-api.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- include/linux/err.h include/linux/errno.h include/linux/idr.h lib/idr.c state.json Documentation/reviews/2026-04-30-stage4-idr-replace-api.md"
+      "git show -- include/linux/radix-tree.h lib/radix-tree.c state.json Documentation/reviews/2026-04-30-stage4-radix-tree-preload-api.md"
     ]
   },
   "next_patch": {
