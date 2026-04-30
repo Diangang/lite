@@ -108,6 +108,11 @@ static inline uint32_t task_ppid_nr(const struct task_struct *task)
     return task->real_parent->pid;
 }
 
+static inline int is_global_init(struct task_struct *task)
+{
+    return task && task->pid == 1;
+}
+
 extern struct list_head task_list_head;
 /*
  * Linux mapping: Lite still exports `current` and `need_resched` as
