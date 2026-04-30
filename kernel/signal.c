@@ -5,9 +5,10 @@
 #include "linux/sched.h"
 #include "linux/wait.h"
 
-/* signal_wake_task: Implement signal wake task. */
-static void signal_wake_task(struct task_struct *t)
+/* Linux mapping: signal_wake_up_state() wakes a task for pending signal work. */
+void signal_wake_up_state(struct task_struct *t, unsigned int state)
 {
+    (void)state;
     if (!t)
         return;
     if (t->state == TASK_SLEEPING) {
@@ -60,7 +61,7 @@ int sys_kill(uint32_t id, int sig)
             tasklist_unlock(flags);
             return -1;
         }
-        signal_wake_task(t->parent);
+        signal_wake_up_state(t->parent, 0);
         tasklist_unlock(flags);
         return 0;
     }

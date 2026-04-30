@@ -11,14 +11,14 @@
   },
   "run_control": {
     "status": "running",
-    "phase": "ready_for_next_round",
-    "active_step": "supervisor ready",
+    "phase": "ready_for_next_patch",
+    "active_step": "select next Stage 5 roadmap patch",
     "stop_condition": null,
     "last_error": null,
     "last_exit": null,
     "last_round": 1,
-    "last_log": "logs/agent-runs/round-20260430-190702-1.log",
-    "heartbeat": "2026-04-30T11:07:02Z",
+    "last_log": "logs/agent-runs/round-20260430-191245-1.log",
+    "heartbeat": "2026-04-30T11:15:39Z",
     "budgets": {
       "max_rounds": 0,
       "max_failures": 3,
@@ -187,17 +187,18 @@
     }
   ],
   "current_patch": {
-    "id": "stage5-proc-task-dump-uses-task-pid-nr",
+    "id": "stage5-signal-wake-up-helper-api",
     "status": "review_clean",
-    "summary": "Use Linux task_pid_nr helper in proc task dump PID output.",
+    "summary": "Align Lite signal wake helper API with Linux signal_wake_up_state/signal_wake_up naming.",
     "files": [
-      "fs/proc/array.c",
-      "Documentation/reviews/2026-04-30-stage5-proc-task-dump-uses-task-pid-nr.md",
+      "kernel/signal.c",
+      "include/linux/sched.h",
+      "Documentation/reviews/2026-04-30-stage5-signal-wake-up-helper-api.md",
       "state.json"
     ],
     "linux_reference": [
       "linux2.6/include/linux/sched.h",
-      "linux2.6/fs/proc/array.c"
+      "linux2.6/kernel/signal.c"
     ]
   },
   "validation": {
@@ -214,17 +215,17 @@
   "commit": {
     "status": "committed",
     "hash": null,
-    "pre_review_hash": "dfbb91ca402a40fec705c774b5315b119bc87885",
+    "pre_review_hash": "4735e69daef654e7a8e998a2bab17d9cee571948",
     "note": "The exact final commit hash is obtained from git log because embedding it would change the hash."
   },
   "review": {
     "status": "clean",
-    "record": "Documentation/reviews/2026-04-30-stage5-proc-task-dump-uses-task-pid-nr.md",
+    "record": "Documentation/reviews/2026-04-30-stage5-signal-wake-up-helper-api.md",
     "findings": [],
     "commands": [
       "git show --stat --oneline --decorate HEAD",
       "git show --check --oneline HEAD",
-      "git show -- fs/proc/array.c state.json Documentation/reviews/2026-04-30-stage5-proc-task-dump-uses-task-pid-nr.md"
+      "git show -- kernel/signal.c include/linux/sched.h state.json Documentation/reviews/2026-04-30-stage5-signal-wake-up-helper-api.md"
     ]
   },
   "next_patch": {
