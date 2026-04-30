@@ -6,6 +6,25 @@
     "enabled": false,
     "note": "No external supervisor is running in this session; state.json is the recovery boundary."
   },
+  "resume": {
+    "status": "ready",
+    "source_of_truth": [
+      "state.json",
+      "Documentation/Linux26-Roadmap.md",
+      "Documentation/reviews/"
+    ],
+    "startup_instruction": "使用 linux-alignment skill。读取 state.json 和 Documentation/Linux26-Roadmap.md，按 state.json 从 current_patch.status=review_clean 继续长期 Linux2.6 alignment。严格遵守 boundaries.stop_policy：一直循环执行 next_patch，跨 stage 也继续；每轮选择一个窄差异点，先读 Linux2.6 参考和 Lite 当前实现，写 Linux Alignment Report/mapping ledger，修改代码，运行 make -j4、make smoke-128、make smoke-512，更新 state.json 和 review 文档，commit，review，amend 到 review_clean，然后继续。只有 boundaries.stop_policy.allowed_stop_conditions 中的条件命中时才停止；如果停止，输出命中的具体停止条件。",
+    "update_required_when": [
+      "active_stage changes",
+      "current_patch changes",
+      "next_patch changes",
+      "validation status changes",
+      "review status changes",
+      "stop_policy changes",
+      "roadmap recovery instructions change"
+    ],
+    "last_updated": "2026-04-30"
+  },
   "boundaries": {
     "roadmap": "Documentation/Linux26-Roadmap.md",
     "active_stage": "Stage 4: MM Second Pass",
